@@ -138,10 +138,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const embed = new EmbedBuilder()
           .setColor(0xFF2222)
-          .setDescription(`# 公告\n\n## ${title}\n${ansiText}`)
-          .setAuthor({ name: `由 ${interaction.member.displayName} 發佈`, iconURL: interaction.user.displayAvatarURL() })
+          .setAuthor({ name: `👑 王國宣告 (由 ${interaction.member.displayName} 草擬)`, iconURL: interaction.user.displayAvatarURL() })
+          .setDescription(`# 📜 【致全境子民：國王御旨】\n\n**${title}**\n${ansiText}`)
           .setTimestamp()
-          .setFooter({ text: footer ? `${footer} | 吉吉國王` : '吉吉國王公告系統', iconURL: 'attachment://stamp.png' });
+          .setFooter({ text: `${footer ? `${footer} | ` : ''}🔱 王國正版授權印記`, iconURL: 'attachment://stamp.png' });
 
         if (data.images?.[0]) embed.setImage(data.images[0]);
 
