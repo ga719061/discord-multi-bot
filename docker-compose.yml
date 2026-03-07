@@ -1,0 +1,48 @@
+services:
+  # 1. Discord bot
+  discord-bot:
+    build: .
+    container_name: chihuahua-king-bot
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - BOT.env
+    environment:
+      - LIVEKIT_URL=http://localhost:7880
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=king_jiji_royal_secret_key_2026_long_32_chars
+      - VOICE_AGENT_NAME=chihuahua-voice-agent
+      - NODE_OPTIONS=--dns-result-order=ipv4first
+    volumes:
+      - bot-data:/app/data
+
+  # 2. LiveKit server
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: jiji-livekit
+    restart: always
+    command: --config /etc/livekit.yaml
+    network_mode: host
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+
+  # 3. Gemini voice agent
+  voice-agent:
+    build: ./voice-agent
+    container_name: jiji-voice-agent
+    restart: always
+    network_mode: host
+    env_file:
+      - BOT.env
+    environment:
+      - LIVEKIT_URL=ws://localhost:7880
+      - LIVEKIT_API_KEY=devkey
+      - LIVEKIT_API_SECRET=king_jiji_royal_secret_key_2026_long_32_chars
+      - VOICE_AGENT_NAME=chihuahua-voice-agent
+      - NODE_OPTIONS=--dns-result-order=ipv4first
+      - GOOGLE_API_KEY=${GOOGLE_AI_KEY}
+    depends_on:
+      - livekit
+
+volumes:
+  bot-data:

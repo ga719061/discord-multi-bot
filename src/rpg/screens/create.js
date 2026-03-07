@@ -1,0 +1,115 @@
+// ===== 角色建立畫面 =====
+import { ActionRowBuilder } from 'discord.js';
+import { RACES, CLASSES, calculateInitialStats } from '../data/gameData.js';
+import { createCharacter, getCharacter, addEquipment, updateCharacter, learnSkill, getEquipmentList } from '../rpgDatabase.js';
+import { rpgEmbed, rpgButton, charSummary, getActualStats, calculateTotalStats, safeReply } from '../rpgHelpers.js';
+import { showHub } from './hub.js';
+
+export async function showCreate(interaction, method = 'reply') {
+    const embed = rpgEmbed(
+        '🏮 吉吉王國冒險者登記處',
+        [
+            '汪！歡迎來到吉吉王國！本王需要登記你的身份～',
+            '',
+            '📋 **第一步：選擇你的種族**',
+            '',
+            ...Object.values(RACES).map(r => `${r.emoji} **${r.name}** — ${r.desc}`),
+        ].join('\n'),
+    ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+
+    const row = new ActionRowBuilder().addComponents(
+        ...Object.values(RACES).map(r =>
+            rpgButton(`rpg_create_race_${r.id}`, r.name, undefined, r.emoji)
+        ),
+    );
+
+    let payload = { embeds: [embed], components: [row] };
+    if (method === 'reply') payload.ephemeral = true;
+
+    await safeReply(interaction, payload);
+}
+
+export async function handleCreate(interaction) {
+    const id = interaction.customId;
+
+    // 進入建立角色流程 (被 rpg_menu 觸發且無角色時)
+    if (id === 'rpg_menu' && !getCharacter(interaction.guildId, interaction.user.id)) {
+        return showCreate(interaction, 'update');
+    }
+
+    // 選擇種族
+    if (id.startsWith('rpg_create_race_')) {
+        const raceId = id.replace('rpg_create_race_', '');
+        const race = RACES[raceId];
+        if (!race) return;
+
+        const embed = rpgEmbed(
+            '🏮 吉吉王國冒險者登記處',
+            [
+                `種族：${race.emoji} **${race.name}**`,
+                '',
+                '📋 **第二步：選擇你的職業**',
+                '',
+                ...Object.values(CLASSES).map(c => `${c.emoji} **${c.name}** — ${c.desc}`),
+            ].join('\n'),
+        ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+
+        const row = new ActionRowBuilder().addComponents(
+            ...Object.values(CLASSES).map(c =>
+                rpgButton(`rpg_create_class_${raceId}_${c.id}`, c.name, undefined, c.emoji)
+            ),
+        );
+
+        await safeReply(interaction, { embeds: [embed], components: [row] });
+    }
+
+    // 選擇職業 → 完成建角
+    if (id.startsWith('rpg_create_class_')) {
+        const payload = id.replace('rpg_create_class_', '');
+        // payload = raceId_classId (classId may contain underscores)
+        const firstUnderscore = payload.indexOf('_');
+        const raceId = payload.substring(0, firstUnderscore);
+        const classId = payload.substring(firstUnderscore + 1);
+        const race = RACES[raceId];
+        const cls = CLASSES[classId];
+        if (!race || !cls) return;
+
+        // 防止重複建角
+        if (getCharacter(interaction.guildId, interaction.user.id)) {
+            const char = getCharacter(interaction.guildId, interaction.user.id);
+            return showHub(interaction, char, 'update');
+        }
+
+        const stats = calculateInitialStats(raceId, classId);
+        const char = createCharacter(interaction.guildId, interaction.user.id, {
+            race: raceId, class: classId, ...stats,
+        });
+
+        // 給起始武器，不再手動疊加數值到 DB
+        const weaponId = cls.weapon;
+        const eqId = addEquipment(interaction.guildId, interaction.user.id, weaponId, 'common');
+        updateCharacter(interaction.guildId, interaction.user.id, { main_hand_id: eqId });
+
+        // 給予初始技能
+        if (cls.initialSkill) {
+            learnSkill(interaction.guildId, interaction.user.id, cls.initialSkill);
+        }
+
+        // 追蹤任務進度：建立角色
+        const { trackQuestProgress } = await import('../engine/questEngine.js');
+        trackQuestProgress(interaction.guildId, interaction.user.id, 'create_character');
+
+        // 顯示主選單前，確保血魔是滿的 (因為裝備可能會增加 MaxHP/MP)
+        const freshChar = getCharacter(interaction.guildId, interaction.user.id);
+        const eqList = getEquipmentList(interaction.guildId, interaction.user.id);
+        const total = calculateTotalStats(freshChar, eqList);
+
+        updateCharacter(interaction.guildId, interaction.user.id, {
+            hp: total.max_hp,
+            mp: total.max_mp
+        });
+
+        const finalChar = getCharacter(interaction.guildId, interaction.user.id);
+        await showHub(interaction, finalChar, 'update');
+    }
+}
