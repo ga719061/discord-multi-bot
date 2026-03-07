@@ -1,4 +1,4 @@
-﻿import 'dotenv/config';
+import 'dotenv/config';
 import dns from 'node:dns';
 import { Client, GatewayIntentBits, Collection, Partials, Events, EmbedBuilder } from 'discord.js';
 import { loadCommands } from './handlers/commandHandler.js';
@@ -32,7 +32,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     try {
       await command.execute(interaction);
     } catch (error) {
-      logger.error(執行指令 \ 時發生錯誤:, error);
+      logger.error(`執行指令 ${interaction.commandName} 時發生錯誤:`, error);
       const reply = { content: '執行此指令時發生錯誤！', flags: ['Ephemeral'] };
       if (interaction.replied || interaction.deferred) await interaction.followUp(reply);
       else await interaction.reply(reply);
@@ -96,14 +96,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
           const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
           const filled = Math.min(20, Math.max(0, Math.round(pct / 5)));
           const bar = '█'.repeat(filled) + '░'.repeat(20 - filled);
-          return \ **\**\n\ \ 票 (\%);
+          return `${emojis[idx]} **${opt}**\n${bar} ${count} 票 (${pct}%)`;
         }).join('\n\n');
 
         const originalFooter = interaction.message.embeds[0]?.footer?.text || '';
         const creatorName = originalFooter.split(' | ')[0].replace('建立者：', '') || '未知';
         const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
           .setDescription(newDesc)
-          .setFooter({ text: 建立者：\ | 總計 \ 票 });
+          .setFooter({ text: `建立者：${creatorName} | 總計 ${totalVotes} 票` });
 
         await interaction.update({ embeds: [updatedEmbed] });
       }
@@ -120,7 +120,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const { pendingAnnouncements } = await import('./commands/admin/announce.js');
         const data = pendingAnnouncements.get(uuid);
-        if (!data) return interaction.editReply({ content: '公告草稿已過期，請重新執行 /announce。' });
+        if (!data) return interaction.editReply({ content: '公告草稿已過期，請重新執行 `/announce`。' });
 
         const title = interaction.fields.getTextInputValue('announce_title');
         const content = interaction.fields.getTextInputValue('announce_content');
@@ -138,10 +138,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const embed = new EmbedBuilder()
           .setColor(0xFF2222)
-          .setDescription(# 公告\n\n## \\n\)
-          .setAuthor({ name: 由 \ 發佈, iconURL: interaction.user.displayAvatarURL() })
+          .setDescription(`# 公告\n\n## ${title}\n${ansiText}`)
+          .setAuthor({ name: `由 ${interaction.member.displayName} 發佈`, iconURL: interaction.user.displayAvatarURL() })
           .setTimestamp()
-          .setFooter({ text: footer ? \ | 吉吉國王 : '吉吉國王公告系統', iconURL: 'attachment://stamp.png' });
+          .setFooter({ text: footer ? `${footer} | 吉吉國王` : '吉吉國王公告系統', iconURL: 'attachment://stamp.png' });
 
         if (data.images?.[0]) embed.setImage(data.images[0]);
 
@@ -168,7 +168,7 @@ async function start() {
     logger.info('資料庫初始化完成。');
 
     await loadCommands(client);
-    logger.info(已載入 \ 個指令。);
+    logger.info(`已載入 ${client.commands.size} 個指令。`);
 
     await loadEvents(client);
     registerRpgRouter(client);
@@ -193,7 +193,7 @@ http.createServer((req, res) => {
   res.writeHead(200);
   res.end('Bot is alive!');
 }).listen(port, () => {
-  logger.info(HTTP 伺服器監聽於連接埠 \。);
+  logger.info(`HTTP 伺服器監聽於連接埠 ${port}。`);
 });
 
 start();
