@@ -15,7 +15,7 @@ import { showAutoConfig, handleAutoConfigSelect } from './screens/autoConfig.js'
 import { showRanking } from './screens/ranking.js';
 import { showTavern, handleTavernAction } from './screens/tavern.js';
 import { showAuctionHub, showAuctionBrowse, handleAuctionBuy, showAuctionListSelection, handleAuctionListPrompt, handleAuctionSubmit, showMyAuctions, handleAuctionCancel, showAuctionHistory } from './screens/auction.js';
-import { showBlacksmith, showBlacksmithList, handleDismantle, handleReforge } from './screens/blacksmith.js';
+import { showBlacksmith, showBlacksmithList, handleDismantle, handleReforge, handleEnhance } from './screens/blacksmith.js';
 import { logger } from '../utils/logger.js';
 
 // Per-user 操作鎖：防止快速連點造成的 race condition（裝備複製、消耗品重複使用等）
@@ -229,6 +229,7 @@ export function registerRpgRouter(client) {
                           const eqId = parseInt(parts[4]);
                           if (type === 'dismantle') return await handleDismantle(interaction, eqId);
                           if (type === 'reforge') return await handleReforge(interaction, eqId);
+                          if (type === 'enhance') return await handleEnhance(interaction, eqId);
                      }
 
                     // ---------- Modal 提交處理 ----------
