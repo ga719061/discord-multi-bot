@@ -20,33 +20,33 @@ export function getServerKnowledge(guildId, isAdmin = false) {
 
     // 1. 基本功能介紹與分類
     let baseInfo = `
-[吉吉王國 伺服器功能手冊]
+[吉吉王國 皇家指南]
 
 1. 社交互動 (不需要斜線指令)
    - 撫摸: 「摸摸國王」、「摸摸吉吉」。國王心情隨機，可能大喜也可能傲嬌。
-   - 擁抱: 「抱抱國王」、「抱抱本王」。國王最喜歡溫鳴的懷抱。
+   - 擁抱: 「抱抱國王」、「抱抱本王」。國王最喜歡溫暖的懷抱。
    - 運勢: 「占卜」、「運勢」。國王會預測你的今日吉凶。
    - 金句: 「每日一汪」、「每日金句」。國王每天賜予智慧語錄。
    - 聊天: 直接 @吉吉王國 或在文中提到「國王」。
 
-2. 等級與皇家頭銜 (聊天獲得 XP)
-   - 經驗機制: 每分鐘聊天可獲得 15-25 XP (伺服器加成者 1.5 倍)。
-   - 頭銜進度:`;
+2. 等級與皇家爵位 (聊天獲得 XP)
+   - 經驗機制: 每分鐘聊天可獲得 15-25 XP (皇家贊助者 1.5 倍)。
+   - 爵位進度:`;
     
     // 動態列出頭銜階級
     const rankCheckpoints = [0, 6, 16, 31, 51, 76, 100];
     for (const lv of rankCheckpoints) {
         baseInfo += `\n     - Lv.${lv}+: ${getRankTitle(lv)}`;
     }
-    baseInfo += `\n   - 指令: /rank (個人), /leaderboard (排行)。
+    baseInfo += `\n   - 指令: /rank (爵位查詢), /leaderboard (皇家封神榜)。
 
-3. 伺服器實用功能
-   - 投票系統: /poll (支援最多 5 個選項，具備實時進度條)。
-   - Steam 助手: /steam <遊戲名>。可查詢全球價格、評價、歷史低價。
+3. 伺服器皇家助手
+   - 投票系統: /poll (王國議會發起決議，具動態進度條樣式)。
+   - 皇家採購辦公室 (Steam): /steam search (搜尋), /steam sales (熱門特價)。
    - 自助身分組: /selfrole (選單式), /reactionrole (按鈕/表情式)。
      * 當前可用身分組 ID: ${selfroleList}
 
-4. 定時提醒系統
+4. 皇家定時提醒
    - 指令: /remind set, /remind list, /remind delete
    - 時間格式: 支援相對時間 (如 10m、1h) 與絕對時間 (如 16:00)。
    - 功能: 國王會準時在設定的頻道標記並提醒你。
@@ -55,11 +55,11 @@ export function getServerKnowledge(guildId, isAdmin = false) {
     // 只有管理員才看的到管理資訊
     if (isAdmin) {
         baseInfo += `
-4. 管理員專屬功能
-   - 皇家公告: /announce。可建立帶有國王御印的華麗聖旨。
-   - 抽獎系統: /giveaway。
-   - 歡迎與日誌設定: /setup-welcome, /setup-log。
-   - 系統狀態: ${settings.welcome_channel ? '歡迎系統已啟用' : '歡迎系統未設定'}。
+4. 國王特權 (管理員專屬)
+   - 皇家聖旨: /announce。發布帶有國王御印的華麗公告。
+   - 王國抽獎: /giveaway。
+   - 史官與歡迎設定: /setup-welcome, /setup-log (配置史官監控與開關)。
+   - 系統狀態: ${settings.welcome_channel ? '歡迎系統已在城門啟用' : '歡迎系統未設定'}。
 `;
     }
 

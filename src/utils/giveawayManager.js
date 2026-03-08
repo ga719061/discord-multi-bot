@@ -1,4 +1,4 @@
-import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import { EmbedBuilder } from 'discord.js';
 import { getDb, markGiveawayEnded } from './database.js';
 import { fmt, COLORS, ansiBlock } from './style.js';
 import { logger } from './logger.js';
@@ -100,8 +100,6 @@ export async function endGiveaway(giveaway) {
         const winnerNameList = winnerNames.join(', ');
         const winnerMentionList = winnerMentions.join(', ');
 
-        const stampAttachment = new AttachmentBuilder('./assets/stamp.png', { name: 'stamp.png' });
-        
         const resultAnsi = ansiBlock([
             { color: COLORS.GOLD + ';' + COLORS.BOLD, text: '🎊 【皇家賞賜：抽獎結果公告】' },
             { color: COLORS.CYAN, text: '━━━━━━━━━━━━━━━━━━━━' },
@@ -114,24 +112,27 @@ export async function endGiveaway(giveaway) {
             .setTitle('🐕🎊 本王欽點的幸運兒出爐了！')
             .setDescription(resultAnsi)
             .setColor(0x00FF00)
-            .setThumbnail('attachment://stamp.png')
             .setFooter({ text: '🐕 吉吉國王官方認證抽獎' })
             .setTimestamp();
 
         await channel.send({
             content: `🐕🎉 汪汪！恭喜 ${winnerMentionList} 獲得了 **${giveaway.prize}**！快來領賞！`,
-            embeds: [resultEmbed],
-            files: [stampAttachment]
+            embeds: [resultEmbed]
         });
 
         // 標記結束
         markGiveawayEnded(giveaway.id);
 
-        // 更新原訊息表示已結束
+        // 更新原訊息表示已結束，保留縮圖但確保不顯示大圖
         const endedEmbed = EmbedBuilder.from(message.embeds[0])
             .setTitle('🐕🎉 抽獎活動 (已結束)')
-            .setColor(0x99AAB5);
-        await message.edit({ embeds: [endedEmbed] }).catch(() => {});
+            .setColor(0x99AAB5)
+            .setThumbnail('attachment://stamp.png')
+            .setImage(null);
+            
+        await message.edit({ 
+            embeds: [endedEmbed]
+        }).catch(() => {});
 
     } catch (err) {
         logger.error(`[GiveawayManager] 開獎失敗 (ID: ${giveaway.id}):`, err);

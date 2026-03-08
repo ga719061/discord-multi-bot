@@ -49,11 +49,19 @@ export function ansi(colorId, text) {
 
 /**
  * 組合多個 ANSI 區塊 (在同一個代碼塊中)
- * @param {Array<{color: string, text: string}>} lines 
+ * @param {Array<{color: string, text: string}>|string} lines 
  * @returns {string}
  */
 export function ansiBlock(lines) {
-    const content = lines.map(line => `${ESC}[${line.color}m${line.text}${ESC}[0m`).join('\n');
+    let content = '';
+    if (Array.isArray(lines)) {
+        content = lines.map(line => {
+            if (typeof line === 'string') return line;
+            return `${ESC}[${line.color}m${line.text}${ESC}[0m`;
+        }).join('\n');
+    } else {
+        content = String(lines);
+    }
     return '```ansi\n' + content + '\n```';
 }
 

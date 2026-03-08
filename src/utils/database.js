@@ -20,6 +20,7 @@ export function initDatabase() {
       welcome_channel TEXT,
       welcome_message TEXT,
       log_channel TEXT,
+      log_toggles TEXT DEFAULT '{"message":1,"member":1,"server":1,"voice":1,"thread":1}',
       selfrole_roles TEXT DEFAULT '[]',
       level_up_announcement_enabled INTEGER DEFAULT 1,
       rpg_broadcast_channel TEXT DEFAULT NULL
@@ -94,8 +95,8 @@ export function initDatabase() {
   const guildSettingsInfo = db.pragma('table_info(guild_settings)');
   const guildColumns = guildSettingsInfo.map(c => c.name);
 
-  if (!guildColumns.includes('level_up_announcement_enabled')) {
-    db.prepare('ALTER TABLE guild_settings ADD COLUMN level_up_announcement_enabled INTEGER DEFAULT 1').run();
+  if (!guildColumns.includes('log_toggles')) {
+    db.prepare('ALTER TABLE guild_settings ADD COLUMN log_toggles TEXT DEFAULT \'{"message":1,"member":1,"server":1,"voice":1,"thread":1}\'').run();
   }
 
   const aiSettingsInfo = db.pragma('table_info(ai_settings)');
@@ -136,7 +137,7 @@ export function getGuildSettings(guildId) {
   return row;
 }
 
-const ALLOWED_GUILD_KEYS = ['welcome_channel', 'welcome_message', 'log_channel', 'selfrole_roles', 'level_up_announcement_enabled', 'rpg_enabled', 'rpg_broadcast_channel'];
+const ALLOWED_GUILD_KEYS = ['welcome_channel', 'welcome_message', 'log_channel', 'log_toggles', 'selfrole_roles', 'level_up_announcement_enabled', 'rpg_enabled', 'rpg_broadcast_channel'];
 
 export function updateGuildSetting(guildId, key, value) {
   if (!ALLOWED_GUILD_KEYS.includes(key)) throw new Error(`不可許的欄位名稱: ${key}`);

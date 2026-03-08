@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getDb } from '../../utils/database.js';
+import { COLORS, ansiBar, ansiBlock, fmt } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
     .setName('poll')
@@ -56,13 +57,16 @@ export async function execute(interaction) {
     const votes = {};
     options.forEach((_, i) => (votes[i] = []));
 
-    const description = options.map((opt, i) => `${EMOJIS[i]} **${opt}** — 0 票`).join('\n');
+    const pollLines = options.map((opt, i) => {
+        const bar = ansiBar(0, 1, COLORS.CYAN, 15);
+        return `${fmt(COLORS.GOLD, EMOJIS[i])} **${opt}**\n${bar} ${fmt(COLORS.WHITE, '0 票 (0%)')}`;
+    });
 
     const embed = new EmbedBuilder()
         .setColor(0x5865f2)
-        .setTitle(`📊 ${question}`)
-        .setDescription(description)
-        .setFooter({ text: `🐕 由 ${interaction.user.displayName} 奉本王之命發起 | 共 0 人投票` })
+        .setTitle(`📊 國是會議：${question}`)
+        .setDescription(ansiBlock(pollLines.join('\n\n')))
+        .setFooter({ text: `建立者：${interaction.user.displayName} | 共 0 人投票` })
         .setTimestamp();
 
     const buttons = options.map((opt, i) =>

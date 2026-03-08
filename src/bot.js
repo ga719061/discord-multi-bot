@@ -23,6 +23,8 @@ const client = new Client({
 
 client.commands = new Collection();
 client.cooldowns = new Collection();
+// 暫存領地的邀請連結，用於追蹤是誰邀請的
+export const inviteCache = new Collection();
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.isChatInputCommand()) {
@@ -64,6 +66,30 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await interaction.editReply({ content: '更新身份組失敗，請檢查機器人權限。' });
         }
       }
+
+      if (interaction.customId === 'log_toggle_select') {
+        const selected = interaction.values;
+        const allCategories = ['message', 'member', 'server', 'voice', 'thread'];
+        const newToggles = {};
+
+        allCategories.forEach(cat => {
+          newToggles[cat] = selected.includes(cat) ? 1 : 0;
+        });
+
+        const json = JSON.stringify(newToggles);
+        updateGuildSetting(interaction.guildId, 'log_toggles', json);
+
+        const statusText = allCategories.map(cat => {
+          const emoji = newToggles[cat] ? '✅' : '❌';
+          const name = { message: '訊息', member: '成員', server: '伺服器', voice: '語音', thread: '討論串' }[cat];
+          return `${emoji} ${name}`;
+        }).join(' | ');
+
+        await interaction.reply({
+            content: `🐕⚙️ **設定更新完成！**\n當前狀態：${statusText}`,
+            flags: ['Ephemeral']
+        });
+      }
     } catch (error) {
       logger.error('選擇選單交互失敗:', error);
     }
@@ -89,20 +115,19 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const totalVotes = Object.values(currentVotes).reduce((sum, arr) => sum + arr.length, 0);
         const opts = JSON.parse(poll.options);
-        const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
+        const { COLORS, ansiBar, ansiBlock, fmt } = await import('./utils/style.js');
 
-        const newDesc = opts.map((opt, idx) => {
+        const pollLines = opts.map((opt, idx) => {
           const count = currentVotes[idx]?.length || 0;
           const pct = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0;
-          const filled = Math.min(20, Math.max(0, Math.round(pct / 5)));
-          const bar = '█'.repeat(filled) + '░'.repeat(20 - filled);
-          return `${emojis[idx]} **${opt}**\n${bar} ${count} 票 (${pct}%)`;
-        }).join('\n\n');
+          const bar = ansiBar(count, totalVotes || 1, COLORS.CYAN, 15);
+          return `${fmt(COLORS.GOLD, (idx + 1) + '️⃣')} **${opt}**\n${bar} ${fmt(COLORS.WHITE, count + ' 票 (' + pct + '%)')}`;
+        });
 
         const originalFooter = interaction.message.embeds[0]?.footer?.text || '';
         const creatorName = originalFooter.split(' | ')[0].replace('建立者：', '') || '未知';
         const updatedEmbed = EmbedBuilder.from(interaction.message.embeds[0])
-          .setDescription(newDesc)
+          .setDescription(ansiBlock(pollLines.join('\n\n')))
           .setFooter({ text: `建立者：${creatorName} | 總計 ${totalVotes} 票` });
 
         await interaction.update({ embeds: [updatedEmbed] });
@@ -181,6 +206,27 @@ async function start() {
 
     await client.login(process.env.DISCORD_TOKEN);
     logger.info('機器人已成功登入！');
+
+    // 登入後緩存所有邀請碼
+    client.guilds.cache.forEach(async (guild) => {
+      try {
+        const invites = await guild.invites.fetch();
+        inviteCache.set(guild.id, new Collection(invites.map(inv => [inv.code, inv.uses])));
+      } catch (e) {
+        logger.warn(`[InviteCache] 無法讀取 ${guild.name} 的邀請碼: ${e.message}`);
+      }
+    });
+
+    // 邀請碼事件監聽
+    client.on('inviteCreate', (invite) => {
+      const gInvites = inviteCache.get(invite.guild.id) || new Collection();
+      gInvites.set(invite.code, invite.uses);
+      inviteCache.set(invite.guild.id, gInvites);
+    });
+    client.on('inviteDelete', (invite) => {
+      const gInvites = inviteCache.get(invite.guild.id);
+      if (gInvites) gInvites.delete(invite.code);
+    });
   } catch (error) {
     logger.error('啟動失敗:', error);
     process.exit(1);

@@ -29,7 +29,7 @@ export async function execute(interaction) {
         'fun': '🎉 娛樂',
         'general': '🐕 一般',
         'leveling': '⭐ 等級',
-        'logging': '📝 記錄',
+        'logging': '📝 史官紀錄',
         'roles': '🏷️ 身分組',
         'steam': '🎮 Steam 遊戲特價',
         'welcome': '👋 歡迎',
@@ -85,6 +85,7 @@ export async function execute(interaction) {
                 name: '👑 國王特權（管理員專屬）', value: [
                     '以下高級功能請到各類別選單查詢詳細斜線指令：',
                     '> 📢 `/announce` — 發布精美的王國聖旨公告',
+                    '> 📝 `/setup-log` — 安置領地史官與配置監控開關',
                     '> 📈 `/setup-leveling` — 設定皇家等級公告開關',
                     '> 🤖 `/ai-setup` — 管理 AI 模型、搜尋與上下文設定',
                     '> 🏷️ `/reactionrole` — 建立點擊按鈕的自助身分組',
