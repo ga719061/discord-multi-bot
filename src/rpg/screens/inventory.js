@@ -297,7 +297,7 @@ async function showInventoryWithMessage(interaction, char, message) {
 
     const embed = rpgEmbed(`🧳 ${interaction.user.displayName} 的背包`, null, 0x9B59B6);
 
-    let desc = ansiText('2;35', '小心翻看，這些都是你在大陸各處搜刮來的寶物。');
+    let desc = '```ansi\n' + ansiText('2;35', '小心翻看，這些都是你在大陸各處搜刮來的寶物。') + '\n```';
     if (message) {
         desc += `\n **✅ ${message}** `;
     }

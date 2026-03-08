@@ -421,12 +421,15 @@ export function mainMenuRows(disabled = false) {
             rpgButton('rpg_profile', '角色', ButtonStyle.Secondary, '📋', disabled),
             rpgButton('rpg_inventory', '背包', ButtonStyle.Secondary, '📦', disabled),
             rpgButton('rpg_shop', '商店', ButtonStyle.Secondary, '🏪', disabled),
-            rpgButton('rpg_quest', '任務', ButtonStyle.Secondary, '📜', disabled),
         ),
         new ActionRowBuilder().addComponents(
+            rpgButton('rpg_blacksmith', '鐵匠', ButtonStyle.Secondary, '⚒️', disabled),
+            rpgButton('rpg_quest', '任務', ButtonStyle.Secondary, '📜', disabled),
             rpgButton('rpg_daily', '簽到', ButtonStyle.Success, '🎁', disabled),
             rpgButton('rpg_ranking', '排行', ButtonStyle.Secondary, '🏆', disabled),
-            rpgButton('rpg_lore', '王國酒館', ButtonStyle.Secondary, '🏰', disabled),
+        ),
+        new ActionRowBuilder().addComponents(
+            rpgButton('rpg_lore', '酒館', ButtonStyle.Secondary, '🏰', disabled),
             rpgButton('rpg_auction', '拍賣', ButtonStyle.Secondary, '⚖️', disabled),
             rpgButton('rpg_merc', '傭兵', ButtonStyle.Secondary, '🛡️', disabled)
         ),

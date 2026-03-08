@@ -43,7 +43,13 @@ export async function renderBattle(interaction, battleId, actionLog = '') {
     // 4. 處理隊員與召喚物顯示
     const playersInfo = battle.player_ids.map(pid => {
         const ps = battle.player_states[pid];
-        const p_name = pid === interaction.user.id ? `**${interaction.user.displayName}**` : `<@${pid}>`;
+        let p_name = `<@${pid}>`;
+        if (pid === interaction.user.id) {
+            p_name = `**${interaction.user.displayName}**`;
+        } else {
+            const member = interaction.guild?.members.cache.get(pid);
+            if (member) p_name = `**${member.displayName}**`;
+        }
         const status = ps.hp <= 0 ? ' 💀' : '';
         return `${p_name}${status} (Lv.${ps.level})\n\`\`\`ansi\n${hpBarBare(ps.hp, ps.max_hp)}\n${mpBarBare(ps.mp, ps.max_mp)}\n\`\`\``;
     });
@@ -61,7 +67,26 @@ export async function renderBattle(interaction, battleId, actionLog = '') {
     // 5. 處理日誌
     let formattedLog = '';
     if (actionLog) {
-        const lines = actionLog.split('\n').filter(Boolean);
+        // 處理玩家暱稱取代：將 <@ID> 換成暱稱
+        let processedLog = actionLog;
+        const mentionRegex = /<@(\d+)>/g;
+        let match;
+        const mentionMap = new Map();
+        while ((match = mentionRegex.exec(actionLog)) !== null) {
+            const mid = match[1];
+            if (!mentionMap.has(mid)) {
+                let name = mid;
+                const member = interaction.guild?.members.cache.get(mid);
+                if (member) name = member.displayName;
+                else if (mid === interaction.user.id) name = interaction.user.displayName;
+                mentionMap.set(mid, name);
+            }
+        }
+        for (const [mid, name] of mentionMap) {
+            processedLog = processedLog.split(`<@${mid}>`).join(name);
+        }
+
+        const lines = processedLog.split('\n').filter(Boolean);
         // 如果 actionLog 已經包含 ANSI 代碼 (由 handleBattleAction 生成)，則直接包裹
         // 否則進行基本的預處理
         const stylizedLines = lines.map(line => {

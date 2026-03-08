@@ -1,6 +1,7 @@
 // ===== 世界觀畫面 =====
 import { ActionRowBuilder } from 'discord.js';
 import { rpgEmbed, rpgButton } from '../rpgHelpers.js';
+import { fmt, COLORS } from '../../utils/style.js';
 
 const LORE_PAGES = [
     {

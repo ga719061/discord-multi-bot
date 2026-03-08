@@ -15,8 +15,10 @@ export const COLORS = {
     RED: '31',      // Error / High Danger
     GREEN: '32',    // Success
     GOLD: '33',     // Warning / Gold / Premium
+    YELLOW: '33',   // Alias for GOLD
     BLUE: '34',     // Info
     MAGENTA: '35',  // Rare / Special
+    PURPLE: '35',   // Alias for MAGENTA
     CYAN: '36',     // System / Quiet Info
     WHITE: '37',
 

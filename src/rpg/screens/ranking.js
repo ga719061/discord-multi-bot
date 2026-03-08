@@ -22,10 +22,10 @@ export async function showRanking(interaction) {
 
     const lines = leaderboard.map((entry, i) => {
         const medal = medals[i] || `${i + 1}. `;
-        const race = RACES[entry.race];
-        const cls = CLASSES[entry.class];
+        const race = RACES[entry.race] || { name: '未知', emoji: '❓' };
+        const cls = CLASSES[entry.class] || { name: '冒險者', emoji: '⚔️' };
         const title = getJobTitle(entry, false);
-        const username = users[i].displayName;
+        const username = users[i]?.displayName || `User#${entry.user_id.slice(-4)}`;
         
         const rankPart = `${medal}`;
         const namePart = widePad(username, 16);
@@ -39,7 +39,7 @@ export async function showRanking(interaction) {
     const embed = rpgEmbed(
         '🏆 冒險者排行榜',
         [
-            ansiText('2;33', '誰才是大陸實力最強、財富最多的霸主？名字將寫在歷史中！'),
+            '```ansi\n' + ansiText('2;33', '誰才是大陸實力最強、財富最多的霸主？名字將寫在歷史中！') + '\n```',
             '```ansi',
             ...lines,
             '```'

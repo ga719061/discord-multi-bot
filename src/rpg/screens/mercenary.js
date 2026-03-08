@@ -1,5 +1,6 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { rpgEmbed, rpgButton, backButton, qualityLabel, ansiText } from '../rpgHelpers.js';
+import { fmt, COLORS } from '../../utils/style.js';
 import { getCharacter, getAvailableMercenaries, getPersonalMercenaryHistory } from '../rpgDatabase.js';
 
 // 記憶體中暫存玩家目前的傭兵組合
@@ -36,7 +37,7 @@ export async function showMercenaryHub(interaction, char = null) {
         const mChar = getCharacter(guildId, mId);
         const member = await interaction.guild.members.fetch(mId).catch(() => null);
         const name = member ? member.displayName : mId;
-        return `> ⚔️ **Lv ${mChar.level}** ${name}`;
+        return `> ⚔️ Lv ${mChar.level} ${name}`;
     }));
 
     const embed = rpgEmbed(

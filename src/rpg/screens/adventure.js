@@ -28,7 +28,7 @@ export async function showAdventure(interaction, char) {
     const embed = rpgEmbed(
         '⚔️ 冒險 — 選擇目的地',
         [
-            ansiText('2;32', '選擇你要前往的區域，本王會為你祈福的！汪！'),
+            '```ansi\n' + ansiText('2;32', '選擇你要前往的區域，本王會為你祈福的！汪！') + '\n```',
             '**👤【當前勇者狀態】**',
             '```ansi\n' + [
                 charSummary(char),

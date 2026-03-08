@@ -18,7 +18,7 @@ export async function showHub(interaction, char, method = 'update') {
     const embed = rpgEmbed(
         '🐕👑 吉吉王國冒險者公會',
         [
-            ansiText('2;36', `歡迎回到公會大廳！勇者 ${interaction.user.displayName}，本王在此為你祈福～`),
+            '```ansi\n' + ansiText('2;36', `歡迎回到公會大廳！勇者 ${interaction.user.displayName}，本王在此為你祈福～`) + '\n```',
             '**📊【勇者當前狀態】**',
             '```ansi\n' + [
                 charSummary(char),

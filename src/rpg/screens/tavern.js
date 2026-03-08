@@ -1,5 +1,6 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { rpgEmbed, rpgButton, ansiText, safeReply, calculateTotalStats } from '../rpgHelpers.js';
+import { fmt, COLORS } from '../../utils/style.js';
 import { getItemDisplayName } from '../data/gameData.js';
 import { TAVERN_NPC, LORE_RUMORS, TAVERN_REWARDS } from '../data/loreData.js';
 import { updateCharacter, getCharacter, deductGold, addToInventory, getEquipmentList, getStashedEquipmentList, stashEquipment, unstashEquipment, resetCharacterStats, getInventory, getStashedInventory, stashItem, unstashItem } from '../rpgDatabase.js';
@@ -16,25 +17,25 @@ export async function showTavern(interaction, char, dialogue = null, activeNpc =
     if (activeNpc) {
         const npc = TAVERN_NPC[activeNpc];
         const greeting = dialogue || npc.greetings[Math.floor(Math.random() * npc.greetings.length)];
-        mainDescription = [
+        mainDescription = '```ansi\n' + [
             ansiText('0;36', `【與 ${npc.name} 交談中...】`),
             `> ${greeting}`,
             '',
             ansiText('0;33', '【其他神祕客】'),
-            activeNpc !== 'bartender' ? `👨‍🍳 **${TAVERN_NPC['bartender'].name}**` : '',
-            activeNpc !== 'veteran' ? `🧔 **${TAVERN_NPC['veteran'].name}**` : '',
-            activeNpc !== 'traveler' ? `👤 **${TAVERN_NPC['traveler'].name}**` : '',
-        ].filter(Boolean).join('\n');
+            activeNpc !== 'bartender' ? `👨‍🍳 ${TAVERN_NPC['bartender'].name}` : '',
+            activeNpc !== 'veteran' ? `🧔 ${TAVERN_NPC['veteran'].name}` : '',
+            activeNpc !== 'traveler' ? `👤 ${TAVERN_NPC['traveler'].name}` : '',
+        ].filter(Boolean).join('\n') + '\n```';
     } else if (dialogue) {
-        mainDescription = [
+        mainDescription = '```ansi\n' + [
             ansiText('0;32', '【系統提示】'),
             `> ${dialogue}`,
             '',
             ansiText('0;33', '【可互動的神祕客】'),
-            `👨‍🍳 **${TAVERN_NPC['bartender'].name}**`,
-            `🧔 **${TAVERN_NPC['veteran'].name}**`,
-            `👤 **${TAVERN_NPC['traveler'].name}**`
-        ].join('\n');
+            `👨‍🍳 ${TAVERN_NPC['bartender'].name}`,
+            `🧔 ${TAVERN_NPC['veteran'].name}`,
+            `👤 ${TAVERN_NPC['traveler'].name}`
+        ].join('\n') + '\n```';
     }
 
     const embed = rpgEmbed(
