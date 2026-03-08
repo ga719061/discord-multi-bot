@@ -3,7 +3,7 @@ import dns from 'node:dns';
 import { Client, GatewayIntentBits, Collection, Partials, Events, EmbedBuilder } from 'discord.js';
 import { loadCommands } from './handlers/commandHandler.js';
 import { loadEvents } from './handlers/eventHandler.js';
-import { initDatabase, getDb } from './utils/database.js';
+import { initDatabase, getDb, updateGuildSetting } from './utils/database.js';
 import { logger } from './utils/logger.js';
 import { initRpgTables } from './rpg/rpgDatabase.js';
 import { registerRpgRouter } from './rpg/rpgRouter.js';
@@ -17,6 +17,8 @@ const client = new Client({
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.GuildVoiceStates,
+    GatewayIntentBits.GuildModeration,
   ],
   partials: [Partials.Message, Partials.Channel, Partials.GuildMember, Partials.Reaction],
 });
@@ -85,8 +87,14 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return `${emoji} ${name}`;
         }).join(' | ');
 
+        const settings = getGuildSettings(interaction.guildId);
+        let extra = '';
+        if (!settings.log_channel) {
+          extra = '\n\n> ⚠️ **提醒：** 您尚未設定日誌頻道！請使用 `/setup-log 頻道:#您的頻道` 來安置史官。';
+        }
+
         await interaction.reply({
-            content: `🐕⚙️ **設定更新完成！**\n當前狀態：${statusText}`,
+            content: `🐕⚙️ **設定更新完成！**\n當前狀態：${statusText}${extra}`,
             flags: ['Ephemeral']
         });
       }

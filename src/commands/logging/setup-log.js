@@ -53,10 +53,18 @@ export async function execute(interaction) {
 
     const row = new ActionRowBuilder().addComponents(select);
 
+    const statusList = categories.map(cat => {
+        const isEnabled = toggles[cat.value] === 1;
+        return `${isEnabled ? '✅' : '❌'} ${cat.label.split(' ')[1]}`;
+    }).join(' | ');
+
     const embed = new EmbedBuilder()
         .setColor(0x0099FF)
         .setTitle('📝 領地史官控制面板')
-        .setDescription('請從下方清單勾選您想要**開啟**的紀錄類別。\n未被選中的類別將會被自動關閉。汪！')
+        .setDescription(
+            '請從下方清單勾選您想要**開啟**的紀錄類別。\n未被選中的類別將會被自動關閉。汪！\n\n' +
+            `**當前監控狀態：**\n> ${statusList}`
+        )
         .addFields(
             { name: '📍 當前頻道', value: settings.log_channel ? `<#${settings.log_channel}>` : '❌ 尚未設定', inline: true },
             { name: '⚙️ 運作狀態', value: '正常監管中', inline: true }

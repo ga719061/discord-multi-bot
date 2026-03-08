@@ -37,7 +37,16 @@ export async function sendLog(guild, embed, category = null) {
 
     try {
         const settings = getGuildSettings(guild.id);
-        if (!settings || !settings.log_channel) return;
+        if (!settings) {
+            logger.debug(`[Log] 領地 ${guild.id} 找不到設定`);
+            return;
+        }
+        if (!settings.log_channel) {
+            logger.debug(`[Log] 領地 ${guild.id} 尚未設定 log_channel`);
+            return;
+        }
+
+        logger.debug(`[Log] 正在嘗試發送日誌至頻道: ${settings.log_channel}, 類別: ${category}`);
 
         // 檢查細分開關
         if (category && settings.log_toggles) {

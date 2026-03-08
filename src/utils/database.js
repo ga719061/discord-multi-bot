@@ -97,6 +97,7 @@ export function initDatabase() {
 
   if (!guildColumns.includes('log_toggles')) {
     db.prepare('ALTER TABLE guild_settings ADD COLUMN log_toggles TEXT DEFAULT \'{"message":1,"member":1,"server":1,"voice":1,"thread":1}\'').run();
+    db.prepare('UPDATE guild_settings SET log_toggles = \'{"message":1,"member":1,"server":1,"voice":1,"thread":1}\' WHERE log_toggles IS NULL').run();
   }
 
   const aiSettingsInfo = db.pragma('table_info(ai_settings)');
