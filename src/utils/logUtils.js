@@ -68,3 +68,48 @@ export async function sendLog(guild, embed, category = null) {
         logger.error(`[Log] 發送日誌錯誤: ${error.message}`);
     }
 }
+
+/**
+ * 解析內容中的標記 (Mentions) 並替換為名稱
+ * @param {Guild} guild 
+ * @param {string} content 
+ * @returns {Promise<string>}
+ */
+export async function resolveMentions(guild, content) {
+    if (!content) return content;
+    
+    let resolved = content;
+
+    // 1. 解析用戶標記 <@ID> 或 <@!ID>
+    const userMatches = content.matchAll(/<@!?(\d+)>/g);
+    for (const match of userMatches) {
+        const userId = match[1];
+        try {
+            const member = await guild.members.fetch(userId).catch(() => null);
+            const name = member ? member.displayName : (guild.client.users.cache.get(userId)?.tag || userId);
+            resolved = resolved.replace(match[0], `@${name}`);
+        } catch (e) {}
+    }
+
+    // 2. 解析頻道標記 <#ID>
+    const channelMatches = content.matchAll(/<#(\d+)>/g);
+    for (const match of channelMatches) {
+        const channelId = match[1];
+        const channel = guild.channels.cache.get(channelId);
+        if (channel) {
+            resolved = resolved.replace(match[0], `#${channel.name}`);
+        }
+    }
+
+    // 3. 解析身分組標記 <@&ID>
+    const roleMatches = content.matchAll(/<@&(\d+)>/g);
+    for (const match of roleMatches) {
+        const roleId = match[1];
+        const role = guild.roles.cache.get(roleId);
+        if (role) {
+            resolved = resolved.replace(match[0], `@${role.name}`);
+        }
+    }
+
+    return resolved;
+}

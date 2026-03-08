@@ -1,5 +1,5 @@
 import { EmbedBuilder, AuditLogEvent } from 'discord.js';
-import { sendLog, getAuditLogExecutor } from '../../utils/logUtils.js';
+import { sendLog, getAuditLogExecutor, resolveMentions } from '../../utils/logUtils.js';
 import { fmt, COLORS } from '../../utils/style.js';
 
 export function register(client) {
@@ -9,7 +9,9 @@ export function register(client) {
         // 嘗試偵測刪除者 (如果是管理員刪除，Audit Log 會有紀錄)
         const executor = await getAuditLogExecutor(message.guild, AuditLogEvent.MessageDelete, message.author.id);
 
-        const content = message.content || '';
+        let content = message.content || '';
+        content = await resolveMentions(message.guild, content); // 解析標記為名稱
+
         const hasEmoji = content.match(/<a?:\w+:\d+>/) || content.match(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]/u);
         const isPureEmoji = content.length > 0 && content.replace(/<a?:\w+:\d+>/g, '').replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}]/gu, '').trim().length === 0;
 
@@ -33,7 +35,7 @@ export function register(client) {
             .setColor(0xFF0000)
             .setTitle('🐕🗑️ 本王發現訊息被吃掉了！')
             .setDescription(
-                `**原有者:** ${message.member?.displayName || message.author.tag} (<@${message.author.id}>)\n` +
+                `**原有者:** ${message.member?.displayName || message.author.tag} (${message.author.tag})\n` +
                 `**執行者:** ${executor ? `${executor.tag} (管理員)` : '用戶本人'}\n` +
                 `**在哪裡:** ${message.channel}\n` +
                 `**內容:**\n${displayContent}`
@@ -52,13 +54,20 @@ export function register(client) {
         if (!oldMessage.guild || oldMessage.author?.bot) return;
         if (oldMessage.content === newMessage.content) return;
 
+        let oldContent = oldMessage.content || '';
+        let newContent = newMessage.content || '';
+
+        // 解析標記
+        oldContent = await resolveMentions(oldMessage.guild, oldContent);
+        newContent = await resolveMentions(newMessage.guild, newContent);
+
         const embed = new EmbedBuilder()
             .setColor(0xFFA500)
             .setTitle('🐕✏️ 本王看到訊息被偷改了！')
-            .setDescription(`**作者:** ${oldMessage.member?.displayName || oldMessage.author.tag} (<@${oldMessage.author.id}>)\n**頻道:** ${oldMessage.channel}\n[👉 跳過去看看](${newMessage.url})`)
+            .setDescription(`**作者:** ${oldMessage.member?.displayName || oldMessage.author.tag} (${oldMessage.author.tag})\n**頻道:** ${oldMessage.channel}\n[👉 跳過去看看](${newMessage.url})`)
             .addFields(
-                { name: '原本的樣子', value: '```ansi\n' + fmt(COLORS.GRAY, (oldMessage.content || '無內容')) + '\n```' },
-                { name: '現在的樣子', value: '```ansi\n' + fmt(COLORS.GOLD, (newMessage.content || '無內容')) + '\n```' }
+                { name: '原本的樣子', value: '```ansi\n' + fmt(COLORS.GRAY, (oldContent || '無內容')) + '\n```' },
+                { name: '現在的樣子', value: '```ansi\n' + fmt(COLORS.GOLD, (newContent || '無內容')) + '\n```' }
             )
             .setFooter({ text: `ID: ${newMessage.id}` })
             .setTimestamp();
