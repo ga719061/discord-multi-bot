@@ -6,12 +6,12 @@ import { TAVERN_NPC, LORE_RUMORS, TAVERN_REWARDS } from '../data/loreData.js';
 import { updateCharacter, getCharacter, deductGold, addToInventory, getEquipmentList, getStashedEquipmentList, stashEquipment, unstashEquipment, resetCharacterStats, getInventory, getStashedInventory, stashItem, unstashItem } from '../rpgDatabase.js';
 export async function showTavern(interaction, char, dialogue = null, activeNpc = null) {
     let mainDescription = '```ansi\n' + [
-        fmt(COLORS.WHITE, '「汪！歡迎來到冒險者的休息站。想找誰聊聊，或是休息一下？」'),
+        fmt(COLORS.WHITE, '「願閣下在此獲得片刻安寧。請問有什麼可以為你服務的？」'),
         '',
-        fmt(COLORS.YELLOW + ';' + COLORS.BOLD, '【可互動的神祕客】'),
-        `${fmt(COLORS.WHITE, `👨‍🍳 ${TAVERN_NPC['bartender'].name}`)} — 提供酒水與恢復服務。`,
-        `${fmt(COLORS.WHITE, `🧔 ${TAVERN_NPC['veteran'].name}`)} — 提供各地的冒險傳聞。`,
-        `${fmt(COLORS.WHITE, `👤 ${TAVERN_NPC['traveler'].name}`)} — 似乎藏著稀有情報與物品。`
+        fmt(COLORS.YELLOW + ';' + COLORS.BOLD, '【停留於此的神祕客】'),
+        `${fmt(COLORS.WHITE, `👨‍🍳 ${TAVERN_NPC['bartender'].name}`)} — 吧檯之後的酒館主人。`,
+        `${fmt(COLORS.WHITE, `🧔 ${TAVERN_NPC['veteran'].name}`)} — 知曉無數舊事的老騎士。`,
+        `${fmt(COLORS.WHITE, `👤 ${TAVERN_NPC['traveler'].name}`)} — 身上帶著星空與虛空的氣息。`
     ].join('\n') + '\n```';
 
     if (activeNpc) {
@@ -39,7 +39,7 @@ export async function showTavern(interaction, char, dialogue = null, activeNpc =
     }
 
     const embed = rpgEmbed(
-        '🏰 王國酒館 — 汪汪城分店',
+        '🏰 王國酒館 — 亞丁分店',
         mainDescription,
         0xDC7633 // Orange/Brown tavern color
     ).setFooter({ text: `💰 持有金幣: ${char.gold.toLocaleString()} | uid:${interaction.user.id}` });
@@ -48,9 +48,9 @@ export async function showTavern(interaction, char, dialogue = null, activeNpc =
 
     // NPC 選擇按鈕列
     rows.push(new ActionRowBuilder().addComponents(
-        rpgButton('rpg_tavern_npc_bartender', '找汪叔', activeNpc === 'bartender' ? 'Success' : 'Primary', '👨‍🍳'),
-        rpgButton('rpg_tavern_npc_veteran', '找凱叔', activeNpc === 'veteran' ? 'Success' : 'Primary', '🧔'),
-        rpgButton('rpg_tavern_npc_traveler', '找旅行者', activeNpc === 'traveler' ? 'Success' : 'Primary', '👤'),
+        rpgButton('rpg_tavern_npc_bartender', '找老狄恩', activeNpc === 'bartender' ? 'Success' : 'Primary', '👨‍🍳'),
+        rpgButton('rpg_tavern_npc_veteran', '找亞伯', activeNpc === 'veteran' ? 'Success' : 'Primary', '🧔'),
+        rpgButton('rpg_tavern_npc_traveler', '找賽恩', activeNpc === 'traveler' ? 'Success' : 'Primary', '👤'),
     ));
 
     // 依據選擇的 NPC 顯示獨立的動作按鈕列
@@ -91,7 +91,7 @@ export async function handleTavernAction(interaction, char) {
 
     // 處理具體動作
     if (id === 'rpg_tavern_drink') {
-        if (char.gold < 30) return safeReply(interaction, { content: '🐕 汪！沒錢喝什麼酒，快去打怪！', flags: ['Ephemeral'] });
+        if (char.gold < 30) return safeReply(interaction, { content: '🚫 金幣不足。這裡不招待沒有錢的過客。', flags: ['Ephemeral'] });
         deductGold(interaction.guildId, interaction.user.id, 30);
         const rand = Math.random();
         let msg = '';
@@ -104,7 +104,7 @@ export async function handleTavernAction(interaction, char) {
     }
 
     if (id === 'rpg_tavern_rest') {
-        if (char.gold < 200) return safeReply(interaction, { content: '🐕 汪！住宿費要 200 金幣，你湊不齊啊。', flags: ['Ephemeral'] });
+        if (char.gold < 200) return safeReply(interaction, { content: '🚫 金幣不足。騎士不能在長椅上過夜。', flags: ['Ephemeral'] });
         deductGold(interaction.guildId, interaction.user.id, 200);
 
         const eqList = getEquipmentList(interaction.guildId, interaction.user.id);
@@ -217,10 +217,10 @@ export async function handleTavernAction(interaction, char) {
         }
 
         rows.push(new ActionRowBuilder().addComponents(
-            rpgButton('rpg_tavern_npc_bartender', '返回汪叔', 'Secondary', '🔙')
+            rpgButton('rpg_tavern_npc_bartender', '返回吧檯', 'Secondary', '🔙')
         ));
 
-        const embed = rpgEmbed('🧰 汪叔的保險箱', msg, 0xDC7633);
+        const embed = rpgEmbed('🧰 老狄恩的保險箱', msg, 0xDC7633);
         return safeReply(interaction, { embeds: [embed], components: rows });
     }
 
@@ -231,7 +231,7 @@ export async function handleTavernAction(interaction, char) {
         deductGold(interaction.guildId, interaction.user.id, cost);
         resetCharacterStats(interaction.guildId, interaction.user.id);
 
-        const msg = `🧔 「收下了你的 ${cost} 金幣。深呼吸...你覺得過去的束縛都被解開了。」\n(所有基礎屬性已重置為 10，點數已歸還至可用屬性點)`;
+        const msg = `🧔 「收下了你的 ${cost} 金幣。深呼吸...你覺得這具軀體的舊枷鎖已被打破。」\n(所有基礎屬性已重置為 10，點數已重歸靈魂庫)`;
         return showTavern(interaction, getCharacter(interaction.guildId, interaction.user.id), msg, 'veteran');
     }
 

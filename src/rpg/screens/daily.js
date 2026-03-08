@@ -18,7 +18,7 @@ export async function showDaily(interaction, char) {
                 '',
                 '明天再來吧！汪！',
             ].join('\n'),
-        ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+        ).setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
         return safeReply(interaction, { embeds: [embed], components: [backButton()] });
     }
 
@@ -30,30 +30,37 @@ export async function showDaily(interaction, char) {
     let goldReward = 100;
     let gemReward = 0;
     let bonusText = '';
+    let announcement = null;
 
     if (streak % 30 === 0) {
         goldReward = 2000; gemReward = 5;
         bonusText = '🎊 **月度獎勵！**';
-        await broadcastRpgEvent(interaction.client, interaction.guildId, {
-            title: '持之以恆：滿月慶典',
-            description: `不可思議！冒險者 ${fmt(COLORS.BLUE, interaction.member.displayName)} 已經\n${fmt(COLORS.GOLD, '連續 30 天')} 不間斷地向吉吉國王請安了！\n真是王國的楷模！`,
+        announcement = {
+            title: '🏆 傳奇之光',
+            description: `不可思議！騎士 ${fmt(COLORS.BLUE, interaction.member.displayName)} 已經\n${fmt(COLORS.GOLD, '連續 30 天')} 不間斷地向吉吉國王致意。\n真是王國的楷模。`,
             color: 0x00FFFF
-        });
+        };
     } else if (streak % 7 === 0) {
         goldReward = 500; gemReward = 1;
         bonusText = '🎉 **週獎勵！**';
-        await broadcastRpgEvent(interaction.client, interaction.guildId, {
-            title: '持之以恆：週滿勤',
-            description: `值得嘉許！冒險者 ${fmt(COLORS.BLUE, interaction.member.displayName)} 達成了\n${fmt(COLORS.GREEN, '連續登入 7 天')} 的成就！`,
+        announcement = {
+            title: '🌟 王國榮耀',
+            description: `值得嘉許！騎士 ${fmt(COLORS.BLUE, interaction.member.displayName)} 達成了\n${fmt(COLORS.GREEN, '連續登入 7 天')} 的成就。`,
             color: 0x00FF00
-        });
-    } else if (streak === 100 || streak === 365) {
+        };
+    }
+
+    if (streak === 100 || streak === 365) {
         // 百日與週年特別成就
-        await broadcastRpgEvent(interaction.client, interaction.guildId, {
-            title: '傳奇忠誠',
-            description: `${fmt(COLORS.GOLD, '傳奇誕生！')} 冒險者 ${fmt(COLORS.BLUE, interaction.member.displayName)} 達成了\n前所未見的 ${fmt(COLORS.MAGENTA, '連續 ' + streak + ' 天')} 登入不中斷！\n王國因為你而更加繁榮！`,
+        announcement = {
+            title: '🌌 永恆之巔',
+            description: `${fmt(COLORS.GOLD, '傳奇誕生！')} 騎士 ${fmt(COLORS.BLUE, interaction.member.displayName)} 達成了\n前所未見的 ${fmt(COLORS.MAGENTA, '連續 ' + streak + ' 天')} 登入不中斷。\n王國因為你而更加繁榮！`,
             color: 0xFF00FF
-        });
+        };
+    }
+
+    if (announcement) {
+        await broadcastRpgEvent(interaction.client, interaction.guildId, announcement);
     }
 
     // 回復 HP/MP
@@ -72,21 +79,19 @@ export async function showDaily(interaction, char) {
     });
 
     const embed = rpgEmbed(
-        '🎁 每日簽到成功！',
+        '🎁 簽到獎勵',
         '```ansi\n' + [
-            fmt(COLORS.CYAN, '恭喜！領取了國王的賞賜，祝你今天冒險順利！'),
-            bonusText ? fmt(COLORS.GOLD + ';' + COLORS.BOLD, bonusText) : '',
-            `${fmt(COLORS.GOLD, '🔥 連續簽到:')} ${fmt(COLORS.WHITE + ';' + COLORS.BOLD, streak.toString())} 天`,
+            fmt(COLORS.CYAN, ` 願聖光常駐。閣下的勤勉深受王國肯定。 `),
             '',
-            `${fmt(COLORS.WHITE, '💰 金幣')} ${fmt(COLORS.GOLD, `+${goldReward}`)}`,
-            gemReward > 0 ? `${fmt(COLORS.WHITE, '💎 寶石')} ${fmt(COLORS.CYAN, `+${gemReward}`)}` : '',
-            `${fmt(COLORS.WHITE, '❤️ HP 回復')} ${fmt(COLORS.GREEN, `+${hpHeal}`)}`,
-            `${fmt(COLORS.WHITE, '💙 MP 回復')} ${fmt(COLORS.BLUE, `+${mpHeal}`)}`,
+            `${fmt(COLORS.WHITE, '💰 獲得金幣:')} ${fmt(COLORS.GOLD + ';' + COLORS.BOLD, goldReward.toLocaleString())}`,
+            gemReward > 0 ? `${fmt(COLORS.WHITE, '💎 獲得寶石:')} ${fmt(COLORS.CYAN + ';' + COLORS.BOLD, gemReward.toLocaleString())}` : '',
+            `${fmt(COLORS.WHITE, '❤️ HP 回復:')} ${fmt(COLORS.GREEN + ';' + COLORS.BOLD, hpHeal.toLocaleString())}`,
+            `${fmt(COLORS.WHITE, '💙 MP 回復:')} ${fmt(COLORS.BLUE + ';' + COLORS.BOLD, mpHeal.toLocaleString())}`,
             '',
-            fmt(COLORS.GRAY, '🐕 明天也要來找本王簽到喔！汪！'),
+            fmt(COLORS.GRAY, '🛡️ 持續致意，將獲得更高的獎賞。'),
         ].filter(Boolean).join('\n') + '\n```',
-        0xF1C40F // Gold for daily
-    ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+        0xF1C40F
+    ).setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
 
     await safeReply(interaction, { embeds: [embed], components: [backButton()] });
 }

@@ -11,15 +11,11 @@ export async function showHub(interaction, char, method = 'update') {
     const total = calculateTotalStats(char, eqList);
     const xpNeeded = getXpForLevel(char.level + 1);
 
-    // 找目前主線任務名
-    const quest = MAIN_QUESTS.find(q => q.id === char.current_quest);
-    const questText = quest ? `📜主線任務: ${quest.name}` : '📜 主線已通關！';
-
     const embed = rpgEmbed(
-        '🐕👑 吉吉王國冒險者公會',
+        '🐕👑 吉吉王國騎士團總部',
         [
-            '```ansi\n' + ansiText('2;36', `歡迎回到公會大廳！勇者 ${interaction.user.displayName}，本王在此為你祈福～`) + '\n```',
-            '**📊【勇者當前狀態】**',
+            '```ansi\n' + ansiText('2;36', `願聖光指引你的道路。騎士 ${interaction.user.displayName}，吉吉三世正注視著你的英姿。`) + '\n```',
+            '**📊【個人當前狀態】**',
             '```ansi\n' + [
                 charSummary(char),
                 hpBarBare(char.hp, total.max_hp),
@@ -30,7 +26,7 @@ export async function showHub(interaction, char, method = 'update') {
         ].join('\n'),
     )
         .addFields(getStatusFields(char, total, { showResources: true, showCombat: true, xpNeeded }))
-        .setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+        .setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
 
     let payload = { embeds: [embed], components: mainMenuRows() };
     if (method === 'reply') payload.ephemeral = true;

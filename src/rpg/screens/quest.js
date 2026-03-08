@@ -44,7 +44,7 @@ export async function showQuest(interaction, char) {
             fmt(COLORS.GRAY, '> （每日任務系統籌備中...）'),
         ].join('\n') + '\n```',
         0xE67E22 // Orange for quests
-    ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+    ).setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
 
     await safeReply(interaction, { embeds: [embed], components: [backButton()] });
 }

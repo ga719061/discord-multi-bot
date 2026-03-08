@@ -9,8 +9,8 @@ export async function showRanking(interaction) {
     const leaderboard = getRpgLeaderboard(interaction.guildId, 10);
 
     if (leaderboard.length === 0) {
-        const embed = rpgEmbed('🏆 冒險者排行榜', '還沒有人成為冒險者呢！\n快使用 `/rpg` 開始你的冒險吧！');
-        embed.setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+        const embed = rpgEmbed('🏆 騎士排行榜', '還沒有人成為騎士呢！\n快使用 `/rpg` 開始你的遠征吧！');
+        embed.setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
         return interaction.editReply({ embeds: [embed], components: [backButton()] });
     }
 
@@ -23,7 +23,8 @@ export async function showRanking(interaction) {
     const lines = leaderboard.map((entry, i) => {
         const medal = medals[i] || `${i + 1}. `;
         const race = RACES[entry.race] || { name: '未知', emoji: '❓' };
-        const cls = CLASSES[entry.class] || { name: '冒險者', emoji: '⚔️' };
+        const level = entry.level;
+        const cls = CLASSES[entry.class] || { name: '騎士', emoji: '⚔️' };
         const title = getJobTitle(entry, false);
         const username = users[i]?.displayName || `User#${entry.user_id.slice(-4)}`;
         
@@ -37,15 +38,11 @@ export async function showRanking(interaction) {
     });
 
     const embed = rpgEmbed(
-        '🏆 冒險者排行榜',
-        [
-            '```ansi\n' + ansiText('2;33', '誰才是大陸實力最強、財富最多的霸主？名字將寫在歷史中！') + '\n```',
-            '```ansi',
-            ...lines,
-            '```'
-        ].join('\n')
+        '🏆 騎士排行榜',
+        '```ansi\n' + lines.join('\n') + '\n```',
+        0xF1C40F
     );
-    embed.setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+    embed.setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
 
     await interaction.editReply({ embeds: [embed], components: [backButton()] });
 }

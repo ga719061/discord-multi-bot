@@ -8,15 +8,15 @@ import { fmt, COLORS } from '../../utils/style.js';
 
 export async function showCreate(interaction, method = 'reply') {
     const embed = rpgEmbed(
-        '🏮 吉吉王國冒險者登記處',
+        '🏮 吉吉王國騎士登記處',
         '```ansi\n' + [
-            fmt(COLORS.CYAN, '汪！歡迎來到吉吉王國！本王需要登記你的身份～'),
+            fmt(COLORS.CYAN, '騎士，歡迎踏入吉吉王國的疆土。本王需在此登記你的誓約身份。'),
             '',
             fmt(COLORS.YELLOW + ';' + COLORS.BOLD, '📋 第一步：選擇你的種族'),
             '',
             ...Object.values(RACES).map(r => `${r.emoji} ${fmt(COLORS.WHITE, widePad(r.name, 8))} ${fmt(COLORS.GRAY, r.desc)}`),
         ].join('\n') + '\n```',
-    ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+    ).setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
 
     const row = new ActionRowBuilder().addComponents(
         ...Object.values(RACES).map(r =>
@@ -45,15 +45,15 @@ export async function handleCreate(interaction) {
         if (!race) return;
 
         const embed = rpgEmbed(
-            '🏮 吉吉王國冒險者登記處',
+            '🏮 吉吉王國騎士登記處',
             '```ansi\n' + [
-                `${fmt(COLORS.WHITE, '種族：')}${race.emoji} ${fmt(COLORS.CYAN, race.name)}`,
+                `${fmt(COLORS.WHITE, '已選種族：')}${race.emoji} ${fmt(COLORS.CYAN, race.name)}`,
                 '',
-                fmt(COLORS.YELLOW + ';' + COLORS.BOLD, '📋 第二步：選擇你的職業'),
+                fmt(COLORS.YELLOW + ';' + COLORS.BOLD, '📋 第二步：選擇你的戰鬥天命 (職業)'),
                 '',
                 ...Object.values(CLASSES).map(c => `${c.emoji} ${fmt(COLORS.WHITE, widePad(c.name, 8))} ${fmt(COLORS.GRAY, c.desc)}`),
             ].join('\n') + '\n```',
-        ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+        ).setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
 
         const row = new ActionRowBuilder().addComponents(
             ...Object.values(CLASSES).map(c =>

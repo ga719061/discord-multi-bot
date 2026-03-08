@@ -54,7 +54,7 @@ export async function showAutoConfig(interaction, char = null) {
         '⚙️ 自動戰鬥設定',
         '```ansi\n' + lines.join('\n') + '\n```',
         0x1ABC9C // Turquoise
-    ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${userId}` });
+    ).setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${userId}` });
 
     // 組建技能選擇下拉選單
     let components = [];

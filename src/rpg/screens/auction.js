@@ -22,10 +22,10 @@ export async function showAuctionHub(interaction) {
             fmt(COLORS.WHITE, '3. 我的拍賣：管理架上商品與下架。'),
             fmt(COLORS.WHITE, '4. 交易紀錄：回顧個人買賣史。'),
             '',
-            fmt(COLORS.GRAY, '「汪嗚... 小心別用天價買到垃圾了喔！」')
+            fmt(COLORS.GRAY, '「莫要以天價購得無用之物...」')
         ].join('\n') + '\n```',
         0xF1C40F // Gold
-    ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+    ).setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
 
     const row = new ActionRowBuilder().addComponents(
         rpgButton('rpg_auction_browse_0', '瀏覽市集', 'Primary', '🔍'),
@@ -157,8 +157,8 @@ export async function handleAuctionBuy(interaction) {
     const buyerId = interaction.user.id;
 
     const auction = getAuctionById(auctionId);
-    if (!auction) return interaction.reply({ content: '🐕 該商品已被買走或下架了！', flags: ['Ephemeral'] });
-    if (auction.seller_id === buyerId) return interaction.reply({ content: '🐕 你不能買自己的商品！', flags: ['Ephemeral'] });
+    if (!auction) return interaction.reply({ content: '🚫 術法共鳴失敗，王國秘法系統發生異常。', flags: ['Ephemeral'] });
+    if (auction.seller_id === buyerId) return interaction.reply({ content: '🚫 閣下不能購買自己架上的物資。', flags: ['Ephemeral'] });
 
     const buyerChar = getCharacter(guildId, buyerId);
     if (!buyerChar || buyerChar.gold < auction.price) return interaction.reply({ content: `🐕 金幣不足！`, flags: ['Ephemeral'] });

@@ -133,9 +133,9 @@ export function getJobTitle(char, useAnsi = false) {
 
 // ---------- 角色摘要文字 ----------
 export function charSummary(char) {
-    if (!char) return '🐕 未知勇者';
+    if (!char) return '🛡️ 未知騎士';
     const race = RACES[char.race] || { name: '未知', emoji: '❓' };
-    const cls = CLASSES[char.class] || { name: '冒險者', emoji: '⚔️' };
+    const cls = CLASSES[char.class] || { name: '騎士候選', emoji: '⚔️' };
     const title = getJobTitle(char, false);
     return `${race.emoji}${cls.emoji} ${race.name}${title} — Lv.${char.level || 1}`;
 }
@@ -359,8 +359,8 @@ export function formatItemName(name, quality) {
 export function rpgEmbed(title, description, color = 0xF1C40F) {
     const embed = new EmbedBuilder()
         .setColor(color)
-        .setTitle(String(title || '吉吉王國訊息'))
-        .setFooter({ text: '🐕👑 吉吉王國冒險者公會' });
+        .setTitle(String(title || '吉吉王國聖旨'))
+        .setFooter({ text: '🐕👑 吉吉王國騎士團' });
 
     if (description && typeof description === 'string' && description.trim().length > 0) {
         embed.setDescription(description);
@@ -488,7 +488,7 @@ export function isOwner(interaction, ownerId) {
 }
 
 export function notOwnerReply(interaction) {
-    return interaction.reply({ content: '🐕 汪！這不是你的冒險面板喔！請自己用 `/rpg` 開始冒險～', flags: ['Ephemeral'] });
+    return interaction.reply({ content: '🚫 此面板不屬於閣下。請使用 `/rpg` 啟動屬於你的遠征。', flags: ['Ephemeral'] });
 }
 
 // ---------- 強化系統設定 ----------
@@ -656,7 +656,7 @@ export async function broadcastRpgEvent(client, guildId, embedData) {
             .setTitle(`📜 【王國歷代記】 ${embedData.title}`)
             .setDescription(description)
             .setTimestamp()
-            .setFooter({ text: '🐕 吉吉王國冒險者公會' });
+            .setFooter({ text: '🐕👑 吉吉王國騎士團' });
 
         if (embedData.thumbnail) {
             embed.setThumbnail(embedData.thumbnail);
@@ -963,7 +963,7 @@ export function executeSetHooks(trigger, actor, target, context = {}) {
                 break;
             }
             case 'crystal_reflect_20': {
-                // target 這裡是攻擊者
+                // target 這裡是攻擊騎士
                 if (Math.random() < 0.20 && target && target.currentHp > 0 && context.originalDamage) {
                     const reflect = context.originalDamage;
                     target.currentHp -= reflect;
@@ -1026,7 +1026,7 @@ export function executeSetHooks(trigger, actor, target, context = {}) {
 export function getStatusFields(char, total, options = { showResources: true, showCombat: true, xpNeeded: 0 }) {
     const fields = [];
     const race = RACES[char.race]?.name || '未知';
-    const cls = CLASSES[char.class]?.name || '冒險者';
+    const cls = CLASSES[char.class]?.name || '騎士';
     const title = getJobTitle(char, false);
 
     // 1. 基礎身份 (Inline) - 整合縮小 XP 條
@@ -1041,7 +1041,7 @@ export function getStatusFields(char, total, options = { showResources: true, sh
     }
 
     fields.push({
-        name: '👤 冒險者身份',
+        name: '👤 騎士身份',
         value: identityValue.join('\n'),
         inline: true
     });

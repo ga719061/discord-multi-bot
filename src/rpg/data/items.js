@@ -14,11 +14,11 @@ export const EQUIP_SELL_PRICES = { common: 30, fine: 80, rare: 200, epic: 500, m
 
 export const EQUIPMENT = {
     // ===== 起始裝備 =====
-    rusty_sword: { name: '鏽蝕短劍', emoji: '🗡️', type: 'weapon_1h', quality: 'common', stats: { atk: 5 }, forClass: 'warrior' },
-    short_bow: { name: '短弓', emoji: '🏹', type: 'weapon_2h', quality: 'common', stats: { atk: 8, spd: 4 }, forClass: 'ranger' },
-    apprentice_staff: { name: '學徒法杖', emoji: '🔮', type: 'weapon_2h', quality: 'common', stats: { matk: 10 }, forClass: 'mage' },
-    wooden_hammer: { name: '木錘', emoji: '🔨', type: 'weapon_1h', quality: 'common', stats: { atk: 4, def: 2 }, forClass: 'paladin' },
-    wooden_shield: { name: '木盾', emoji: '🛡️', type: 'shield', quality: 'common', stats: { def: 3, mdef: 1 }, forClass: 'paladin' },
+    rusty_sword: { name: '新手短劍', emoji: '🗡️', type: 'weapon_1h', quality: 'common', stats: { atk: 5 }, forClass: 'warrior' },
+    short_bow: { name: '新手長弓', emoji: '🏹', type: 'weapon_2h', quality: 'common', stats: { atk: 8, spd: 4 }, forClass: 'ranger' },
+    apprentice_staff: { name: '新手魔杖', emoji: '🔮', type: 'weapon_2h', quality: 'common', stats: { matk: 10 }, forClass: 'mage' },
+    wooden_hammer: { name: '新手戰鎚', emoji: '🔨', type: 'weapon_1h', quality: 'common', stats: { atk: 4, def: 2 }, forClass: 'paladin' },
+    wooden_shield: { name: '新手木盾', emoji: '🛡️', type: 'shield', quality: 'common', stats: { def: 3, mdef: 1 }, forClass: 'paladin' },
 
     // ===== 王國近郊掉落 (⬜普通 ~ 🟢精良) =====
     slime_hat: { name: '史萊姆黏液帽', emoji: '🧢', type: 'head', quality: 'common', stats: { def: 2, mdef: 1, hp: 10 }, set_id: 'slime_set' },
@@ -364,12 +364,12 @@ export const EQUIPMENT = {
 
 export const SHOP_ITEMS = {
     consumables: [
-        { id: 'hp_potion_s', name: '小型回復藥水', emoji: '🧪', price: 30, effect: { type: 'heal_hp', percent: 30 }, desc: '回復 30% HP' },
-        { id: 'hp_potion_m', name: '中型回復藥水', emoji: '🧪', price: 100, effect: { type: 'heal_hp', percent: 60 }, desc: '回復 60% HP' },
-        { id: 'hp_potion_l', name: '大型回復藥水', emoji: '🧪', price: 280, effect: { type: 'heal_hp', percent: 100 }, desc: '回復 100% HP' },
-        { id: 'mp_potion', name: '魔力藥水', emoji: '💙', price: 60, effect: { type: 'heal_mp', percent: 50 }, desc: '回復 50% MP' },
-        { id: 'smoke_bomb', name: '逃脫煙霧彈', emoji: '🪶', price: 80, effect: { type: 'escape' }, desc: '戰鬥中 100% 逃跑成功' },
-        { id: 'teleport_scroll', name: '傳送卷軸', emoji: '📜', price: 150, effect: { type: 'teleport' }, desc: '傳送回王國' },
+        { id: 'hp_potion_s', name: '輕型治癒藥水', emoji: '🧪', price: 30, effect: { type: 'heal_hp', percent: 30 }, desc: '回復 30% HP' },
+        { id: 'hp_potion_m', name: '中型治癒藥水', emoji: '🧪', price: 100, effect: { type: 'heal_hp', percent: 60 }, desc: '回復 60% HP' },
+        { id: 'hp_potion_l', name: '強力治癒藥水', emoji: '🧪', price: 280, effect: { type: 'heal_hp', percent: 100 }, desc: '回復 100% HP' },
+        { id: 'mp_potion', name: '魔力恢復藥水', emoji: '💙', price: 60, effect: { type: 'heal_mp', percent: 50 }, desc: '回復 50% MP' },
+        { id: 'smoke_bomb', name: '歸還卷軸', emoji: '🪶', price: 80, effect: { type: 'escape' }, desc: '戰鬥中 100% 傳送回安全區' },
+        { id: 'teleport_scroll', name: '傳送符印', emoji: '📜', price: 150, effect: { type: 'teleport' }, desc: '標記並傳送回王都' },
         { id: 'revive_scroll', name: '復活卷軸', emoji: '💀', price: 400, effect: { type: 'revive', percent: 30 }, desc: '復活隊友至 30% HP' },
     ],
     weapons: [
@@ -393,51 +393,52 @@ export const SHOP_ITEMS = {
         { id: 'speed_boots', name: '疾風靴', emoji: '👢', price: 350, type: 'feet', quality: 'common', stats: { spd: 5 }, desc: '足部 SPD+5' },
     ],
     skillbooks: [
-        { id: 'book_power_slash', name: '猛力斬擊 技能書', emoji: '📖', price: 300, type: 'book', quality: 'common', desc: '學習戰士技能：猛力斬擊' },
-        { id: 'book_precise_shot', name: '精準射擊 技能書', emoji: '📖', price: 300, type: 'book', quality: 'common', desc: '學習遊俠技能：精準射擊' },
-        { id: 'book_fireball', name: '火球術 技能書', emoji: '📖', price: 300, type: 'book', quality: 'common', desc: '學習法師技能：火球術' },
-        { id: 'book_holy_strike', name: '聖光打擊 技能書', emoji: '📖', price: 300, type: 'book', quality: 'common', desc: '學習聖騎士技能：聖光打擊' },
+        { id: 'book_power_slash', name: '強力斬擊 技能書', emoji: '📖', price: 300, type: 'book', quality: 'common', desc: '學習戰士技能：強力斬擊' },
+        { id: 'book_precise_shot', name: '精準目標 技能書', emoji: '📖', price: 300, type: 'book', quality: 'common', desc: '學習遊俠技能：精準目標' },
+        { id: 'book_fireball', name: '火球 技能書', emoji: '📖', price: 300, type: 'book', quality: 'common', desc: '學習法師技能：火球' },
+        { id: 'book_holy_strike', name: '聖威一擊 技能書', emoji: '📖', price: 300, type: 'book', quality: 'common', desc: '學習聖騎士技能：聖威一擊' },
         { id: 'book_war_guard', name: '防禦架勢 技能書', emoji: '📖', price: 600, type: 'book', quality: 'common', desc: '學習戰士技能：防禦架勢' },
-        { id: 'book_agility', name: '靈動 技能書', emoji: '📖', price: 600, type: 'book', quality: 'common', desc: '學習遊俠技能：靈動' },
-        { id: 'book_mana_surge', name: '魔力湧動 技能書', emoji: '📖', price: 600, type: 'book', quality: 'common', desc: '學習法師技能：魔力湧動' },
+        { id: 'book_agility', name: '風之疾走 技能書', emoji: '📖', price: 600, type: 'book', quality: 'common', desc: '學習遊俠技能：風之疾走' },
+        { id: 'book_mana_surge', name: '魔力增幅 技能書', emoji: '📖', price: 600, type: 'book', quality: 'common', desc: '學習法師技能：魔力增幅' },
         { id: 'book_pal_protection', name: '聖光加持 技能書', emoji: '📖', price: 600, type: 'book', quality: 'common', desc: '學習聖騎士技能：聖光加持' },
         { id: 'book_war_bash', name: '盾擊 技能書', emoji: '📖', price: 1000, type: 'book', quality: 'common', desc: '學習戰士技能：盾擊' },
         { id: 'book_pal_bash', name: '制裁之錘 技能書', emoji: '📖', price: 1000, type: 'book', quality: 'common', desc: '學習聖騎士技能：制裁之錘' },
     ],
 };
+
 export const ITEM_NAMES = {
-    // 近郊（怪物 gold: 8~25）
-    slime_gel: { name: '史萊姆凝膠', emoji: '🟢', sellPrice: 4 },
-    boar_meat: { name: '野豬肉', emoji: '🥩', sellPrice: 7 },
-    stolen_pouch: { name: '贓物袋', emoji: '💰', sellPrice: 12 },
-    // 黑霧森林（怪物 gold: 28~35）
-    goblin_ear: { name: '哥布林耳朵', emoji: '👺', sellPrice: 14 },
-    spider_fang: { name: '蜘蛛毒牙', emoji: '🕷️', sellPrice: 18 },
+    // 近郊
+    slime_gel: { name: '黏液凝膠', emoji: '🟢', sellPrice: 4 },
+    boar_meat: { name: '狂暴野豬肉', emoji: '🥩', sellPrice: 7 },
+    stolen_pouch: { name: '戰敗者的包裹', emoji: '💰', sellPrice: 12 },
+    // 迷霧森林
+    goblin_ear: { name: '惡魔之角', emoji: '👺', sellPrice: 14 },
+    spider_fang: { name: '荒野狼獠牙', emoji: '🕷️', sellPrice: 18 },
     spirit_wood: { name: '精靈木', emoji: '🌳', sellPrice: 16 },
-    // 龍脊山脈（怪物 gold: 80~120）
-    rock_shard: { name: '岩石碎片', emoji: '🪨', sellPrice: 40 },
+    // 龍之谷
+    rock_shard: { name: '巨石碎片', emoji: '🪨', sellPrice: 40 },
     dragon_scale_mat: { name: '龍鱗素材', emoji: '🐲', sellPrice: 55 },
-    chief_amulet: { name: '頭目護符', emoji: '📿', sellPrice: 45 },
-    // 幽暗沼澤（怪物 gold: 90~100）
-    ancient_bone: { name: '遠古骨骸', emoji: '🦴', sellPrice: 42 },
-    toad_poison: { name: '蟾蜍毒液', emoji: '🧪', sellPrice: 38 },
+    chief_amulet: { name: '巴風特護符', emoji: '📿', sellPrice: 45 },
+    // 海音低地
+    ancient_bone: { name: '冥界骨骸', emoji: '🦴', sellPrice: 42 },
+    toad_poison: { name: '腐蝕毒液', emoji: '🧪', sellPrice: 38 },
     dark_staff_frag: { name: '闇杖碎片', emoji: '🔮', sellPrice: 50 },
-    // 熔岩荒原（怪物 gold: 180~200）
+    // 火龍窟
     fire_core: { name: '火焰核心', emoji: '🔥', sellPrice: 90 },
     hell_fang: { name: '地獄犬牙', emoji: '🦷', sellPrice: 80 },
     lava_heart: { name: '熔岩之心', emoji: '❤️‍🔥', sellPrice: 100 },
-    // 虛空裂隙（怪物 gold: 350~400）
-    void_shard: { name: '虛空碎片', emoji: '💜', sellPrice: 160 },
-    chaos_blade_frag: { name: '混沌之刃碎片', emoji: '⚔️', sellPrice: 200 },
-    void_essence: { name: '虛空精華', emoji: '🌀', sellPrice: 240 },
+    // 歐瑞裂隙
+    void_shard: { name: '時空碎片', emoji: '💜', sellPrice: 160 },
+    chaos_blade_frag: { name: '混亂之刃碎片', emoji: '⚔️', sellPrice: 200 },
+    void_essence: { name: '裂隙精華', emoji: '🌀', sellPrice: 240 },
     // Boss 掉落物
     boar_king_tusk: { name: '野豬王獠牙', emoji: '🐗', sellPrice: 100 },
-    // 水晶洞窟（怪物 gold: 600）
+    // 奇岩地監
     crystal_shard: { name: '水晶碎片', emoji: '💎', sellPrice: 280 },
     mana_crystal: { name: '魔力結晶', emoji: '🎇', sellPrice: 320 },
     crystal_silk: { name: '水晶絲線', emoji: '🖧️', sellPrice: 300 },
     perfect_crystal: { name: '完美水晶心', emoji: '🤍', sellPrice: 800 },
-    // 新增掉落物
+    // 新增
     sky_shard: { name: '天空碎片', emoji: '☁️', sellPrice: 400 },
     ancient_shard: { name: '遠古能量塊', emoji: '🛡️', sellPrice: 600 },
     abyss_core_shard: { name: '深淵核心碎片', emoji: '👹', sellPrice: 1000 },
@@ -447,18 +448,19 @@ export const ITEM_NAMES = {
     scroll_armor: { name: '對防具施法的卷軸', emoji: '📜', sellPrice: 160 },
     scroll_accessory: { name: '對飾品施法的卷軸', emoji: '📜', sellPrice: 120 },
 
-    // 商店消耗品 (可賣回商店，折價 50%)
-    hp_potion_s: { name: '小型回復藥水', emoji: '🧪', sellPrice: 15 },
-    hp_potion_m: { name: '中型回復藥水', emoji: '🧪', sellPrice: 50 },
-    hp_potion_l: { name: '大型回復藥水', emoji: '🧪', sellPrice: 140 },
+    // 商店消耗品
+    hp_potion_s: { name: '輕型治癒藥水', emoji: '🧪', sellPrice: 15 },
+    hp_potion_m: { name: '中型治癒藥水', emoji: '🧪', sellPrice: 50 },
+    hp_potion_l: { name: '強力治癒藥水', emoji: '🧪', sellPrice: 140 },
     mp_potion: { name: '魔力藥水', emoji: '💙', sellPrice: 30 },
-    smoke_bomb: { name: '逃脫煙霧彈', emoji: '🪶', sellPrice: 40 },
-    boss_lure: { name: '首領誘餌', emoji: '🍖', sellPrice: 200 },
-    teleport_scroll: { name: '傳送卷軸', emoji: '📜', sellPrice: 75 },
+    smoke_bomb: { name: '歸還卷軸', emoji: '🪶', sellPrice: 40 },
+    boss_lure: { name: '精銳誘餌', emoji: '🍖', sellPrice: 200 },
+    teleport_scroll: { name: '傳送符印', emoji: '📜', sellPrice: 75 },
     revive_scroll: { name: '復活卷軸', emoji: '💀', sellPrice: 200 },
     magic_shard: { name: '魔力碎片', emoji: '✨', sellPrice: 50 },
     chaos_essence: { name: '混沌精華', emoji: '🌀', sellPrice: 500 },
 };
+
 
 export function getItemDisplayName(itemId) {
     if (ITEM_NAMES[itemId]) return `${ITEM_NAMES[itemId].emoji} ${ITEM_NAMES[itemId].name}`;

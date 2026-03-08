@@ -15,21 +15,21 @@ export async function showAdventure(interaction, char) {
     const total = calculateTotalStats(char, eqList);
 
     if (char.hp <= 0) {
-        const embed = rpgEmbed('🐕💀 你已經倒下了...', [
-            '你的 HP 已經歸零！需要先回復才能繼續冒險。',
+        const embed = rpgEmbed('🛡️ 騎士已倒下...', [
+            '你的體力已全然耗盡，靈魂正處於虛弱狀態。需要先進行冥想或休憩方可再次啟程。',
             '',
             `${hpBar(char.hp, total.max_hp)}`,
             '',
-            '💡 使用商店購買藥水，或等待每日簽到回復！',
-        ].join('\n')).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+            '💡 於酒館稍作休息，或待能量自然匯聚。',
+        ].join('\n')).setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
         return safeReply(interaction, { embeds: [embed], components: [backButton()] });
     }
 
     const embed = rpgEmbed(
-        '⚔️ 冒險 — 選擇目的地',
+        '⚔️ 出征 — 選擇目的地',
         [
-            '```ansi\n' + ansiText('2;32', '選擇你要前往的區域，本王會為你祈福的！汪！') + '\n```',
-            '**👤【當前勇者狀態】**',
+            '```ansi\n' + ansiText('2;32', '決定你要遠征的疆域，聖光將與你同在。') + '\n```',
+            '**👤【當前騎士狀態】**',
             '```ansi\n' + [
                 charSummary(char),
                 hpBarBare(char.hp, total.max_hp),
@@ -41,7 +41,7 @@ export async function showAdventure(interaction, char) {
         0x2ECC71
     )
         .addFields(getStatusFields(char, total, { showResources: true, showCombat: false }))
-        .setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+        .setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
 
     const rows = areaSelectRows(char.level);
     const navRow = rows.pop(); // 先把 areaSelectRows 最後一行的返回按鈕拿出來
@@ -68,9 +68,9 @@ export async function showAutoFarmMenu(interaction, char) {
 
     const embed = rpgEmbed(
         '🤖 自動探索模式',
-        '請選擇你想連續探索的區域與次數。\n> ⚠️ 注意：自動探索將在背景瞬間完成多場戰鬥，期間如果生命值歸零會立即中斷並結算。',
+        '請選擇你想連續探索的區域與次數。\n> ⚠️ 注意：自動探索將模擬高強度的連續作戰，若生命值見底將會強制中斷遠征。',
         0x3498DB
-    ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${userId}` });
+    ).setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${userId}` });
 
     const options = availableAreas.map(a => ({
         label: `${a.emoji} ${a.name} (Lv.${a.levelReq}+)`,
@@ -156,7 +156,7 @@ export async function showShrineMenu(interaction, char) {
     // ANSI Header
     const headerContent = [
         { color: COLORS.GOLD + ';' + COLORS.BOLD, text: ` 🏮 【 遠 古 祭 壇 — 靈 魂 喚 醒 】 🏮 ` },
-        { color: COLORS.CYAN, text: ` 汪！供奉特定的怪物素材，就能強行喚醒該區域的領主！ ` }
+        { color: COLORS.CYAN, text: ` 於祭壇供奉特定的靈媒，喚醒潛藏於此地的強大存在。 ` }
     ];
 
     let areaListText = '';
@@ -195,12 +195,12 @@ export async function showShrineMenu(interaction, char) {
     headerContent.forEach(h => {
         finalDesc += fmt(h.color, h.text) + '\n';
     });
-    finalDesc += fmt(COLORS.WHITE, '💡 召喚後將立即進入首領戰，請做好準備！') + '\n';
+    finalDesc += fmt(COLORS.WHITE, '💡 提示：喚醒後將立即面對首領挑戰。') + '\n';
     finalDesc += fmt(COLORS.GRAY, '═══ 目前可感應到的祭壇 ═══') + '\n';
-    finalDesc += (areaListText || fmt(COLORS.RED, '汪嗚...目前沒有發現任何可召喚的首領祭壇。')) + '\n```';
+    finalDesc += (areaListText || fmt(COLORS.RED, '目前尚未感應到任何祭壇的能量共鳴。')) + '\n```';
 
     const embed = rpgEmbed(null, finalDesc, areaListText ? 0xE74C3C : 0x95A5A6)
-        .setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+        .setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
 
     if (options.length === 0) {
         return safeReply(interaction, { embeds: [embed], components: [backButton()] });
@@ -233,7 +233,7 @@ export async function handleSummonSelect(interaction, char) {
     for (const ing of recipe.ingredients) {
         const owned = inv.find(i => i.item_id === ing.id)?.quantity || 0;
         if (owned < ing.count) {
-            return interaction.followUp({ content: `🐕 汪嗚！召喚失敗：你還差一些 ${getItemDisplayName(ing.id)}！`, flags: ['Ephemeral'] });
+            return interaction.followUp({ content: `🚫 召喚失敗：你所持有的 ${getItemDisplayName(ing.id)} 數量不足以引發共鳴。`, flags: ['Ephemeral'] });
         }
     }
 
@@ -377,7 +377,7 @@ async function foundTreasure(interaction, char, areaId) {
 
     const headerContent = [
         { color: COLORS.GOLD + ';' + COLORS.BOLD, text: ` 🎁 【驚喜發現！】 🎁 ` },
-        { color: COLORS.CYAN, text: ` 汪！這是在角落發現的無主財寶！ ` }
+        { color: COLORS.CYAN, text: ` 📜 於瓦礫堆中發現了無主之財。 ` }
     ];
 
     let desc = '```ansi\n';
@@ -388,7 +388,7 @@ async function foundTreasure(interaction, char, areaId) {
         '',
         `${fmt(COLORS.WHITE, '💰 獲得金幣:')} ${fmt(COLORS.GOLD + ';' + COLORS.BOLD, goldFound.toLocaleString())}`,
         '',
-        `${fmt(COLORS.GREEN, '🐕 汪！運氣不錯嘛！繼續冒險吧！')}`
+        `${fmt(COLORS.GREEN, '📜 運氣不錯。繼續遠征。')}`
     ].join('\n') + '\n```';
 
     const embed = rpgEmbed(null, desc, 0xF1C40F);
@@ -405,7 +405,7 @@ async function randomEvent(interaction, char, areaId) {
     const eventPools = {
         outskirts: [
             { text: '一隻友善的吉娃娃農夫招待你吃了一頓豐盛的農家菜！', healHp: 30, healMp: 15 },
-            { text: '你在草叢中發現了某個粗心冒險者遺落的錢袋。', gold: 50 },
+            { text: '你在草叢中發現了某個粗心騎士遺落的錢袋。', gold: 50 },
             { text: '你幫忙找回了走失的小綿羊，獲得了一些謝禮。', gold: 30, healHp: 10 },
         ],
         dark_forest: [
@@ -472,14 +472,14 @@ async function randomEvent(interaction, char, areaId) {
     }
 
     const header = ansiBlock([
-        { color: COLORS.PURPLE + ';' + COLORS.BOLD, text: ` 🎲 【奇遇事件】 🎲 ` },
-        { color: COLORS.CYAN, text: ` 汪！冒險途中總是一波三折呢！ ` }
+        { color: COLORS.PURPLE + ';' + COLORS.BOLD, text: ` 🎲 【 奇 遇 之 刻 】 🎲 ` },
+        { color: COLORS.CYAN, text: ` 遠征途中，命運的齒輪往往生出意外的轉折。 ` }
     ]);
 
     const resultLines = [
         `你在探索途中的奇遇：`,
         '',
-        `${fmt(COLORS.GRAY, `> ${event.text}`)}`,
+        fmt(COLORS.GRAY, '「莫要以天價購得無用之物...」'),
         '',
         finalGold ? `${fmt(COLORS.WHITE, '💰 獲得金幣:')} ${fmt(COLORS.GOLD + ';' + COLORS.BOLD, finalGold.toLocaleString())}` : '',
         scaledHealHp ? `${scaledHealHp > 0 ? fmt(COLORS.GREEN, '💚') : fmt(COLORS.RED, '💔')} 生命周期 ${scaledHealHp > 0 ? fmt(COLORS.GREEN, '恢復') : fmt(COLORS.RED, '減少')} 了 ${fmt(COLORS.WHITE + ';' + COLORS.BOLD, Math.abs(scaledHealHp))} 點！` : '',

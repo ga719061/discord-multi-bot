@@ -191,7 +191,7 @@ async function applyDamage(boss, targetInfo, battle, calcDamage, isDodge, mult, 
                 const vName = victim ? victim.displayName : interaction.user.username;
                 await broadcastRpgEvent(interaction.client, interaction.guildId, {
                     title: '壯烈犧牲',
-                    description: `冒險者 ${fmt(COLORS.BLUE, vName)} 在對抗 **${boss.name}** 時不幸戰死...`,
+                    description: `騎士 ${fmt(COLORS.BLUE, vName)} 在對抗 **${boss.name}** 時不幸戰死...`,
                     color: 0x880000
                 });
             }

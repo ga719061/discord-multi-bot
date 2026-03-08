@@ -690,7 +690,7 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
             `🔄 自動探索戰報: ${areaName}`,
             lines.join('\n'),
             deathReason ? 0xE74C3C : 0x2ECC71
-        ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${userId}` });
+        ).setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${userId}` });
 
         const row = backButton();
 
@@ -705,10 +705,11 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
         }
     } catch (e) {
         logger.error('runAutoFarm fatal error:', e);
-        const errEmbed = rpgEmbed('🤖 自動探索發生錯誤', `汪！探索中斷了...\n錯誤訊息: ${e.message}`, 0xE74C3C);
+        const errEmbed = rpgEmbed('🤖 自動遠征發生異常', `🚫 遠征中斷，術法能量流失...\n錯誤訊息: ${e.message}`, 0xE74C3C);
         try {
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ embeds: [errEmbed], flags: ['Ephemeral'] });
+                const reply = { content: '🚫 術法共鳴失敗，王國秘法系統發生異常。', flags: ['Ephemeral'] };
+                await interaction.reply(reply);
             } else {
                 await interaction.editReply({ embeds: [errEmbed] });
             }

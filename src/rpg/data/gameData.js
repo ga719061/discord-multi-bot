@@ -26,31 +26,31 @@ export const STAT_LABELS = {
 // ---------- 職業 (Classes) ----------
 export const CLASSES = {
     warrior: {
-        id: 'warrior', name: '戰士', emoji: '⚔️', desc: '攻守兼備的近戰大師。',
+        id: 'warrior', name: '劍士', emoji: '⚔️', desc: '貫徹力量與信念的武藝大師，擅長近身交鋒，是戰場上的核心。',
         baseStats: { hp: 150, mp: 30, atk: 25, matk: 10, def: 20, mdef: 15, spd: 15 },
         growth: { hp: 25, mp: 5, atk: 5, matk: 2, def: 4, mdef: 3, spd: 3 },
         statConversion: { str: { atk: 1.5, hp: 2 }, vit: { hp: 8, def: 1.2 } },
         advancements: [
-            { level: 30, name: '精英戰士', color: 'WHITE' },
-            { level: 60, name: '戰爭大師', color: 'GOLD' },
-            { level: 99, name: '不朽戰神', color: 'RED' }
+            { level: 30, name: '精英騎士', color: 'WHITE' },
+            { level: 60, name: '死亡騎士', color: 'GOLD' },
+            { level: 99, name: '不朽至尊', color: 'RED' }
         ],
         weapon: 'rusty_sword', initialSkill: 'power_slash'
     },
     ranger: {
-        id: 'ranger', name: '遊俠', emoji: '🏹', desc: '遠程打擊與速度的化身。',
+        id: 'ranger', name: '遊俠', emoji: '🏹', desc: '穿梭於綠蔭與陰影間的精準狙擊者，以靈動的身法戲弄敵人。',
         baseStats: { hp: 120, mp: 40, atk: 28, matk: 10, def: 12, mdef: 12, spd: 25 },
         growth: { hp: 18, mp: 6, atk: 6, matk: 2, def: 2, mdef: 2, spd: 5 },
         statConversion: { agi: { spd: 1.2, atk: 1.0, crit: 0.1 }, luk: { crit: 0.2, crit_dmg: 0.5 } },
         advancements: [
             { level: 30, name: '巡林客', color: 'WHITE' },
-            { level: 60, name: '神射手', color: 'GOLD' },
-            { level: 99, name: '追風者', color: 'CYAN' }
+            { level: 60, name: '幽暗執行者', color: 'GOLD' },
+            { level: 99, name: '追風主宰', color: 'CYAN' }
         ],
         weapon: 'novice_bow', initialSkill: 'precise_shot'
     },
     mage: {
-        id: 'mage', name: '法師', emoji: '🔮', desc: '操縱元素與奧術的高塔主人。',
+        id: 'mage', name: '法師', emoji: '🔮', desc: '與四大元素簽署古老契約的智者，揮手間足以毀天滅地。',
         baseStats: { hp: 100, mp: 100, atk: 10, matk: 30, def: 10, mdef: 25, spd: 12 },
         growth: { hp: 15, mp: 15, atk: 1, matk: 8, def: 2, mdef: 5, spd: 2 },
         statConversion: { int: { matk: 1.8, mp: 10 }, luk: { crit: 0.1, echo_chance: 0.1 } },
@@ -62,7 +62,7 @@ export const CLASSES = {
         weapon: 'novice_staff', initialSkill: 'fireball'
     },
     paladin: {
-        id: 'paladin', name: '聖騎士', emoji: '🛡️', desc: '神聖的護盾與救贖的福音。',
+        id: 'paladin', name: '聖騎士', emoji: '🛡️', desc: '神的代理者，誓言守護弱小並降下神聖的審判。',
         baseStats: { hp: 180, mp: 50, atk: 18, matk: 18, def: 25, mdef: 20, spd: 10 },
         growth: { hp: 35, mp: 8, atk: 3, matk: 3, def: 6, mdef: 5, spd: 1 },
         statConversion: { vit: { hp: 12, def: 1.5 }, int: { mdef: 1.0, matk: 0.8 } },
@@ -74,7 +74,7 @@ export const CLASSES = {
         weapon: 'rusty_mace', initialSkill: 'holy_strike'
     },
     magic_swordsman: {
-        id: 'magic_swordsman', name: '魔劍士', emoji: '✨', desc: '結合劍術與魔法的精英。',
+        id: 'magic_swordsman', name: '魔劍士', emoji: '✨', desc: '劍與魔法的完美交織，在刀光劍影中釋放混亂的奧術能量。',
         baseStats: { hp: 130, mp: 60, atk: 22, matk: 22, def: 15, mdef: 15, spd: 18 },
         growth: { hp: 20, mp: 10, atk: 4.5, matk: 4.5, def: 3, mdef: 3, spd: 4 },
         statConversion: { str: { atk: 1.0, spd: 0.2 }, int: { matk: 1.0, mp: 5 }, agi: { spd: 0.5, atk: 0.5 } },
@@ -89,11 +89,11 @@ export const CLASSES = {
 
 // ---------- 種族 (Races) ----------
 export const RACES = {
-    human: { id: 'human', name: '人類', emoji: '🧑', desc: '適應力極強，潛力無窮。', bonus: { all: 2 } },
-    elf: { id: 'elf', name: '精靈', emoji: '🧝', desc: '自然的寵兒，精通奧術。', bonus: { int: 5, agi: 5 } },
-    dwarf: { id: 'dwarf', name: '矮人', emoji: '🧔', desc: '地底的堅毅守護者。', bonus: { vit: 5, str: 5 } },
-    orc: { id: 'orc', name: '獸人', emoji: '👹', desc: '咆哮的戰士，力量至上。', bonus: { str: 10 } },
-    undead: { id: 'undead', name: '不死者', emoji: '💀', desc: '死亡亦非終結。', bonus: { vit: 15 } }
+    chihuahua: { id: 'chihuahua', name: '吉娃娃族', emoji: '🐕', desc: '吉吉三世王所在的皇室族裔，擁有不可思議的神聖加護與生命力。', bonus: { vit: 15 } },
+    human: { id: 'human', name: '人類', emoji: '🧑', desc: '大陸上人數最多的種族，擁有極強的適應力與平衡能力。', bonus: { all: 2 } },
+    elf: { id: 'elf', name: '精靈', emoji: '🧝', desc: '在密林中成長，是自然的寵兒，精通奧術與箭步。', bonus: { int: 5, agi: 5 } },
+    dark_elf: { id: 'dark_elf', name: '黑妖', emoji: '👤', desc: '為了追求極致的力量，與陰影簽下契約的冷酷種族。', bonus: { str: 5, agi: 5 } },
+    orc: { id: 'orc', name: '獸人', emoji: '👺', desc: '咆哮的戰士族，天生擁有野獸般的怪力。', bonus: { str: 10 } }
 };
 
 // ---------- 套裝註冊 (Set Registry) ----------
@@ -191,7 +191,7 @@ export const AFFIX_REGISTRY = {
 
 // ---------- 區域 ----------
 export const AREAS = [
-    { id: 'outskirts', name: '王國近郊', emoji: '🌲', levelReq: 1, desc: '平靜的森林邊緣，住著一些弱小的生物，適合作為新手冒險者的起點。' },
+    { id: 'outskirts', name: '王國近郊', emoji: '🌲', levelReq: 1, desc: '平靜的森林邊緣，住著一些弱小的生物，適合作為新手騎士的起點。' },
     { id: 'dark_forest', name: '黑霧森林', emoji: '🌳', levelReq: 10, desc: '被邪惡氣息籠罩的古老森林，光線陰暗，隱藏著兇猛的哥布林與巨蜘蛛。' },
     { id: 'dragon_ridge', name: '龍脊山脈', emoji: '🏔️', levelReq: 25, desc: '地勢險要的山峰，終年積雪。傳說山巔曾有巨龍棲息，怪物體格極其強壯。' },
     { id: 'dull_swamp', name: '幽暗沼澤', emoji: '🦎', levelReq: 40, desc: '毒氣瀰漫的濕地，步步危機。劇毒生物與死靈在此徘徊，令人不寒而慄。' },
@@ -207,7 +207,7 @@ export const AREAS = [
 export const MONSTERS = {
     outskirts: [
         {
-            id: 'slime', name: '史萊姆', emoji: '🟢', hp: 40, atk: 10, def: 3, mdef: 3, spd: 2, xp: 12, gold: 10, drops: [
+            id: 'slime', name: '爬行的啫喱', emoji: '🟢', hp: 40, atk: 10, def: 3, mdef: 3, spd: 2, xp: 12, gold: 10, drops: [
                 { id: 'slime_gel', chance: 50 },
                 { id: 'slime_shield', chance: 5, isEquip: true },
                 { id: 'slime_ring', chance: 2, isEquip: true },
@@ -223,7 +223,7 @@ export const MONSTERS = {
             ]
         },
         {
-            id: 'wild_boar', name: '野豬', emoji: '🐗', hp: 70, atk: 18, def: 8, mdef: 4, spd: 5, xp: 20, gold: 18, drops: [
+            id: 'wild_boar', name: '狂暴野豬', emoji: '🐗', hp: 70, atk: 18, def: 8, mdef: 4, spd: 5, xp: 20, gold: 18, drops: [
                 { id: 'boar_meat', chance: 50 },
                 { id: 'boar_hide_vest', chance: 5, isEquip: true },
                 { id: 'boar_tusk_dagger', chance: 3, isEquip: true },
@@ -231,7 +231,7 @@ export const MONSTERS = {
             ]
         },
         {
-            id: 'bandit', name: '盜賊', emoji: '🥷', hp: 60, atk: 15, def: 6, mdef: 5, spd: 10, xp: 25, gold: 28, drops: [
+            id: 'bandit', name: '叛亡兵', emoji: '🥷', hp: 60, atk: 15, def: 6, mdef: 5, spd: 10, xp: 25, gold: 28, drops: [
                 { id: 'stolen_pouch', chance: 40 },
                 { id: 'bandit_cloak', chance: 4, isEquip: true },
                 { id: 'thieves_dagger', chance: 3, isEquip: true },
@@ -242,10 +242,10 @@ export const MONSTERS = {
     ],
     dark_forest: [
         {
-            id: 'goblin', name: '哥布林', emoji: '👺', hp: 150, atk: 32, def: 15, mdef: 8, spd: 10, xp: 38, gold: 35,
+            id: 'goblin', name: '小惡魔', emoji: '👺', hp: 150, atk: 32, def: 15, mdef: 8, spd: 10, xp: 38, gold: 35,
             skills: [
-                { name: '重擊', type: 'physical', multiplier: 1.4, chance: 25 },
-                { name: '磨刀', type: 'buff', stat: 'atk', percent: 20, turns: 2, chance: 15 }
+                { name: '致命襲擊', type: 'physical', multiplier: 1.4, chance: 25 },
+                { name: '嗜血', type: 'buff', stat: 'atk', percent: 20, turns: 2, chance: 15 }
             ],
             drops: [
                 { id: 'goblin_ear', chance: 50 },
@@ -264,10 +264,10 @@ export const MONSTERS = {
             ]
         },
         {
-            id: 'giant_spider', name: '巨蜘蛛', emoji: '🕷️', hp: 220, atk: 45, def: 12, mdef: 12, spd: 18, xp: 52, gold: 40,
+            id: 'giant_spider', name: '荒野狼', emoji: '🐺', hp: 220, atk: 45, def: 12, mdef: 12, spd: 18, xp: 52, gold: 40,
             skills: [
-                { name: '毒液噴射', type: 'physical', multiplier: 1.1, dot: { percent: 5, turns: 3 }, chance: 30 },
-                { name: '蜘蛛絲', type: 'debuff', stat: 'spd', percent: -30, turns: 2, chance: 20 }
+                { name: '狂暴撕咬', type: 'physical', multiplier: 1.1, dot: { percent: 5, turns: 3 }, chance: 30 },
+                { name: '狼嚎', type: 'debuff', stat: 'spd', percent: -30, turns: 2, chance: 20 }
             ],
             drops: [
                 { id: 'spider_fang', chance: 45 },
@@ -281,9 +281,9 @@ export const MONSTERS = {
     ],
     dragon_ridge: [
         {
-            id: 'mountain_troll', name: '山丘巨魔', emoji: '👹', hp: 450, atk: 65, def: 35, mdef: 15, spd: 8, xp: 85, gold: 60,
+            id: 'mountain_troll', name: '地底巨魔', emoji: '👹', hp: 450, atk: 65, def: 35, mdef: 15, spd: 8, xp: 85, gold: 60,
             skills: [
-                { name: '大地粉碎', type: 'physical', multiplier: 1.6, chance: 20 },
+                { name: '巨石震擊', type: 'physical', multiplier: 1.6, chance: 20 },
                 { name: '咆哮', type: 'debuff', stat: 'atk', percent: -20, turns: 2, chance: 15 }
             ],
             drops: [
@@ -298,10 +298,10 @@ export const MONSTERS = {
             ]
         },
         {
-            id: 'rock_golem', name: '石巨人', emoji: '🗿', hp: 600, atk: 55, def: 60, mdef: 30, spd: 5, xp: 110, gold: 75,
+            id: 'rock_golem', name: '石巨人之魂', emoji: '🗿', hp: 600, atk: 55, def: 60, mdef: 30, spd: 5, xp: 110, gold: 75,
             skills: [
-                { name: '岩石投擲', type: 'physical', multiplier: 1.3, chance: 30 },
-                { name: '堅毅', type: 'buff', stat: 'def', percent: 40, turns: 3, chance: 20 }
+                { name: '巨石投擲', type: 'physical', multiplier: 1.3, chance: 30 },
+                { name: '堅毅不拔', type: 'buff', stat: 'def', percent: 40, turns: 3, chance: 20 }
             ],
             drops: [
                 { id: 'rock_shard', chance: 45 },
@@ -317,10 +317,10 @@ export const MONSTERS = {
     ],
     dull_swamp: [
         {
-            id: 'swamp_hydra', name: '沼澤九頭蛇', emoji: '🐍', hp: 850, atk: 85, def: 45, mdef: 45, spd: 15, xp: 180, gold: 120,
+            id: 'swamp_hydra', name: '墮落的九頭龍', emoji: '🐍', hp: 850, atk: 85, def: 45, mdef: 45, spd: 15, xp: 180, gold: 120,
             skills: [
-                { name: '多重咬碎', type: 'physical', multiplier: 1.8, chance: 20 },
-                { name: '腐蝕毒霧', type: 'debuff', stat: 'def', percent: -30, turns: 3, chance: 25 }
+                { name: '多重粉碎', type: 'physical', multiplier: 1.8, chance: 20 },
+                { name: '腐蝕之息', type: 'debuff', stat: 'def', percent: -30, turns: 3, chance: 25 }
             ],
             drops: [
                 { id: 'hydra_fang', chance: 30 },
@@ -334,10 +334,10 @@ export const MONSTERS = {
             ]
         },
         {
-            id: 'undead_knight', name: '不死騎士', emoji: '🏇', hp: 750, atk: 95, def: 55, mdef: 25, spd: 12, xp: 210, gold: 150,
+            id: 'undead_knight', name: '冥界騎士', emoji: '🏇', hp: 750, atk: 95, def: 55, mdef: 25, spd: 12, xp: 210, gold: 150,
             skills: [
-                { name: '幽冥突刺', type: 'physical', multiplier: 1.5, lifesteal: 20, chance: 25 },
-                { name: '死亡寒氣', type: 'debuff', stat: 'spd', percent: -40, turns: 2, chance: 20 }
+                { name: '幽冥一閃', type: 'physical', multiplier: 1.5, lifesteal: 20, chance: 25 },
+                { name: '死亡靈氣', type: 'debuff', stat: 'spd', percent: -40, turns: 2, chance: 20 }
             ],
             drops: [
                 { id: 'ancient_bone', chance: 45 },
@@ -355,9 +355,9 @@ export const MONSTERS = {
 
 // ---------- BOSSES ----------
 export const BOSSES = {
-    outskirts: { id: 'wild_boar_king', name: '野豬王', emoji: '🐗👑', hp: 500, atk: 60, def: 30, mdef: 20, spd: 15, xp: 500, gold: 1000 },
-    dark_forest: { id: 'goblin_chief', name: '哥布林酋長', emoji: '👺👑', hp: 1500, atk: 120, def: 60, mdef: 40, spd: 25, xp: 2000, gold: 4000 },
-    dragon_ridge: { id: 'young_dragon', name: '幼龍', emoji: '🐉', hp: 5000, atk: 300, def: 150, mdef: 150, spd: 40, xp: 10000, gold: 20000 },
+    outskirts: { id: 'wild_boar_king', name: '狂暴野豬王', emoji: '🐗👑', hp: 500, atk: 60, def: 30, mdef: 20, spd: 15, xp: 500, gold: 1000 },
+    dark_forest: { id: 'goblin_chief', name: '巴風特', emoji: '👺👑', hp: 1500, atk: 120, def: 60, mdef: 40, spd: 25, xp: 2000, gold: 4000 },
+    dragon_ridge: { id: 'young_dragon', name: '地龍', emoji: '🐉', hp: 5000, atk: 300, def: 150, mdef: 150, spd: 40, xp: 10000, gold: 20000 },
 };
 
 // ---------- 召喚配方 (Summon Recipes) ----------
@@ -399,37 +399,37 @@ export const MAIN_QUESTS = [
     {
         id: 'dark_forest_depths',
         chapter: '第三章',
-        name: '深入黑霧',
+        name: '深入深淵之林',
         objectives: [
-            { type: 'kill_monster', monsterId: 'goblin', count: 15, desc: '擊敗 15 隻哥布林' },
-            { type: 'kill_monster', monsterId: 'giant_spider', count: 5, desc: '擊敗 5 隻巨蜘蛛' }
+            { type: 'kill_monster', monsterId: 'goblin', count: 15, desc: '驅逐 15 名小惡魔' },
+            { type: 'kill_monster', monsterId: 'giant_spider', count: 5, desc: '擊斃 5 隻荒野狼' }
         ],
         rewards: { gold: 1200, xp: 1200, gems: 20 }
     },
     {
         id: 'mountain_ascent',
         chapter: '第四章',
-        name: '攀登龍脊',
+        name: '攀登龍脊之巔',
         objectives: [
-            { type: 'kill_monster', monsterId: 'mountain_troll', count: 8, desc: '擊敗 8 隻山丘巨魔' },
-            { type: 'kill_monster', monsterId: 'rock_golem', count: 5, desc: '擊敗 5 隻石巨人' }
+            { type: 'kill_monster', monsterId: 'mountain_troll', count: 8, desc: '討伐 8 隻地底巨魔' },
+            { type: 'kill_monster', monsterId: 'rock_golem', count: 5, desc: '粉碎 5 具石巨人之魂' }
         ],
         rewards: { gold: 2500, xp: 3000, gems: 50 }
     },
     {
         id: 'swamp_menace',
         chapter: '第五章',
-        name: '沼澤之影',
+        name: '墮落之影',
         objectives: [
-            { type: 'kill_monster', monsterId: 'swamp_hydra', count: 3, desc: '擊潰 3 隻沼澤九頭蛇' },
-            { type: 'kill_monster', monsterId: 'undead_knight', count: 10, desc: '驅逐 10 名不死騎士' }
+            { type: 'kill_monster', monsterId: 'swamp_hydra', count: 3, desc: '斬殺 3 隻墮落的九頭龍' },
+            { type: 'kill_monster', monsterId: 'undead_knight', count: 10, desc: '淨化 10 名冥界騎士' }
         ],
         rewards: { gold: 5000, xp: 8000, gems: 100 }
     }
 ];
 
 export const DAILY_QUEST_POOL = [
-    { id: 'daily_kill_slime', type: 'kill_monster', monsterId: 'slime', count: 10, name: '史萊姆清理', rewards: { gold: 200, xp: 150 } },
-    { id: 'daily_kill_goblin', type: 'kill_monster', monsterId: 'goblin', count: 8, name: '哥布林獵人', rewards: { gold: 400, xp: 300 } },
-    { id: 'daily_win_battles', type: 'win_battle', count: 5, name: '戰鬥磨練', rewards: { gold: 500, xp: 400, gems: 2 } },
+    { id: 'daily_kill_slime', type: 'kill_monster', monsterId: 'slime', count: 10, name: '清掃啫喱', rewards: { gold: 200, xp: 150 } },
+    { id: 'daily_kill_goblin', type: 'kill_monster', monsterId: 'goblin', count: 8, name: '獵捕小惡魔', rewards: { gold: 400, xp: 300 } },
+    { id: 'daily_win_battles', type: 'win_battle', count: 5, name: '戰之磨練', rewards: { gold: 500, xp: 400, gems: 2 } },
 ];

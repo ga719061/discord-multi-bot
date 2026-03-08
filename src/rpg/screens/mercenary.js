@@ -8,7 +8,7 @@ import { getCharacter, getAvailableMercenaries, getPersonalMercenaryHistory } fr
 export const activeMercenaries = new Map();
 
 /**
- * 傭兵公會主畫面
+ * 傭兵駐地主畫面
  */
 export async function showMercenaryHub(interaction, char = null) {
     await interaction.deferUpdate().catch(() => { });
@@ -41,11 +41,11 @@ export async function showMercenaryHub(interaction, char = null) {
     }));
 
     const embed = rpgEmbed(
-        '🛡️ 吉吉傭兵公會',
+        '🛡️ 吉吉傭兵駐地',
         '```ansi\n' + [
-            fmt(COLORS.CYAN, '歡迎來到傭兵公會！在此締結無畏的契約，尋找最可靠的戰友！'),
+            fmt(COLORS.CYAN, '歡迎來到傭兵駐地。在此締結誓約，尋找最可靠的戰友。'),
             '',
-            fmt(COLORS.WHITE, '你可以僱用其他冒險者作為傭兵。他們會在戰鬥中由系統 AI 操控提供支援。'),
+            fmt(COLORS.WHITE, '你可以僱用其他正式騎士作為傭兵。他們會在遠征中由系統 AI 操控提供支援。'),
             '',
             fmt(COLORS.YELLOW + ';' + COLORS.BOLD, '【你目前的傭兵小隊】 (最多 3 人)'),
             hiredInfos.length > 0 ? hiredInfos.join('\n') : fmt(COLORS.GRAY, '> 尚無傭兵，快去招募吧！'),
@@ -53,7 +53,7 @@ export async function showMercenaryHub(interaction, char = null) {
             fmt(COLORS.GRAY, '💡 出發去冒險時，這些傭兵就會自動跟著你上陣囉！')
         ].join('\n') + '\n```',
         0x3498DB // Blue
-    ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${userId}` });
+    ).setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${userId}` });
 
     const row = new ActionRowBuilder().addComponents(
         rpgButton('rpg_merc_hire', '🔍 尋找傭兵', 1, '🔍', hired.length >= 3),
@@ -92,7 +92,7 @@ export async function showHireMenu(interaction) {
     const candidates = available.filter(c => !hired.includes(c.user_id));
 
     if (candidates.length === 0) {
-        return interaction.editReply({ content: '🐕 汪嗚...目前沒有合適且開放助戰的傭兵可以招募！', components: [] });
+        return interaction.editReply({ content: '🚫 目前沒有合適且開放助戰的傭兵可以招募。', components: [] });
     }
 
     const options = await Promise.all(candidates.map(async (c) => {
@@ -116,7 +116,7 @@ export async function showHireMenu(interaction) {
 
     const embed = rpgEmbed(
         '🦸 招募傭兵',
-        '請選擇你想招募的勇者加入你的冒險小隊：\n*(系統僅顯示等級相近且願意參加助戰的玩家)*',
+        '請選擇你想招募的勇者加入你的遠征小隊：\n*(系統僅顯示境界相近且願意參加助戰的玩家)*',
         0x3498DB
     );
 
@@ -135,7 +135,7 @@ export async function handleHireSelect(interaction) {
 
     let hired = activeMercenaries.get(userId) || [];
     if (hired.length >= 3) {
-        return interaction.reply({ content: '🐕 你的隊伍已經滿了 (最多 3 人)！', flags: ['Ephemeral'] });
+        return interaction.reply({ content: '🚫 閣下的隊伍已經額滿 (最多 3 人)。', flags: ['Ephemeral'] });
     }
 
     if (!hired.includes(hiredId)) {
@@ -158,8 +158,8 @@ export async function showMercenaryHistory(interaction) {
     const history = getPersonalMercenaryHistory(guildId, userId, 20);
 
     if (history.length === 0) {
-        const emptyEmbed = rpgEmbed('📜 我的助戰紀錄', '你目前沒有任何出勤的助戰紀錄！開啟助戰功能讓別人僱用你賺取獎勵吧！').setFooter({ text: `uid:${userId}` });
-        const row = new ActionRowBuilder().addComponents(rpgButton('rpg_merc_hub', '返回傭兵公會', 2, '🔙'));
+        const emptyEmbed = rpgEmbed('📜 我的助戰紀錄', '閣下目前沒有任何出勤的助戰紀錄。開啟助戰功能讓別人僱用你賺取獎勵吧。').setFooter({ text: `uid:${userId}` });
+        const row = new ActionRowBuilder().addComponents(rpgButton('rpg_merc_hub', '返回傭兵駐地', 2, '🔙'));
         return interaction.editReply({ embeds: [emptyEmbed], components: [row] });
     }
 
@@ -187,7 +187,7 @@ export async function showMercenaryHistory(interaction) {
         0x1ABC9C // Turquoise
     ).setFooter({ text: `uid:${userId}` });
 
-    const navRow = new ActionRowBuilder().addComponents(rpgButton('rpg_merc_hub', '返回傭兵公會', 2, '🔙'));
+    const navRow = new ActionRowBuilder().addComponents(rpgButton('rpg_merc_hub', '返回傭兵駐地', 2, '🔙'));
 
     await interaction.editReply({ embeds: [embed], components: [navRow] });
 }

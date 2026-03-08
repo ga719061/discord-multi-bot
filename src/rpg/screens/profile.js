@@ -30,7 +30,7 @@ export async function showProfile(interaction, char) {
             return `${def.emoji} **${fullName}${enhStr}** [${qualityLabel(eq.quality)}]\n　 ╰┈> \`${statsText}\``;
         };
 
-        const embed = rpgEmbed(`🐕⚔️ ${interaction.user.displayName} 的冒險者資訊`);
+        const embed = rpgEmbed(`🛡️ ${interaction.user.displayName} 的騎士檔案`);
 
         const basicInfo = [
             `**稱號:**`,
@@ -98,7 +98,7 @@ export async function showProfile(interaction, char) {
             : '（未設定，顯示所有技能）';
 
         embed.addFields(
-            { name: '✨ 冒險者基礎', value: basicInfo, inline: true },
+            { name: '✨ 騎士基礎', value: basicInfo, inline: true },
             { name: '📊 核心屬性', value: attrInfo, inline: true },
             { name: '🧬 戰鬥數值', value: mainStats, inline: false },
             { name: '🏆 生涯戰績', value: careerInfo, inline: false },
@@ -141,8 +141,8 @@ export async function showProfile(interaction, char) {
         console.error('showProfile error:', e);
         const errDetail = e.errors ? ` (${JSON.stringify(e.errors)})` : '';
         try {
-            if (interaction.replied || interaction.deferred) await interaction.followUp({ content: `🐕 UI產生發生錯誤: ${e.message}${errDetail}`, flags: ['Ephemeral'] });
-            else await interaction.reply({ content: `🐕 UI產生發生錯誤: ${e.message}${errDetail}`, flags: ['Ephemeral'] });
+            if (interaction.replied || interaction.deferred) await interaction.followUp({ content: `🚫 UI 渲染程序發生異常: ${e.message}${errDetail}`, flags: ['Ephemeral'] });
+            else await interaction.reply({ content: `🚫 UI 渲染程序發生異常: ${e.message}${errDetail}`, flags: ['Ephemeral'] });
         } catch (err) { }
     }
 }
@@ -197,8 +197,8 @@ export async function handleProfileAction(interaction, char) {
 
             const lines = [];
             if (learnedIds.length === 0) {
-                lines.push(fmt(COLORS.GRAY, '🐕 你還沒有學會任何技能！'));
-                lines.push(fmt(COLORS.CYAN, '💡 打怪時有機率掉落 技能書，在背包中使用即可學習！'));
+                lines.push(fmt(COLORS.GRAY, '📜 目前尚未掌握任何祕法或劍技。'));
+                lines.push(fmt(COLORS.CYAN, '💡 擊敗強敵有机率獲得 技能書，研讀後即可掌握新力量。'));
             } else {
                 // 已學習技能：改為更緊實的排版
                 lines.push(fmt(COLORS.GOLD, '【 已掌握技能 】'));
@@ -238,10 +238,10 @@ export async function handleProfileAction(interaction, char) {
             }
 
             const embed = rpgEmbed(
-                `🔥 ${interaction.user.displayName} 的技能`,
+                `🔥 ${interaction.user.displayName} 的個人技能清單`,
                 '```ansi\n' + lines.join('\n') + '\n```',
                 0x3498DB // Blue for profile/skills
-            ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+            ).setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
 
             return safeReply(interaction, {
                 embeds: [embed],
@@ -299,7 +299,7 @@ export async function handleProfileAction(interaction, char) {
             const embed = rpgEmbed(
                 '⚔️ 設定上場技能',
                 `請從下方列表選擇您想在戰鬥中使用的技能 (最多 5 個)。\n若未設定，系統將預設顯示所有已學技能。\n\n**當前選擇:**\n${equipped.map(sid => `• ${getSkillDef(sid)?.name || sid}`).join('\n') || '無'}`
-            ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
+            ).setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
 
             return safeReply(interaction, {
                 embeds: [embed],

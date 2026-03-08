@@ -48,10 +48,10 @@ export async function handleInventoryUse(interaction, char) {
     if (interaction.customId === 'rpg_inv_use' && value.startsWith('use_')) {
         const itemId = value.replace('use_', '');
         const shopDef = SHOP_ITEMS.consumables.find(s => s.id === itemId);
-        if (!shopDef) return safeReply(interaction, { content: '🐕 找不到該道具資料！', flags: ['Ephemeral'] });
+        if (!shopDef) return safeReply(interaction, { content: '🚫 找不到該道具之記載。', flags: ['Ephemeral'] });
 
         const ok = removeFromInventory(interaction.guildId, interaction.user.id, itemId, 1);
-        if (!ok) return safeReply(interaction, { content: '🐕 道具不足！', flags: ['Ephemeral'] });
+        if (!ok) return safeReply(interaction, { content: '🚫 物品殘量不足。', flags: ['Ephemeral'] });
 
         let msg = '';
         if (shopDef.effect.type === 'heal_hp') {
@@ -78,23 +78,23 @@ export async function handleInventoryUse(interaction, char) {
     if (interaction.customId === 'rpg_inv_use' && value.startsWith('learn_')) {
         const bookId = value.replace('learn_', '');
         const book = SKILL_BOOKS[bookId];
-        if (!book) return safeReply(interaction, { content: '🐕 找不到該技能書資料！', flags: ['Ephemeral'] });
+        if (!book) return safeReply(interaction, { content: '🚫 找不到該技能古卷之記載。', flags: ['Ephemeral'] });
 
         const skill = getSkillDef(book.skillId);
-        if (!skill) return safeReply(interaction, { content: '🐕 找不到該技能定義！', flags: ['Ephemeral'] });
+        if (!skill) return safeReply(interaction, { content: '🚫 無法感知該技能之祕法定義。', flags: ['Ephemeral'] });
 
         if (book.forClass !== null && book.forClass !== char.class) {
-            return safeReply(interaction, { content: `🐕 這是 ${CLASSES[book.forClass]?.name || book.forClass} 的技能書，你的職業無法學習！`, flags: ['Ephemeral'] });
+            return safeReply(interaction, { content: `🚫 此古卷記載之術法僅限 ${CLASSES[book.forClass]?.name || book.forClass} 研習。`, flags: ['Ephemeral'] });
         }
         if (char.level < book.levelReq) {
-            return safeReply(interaction, { content: `🐕 等級不足！需要 Lv.${book.levelReq}，你目前 Lv.${char.level} `, flags: ['Ephemeral'] });
+            return safeReply(interaction, { content: `🚫 境界不足。需要 Lv.${book.levelReq}，閣下目前僅 Lv.${char.level}。`, flags: ['Ephemeral'] });
         }
         if (hasLearnedSkill(interaction.guildId, interaction.user.id, book.skillId)) {
-            return safeReply(interaction, { content: `🐕 你已經學會 ${skill.name} 了！`, flags: ['Ephemeral'] });
+            return safeReply(interaction, { content: `📜 閣下早已參透 ${skill.name} 之精要。`, flags: ['Ephemeral'] });
         }
 
         const ok = removeFromInventory(interaction.guildId, interaction.user.id, bookId, 1);
-        if (!ok) return safeReply(interaction, { content: '🐕 技能書不足！', flags: ['Ephemeral'] });
+        if (!ok) return safeReply(interaction, { content: '🚫 技能古卷不足。', flags: ['Ephemeral'] });
 
         learnSkill(interaction.guildId, interaction.user.id, book.skillId);
         const msg = `📕✨ 學會了新技能！${skill.emoji} ** ${skill.name}**！`;
@@ -109,7 +109,7 @@ export async function handleInventoryUse(interaction, char) {
         const eqId = Number(value.substring(lastUnderscoreStr + 1));
 
         const oldEqId = char[slotKey];
-        if (!oldEqId) return safeReply(interaction, { content: '🐕 該欄位沒有裝備可以卸下！', flags: ['Ephemeral'] });
+        if (!oldEqId) return safeReply(interaction, { content: '🚫 該欄位並未穿戴任何裝備。', flags: ['Ephemeral'] });
 
         const oldEq = getEquipment(oldEqId);
 
@@ -129,13 +129,13 @@ export async function handleInventoryUse(interaction, char) {
     if (interaction.customId === 'rpg_inv_equip' && value.startsWith('equip_')) {
         const eqId = Number(value.replace('equip_', ''));
         const eq = getEquipment(eqId);
-        if (!eq) return interaction.reply({ content: '🐕 找不到該裝備！', flags: ['Ephemeral'] });
+        if (!eq) return interaction.reply({ content: '🚫 找不到指定的裝備。', flags: ['Ephemeral'] });
 
         const def = EQUIPMENT[eq.item_id];
-        if (!def) return interaction.reply({ content: '🐕 裝備庫中無此定義！', flags: ['Ephemeral'] });
+        if (!def) return interaction.reply({ content: '🚫 王國軍械庫中無此記載。', flags: ['Ephemeral'] });
 
         if (def.forClass && def.forClass !== char.class) {
-            return interaction.reply({ content: `🐕 此裝備僅限 ${CLASSES[def.forClass]?.name || def.forClass} 使用！`, flags: ['Ephemeral'] });
+            return interaction.reply({ content: `🚫 此軍械僅供 ${CLASSES[def.forClass]?.name || def.forClass} 使用。`, flags: ['Ephemeral'] });
         }
 
         let targetSlotKey = '';
@@ -153,7 +153,7 @@ export async function handleInventoryUse(interaction, char) {
                 const mhEq = getEquipment(char.main_hand_id);
                 const mhDef = mhEq ? EQUIPMENT[mhEq.item_id] : null;
                 if (mhDef && mhDef.type === 'weapon_2h') {
-                    return interaction.reply({ content: '🐕 雙手武器裝備中！無法拿盾。請先卸下主手武器。', flags: ['Ephemeral'] });
+                    return interaction.reply({ content: '🚫 雙手持武時無法佩備盾牌。請先卸下主手武器。', flags: ['Ephemeral'] });
                 }
             }
         }
@@ -182,7 +182,7 @@ export async function handleInventoryUse(interaction, char) {
             else targetSlotKey = 'acc1_id';
         }
 
-        if (!targetSlotKey) return interaction.reply({ content: '🐕 無法決定裝備位置！', flags: ['Ephemeral'] });
+        if (!targetSlotKey) return interaction.reply({ content: '🚫 無法判定合適的穿戴槽位。', flags: ['Ephemeral'] });
 
         let updates = {};
 
@@ -212,7 +212,7 @@ export async function handleInventoryUse(interaction, char) {
 
     // 保險：如果沒有任何匹配，給予基本回應防止超時
     if (!interaction.replied && !interaction.deferred) {
-        return safeReply(interaction, { content: '🐕 汪嗚？此項操作無效。', flags: ['Ephemeral'] });
+        return safeReply(interaction, { content: '🚫 此項操作在法理上無效。', flags: ['Ephemeral'] });
     }
 }
 
@@ -297,7 +297,7 @@ async function showInventoryWithMessage(interaction, char, message) {
 
     const embed = rpgEmbed(`🧳 ${interaction.user.displayName} 的背包`, null, 0x9B59B6);
 
-    let desc = '```ansi\n' + ansiText('2;35', '小心翻看，這些都是你在大陸各處搜刮來的寶物。') + '\n```';
+    let desc = '```ansi\n' + ansiText('2;35', '細心打點，這皆是閣下於吉吉王國各處所得之戰利品。') + '\n```';
     if (message) {
         desc += `\n **✅ ${message}** `;
     }
@@ -459,7 +459,7 @@ async function showInventoryWithMessage(interaction, char, message) {
         });
     }
 
-    embed.setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id} ` });
+    embed.setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id} ` });
 
     const rows = [];
     const useOptions = [];
