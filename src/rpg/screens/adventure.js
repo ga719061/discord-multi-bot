@@ -403,41 +403,49 @@ async function foundTreasure(interaction, char, areaId) {
 
 async function randomEvent(interaction, char, areaId) {
     const eventPools = {
-        outskirts: [
+        talking_island: [
             { text: '一隻友善的吉娃娃農夫招待你吃了一頓豐盛的農家菜！', healHp: 30, healMp: 15 },
-            { text: '你在草叢中發現了某個粗心騎士遺落的錢袋。', gold: 50 },
-            { text: '你幫忙找回了走失的小綿羊，獲得了一些謝禮。', gold: 30, healHp: 10 },
+            { text: '你在島上的草叢中發現了某個粗心騎士遺落的錢袋。', gold: 50 },
+            { text: '你幫忙找回了島民走失的小綿羊，獲得了一些謝禮。', gold: 30, healHp: 10 },
         ],
-        dark_forest: [
-            { text: '你發現了一處被遺棄的盜賊營地，搜刮了一些物資。', gold: 80 },
-            { text: '你誤食了發光的詭異蘑菇... 雖然肚子很痛但魔力湧出來了！', healHp: -20, healMp: 40 },
-            { text: '你在迷霧中迷路繞了半天，卻意外發現了隱藏的清泉。', healHp: 40, healMp: 40 },
+        elven_forest: [
+            { text: '精靈之森的泉水甘甜無比，你感到體力得到了恢復。', healHp: 50, healMp: 20 },
+            { text: '不慎踩到了森林中的獵人陷阱，受到了一點皮外傷。', hpDamage: 20 },
+            { text: '你在妖精之森的老樹根部發現了一些被遺忘的銀幣。', gold: 40 },
         ],
-        dragon_ridge: [
-            { text: '找到了一處溫暖的岩穴，免受寒風侵襲，恢復了大量體力。', healHp: 60, healMp: 30 },
-            { text: '在懸崖邊發現了一名遇難者的遺骸，你拿走了他身上的錢幣。', gold: 120 },
-            { text: '躲過了一次突如其來的落石，驚嚇之餘也找到了碎金塊。', gold: 50, healHp: -10 },
+        dragon_valley: [
+            { text: '一股莫名的寒氣從龍骨中散發，你感到靈魂有些顫慄。', mpDamage: 10 },
+            { text: '你採集到了一些稀有的龍脊藥草。', gold: 80, healHp: 20 },
+            { text: '龍之谷一陣強風吹過，你差點被風沙迷了眼。', hpDamage: 15 },
         ],
-        dark_swamp: [
-            { text: '你不小心踩進了帶毒的沼澤... 失去了一些生命值！', healHp: -40 },
-            { text: '撿到了不知名的發黑骸骨，似乎轉手能賣點錢。', gold: 150 },
-            { text: '一名路過的神秘女巫賜予了你一瓶詭異的藥水。', healHp: -30, healMp: 80 },
+        giran_swamp: [
+            { text: '奇岩沼澤的毒氣讓你感到一陣暈眩。', hpDamage: 30, mpDamage: 10 },
+            { text: '你在淤泥中挖出了一枚沾滿泥土的古幣。', gold: 100 },
         ],
-        lava_waste: [
-            { text: '高溫環境讓你幾乎中暑，但你咬牙前行。', healHp: -50 },
-            { text: '你撿到一塊溫熱的火山岩晶體，似乎非常值錢！', gold: 250 },
-            { text: '找到了一處難得的地底冷泉，宛如沙漠中的綠洲。', healHp: 100, healMp: 50 },
-        ],
-        void_rift: [
-            { text: '次元裂縫中的虛空能量穿透了你！雖然痛苦但魔力充滿了！', healHp: -80, healMp: 150 },
-            { text: '從次元裂縫中掉落了來自異世界的古幣。', gold: 400 },
-            { text: '你觀察虛空的流動，感覺身心都被奇妙的重塑了。', healHp: 80, healMp: 80 },
+        fire_dragon_cave: [
+            { text: '火龍窟的高溫撲面而來，你的護甲感覺快要融化了。', hpDamage: 40 },
+            { text: '在焦黑的岩石縫隙中發現了一顆微弱的紅水晶。', gold: 150 },
         ],
         crystal_cave: [
-            { text: '純淨水晶的共鳴能量完美修復了你的身心！', healHp: 200, healMp: 100 },
+            { text: '水晶地監的共鳴能量修復了你的身心！', healHp: 200, healMp: 100 },
             { text: '你敲下了一小塊純淨的水晶碎片帶走。', gold: 600 },
-            { text: '水晶迷宮中折射的強光讓你暫時失明，撞到了頭。', healHp: -100 },
+            { text: '水晶迷宮中折射的強光讓你暫時失明。', hpDamage: 30 },
         ],
+        ivory_tower: [
+            { text: '象牙塔中的魔力波動讓你感到精神煥發。', healMp: 50 },
+            { text: '在塔樓的夾層中發現了寫滿古代文字的錢袋。', gold: 200 },
+        ],
+        tower_of_insolence: [
+            { text: '傲慢之塔的空氣沉重如石，每一口呼吸都感到體力流逝。', hpDamage: 50, mpDamage: 20 },
+            { text: '在高塔的陰影中撿到了前人遺留的金幣袋。', gold: 300 },
+        ],
+        forgotten_island: [
+            { text: '遺忘之島的遠古巨人氣息在空氣中迴盪。', hpDamage: 40 },
+            { text: '在遺蹟的祭壇上發現了閃爍的古文明錢幣。', gold: 400 },
+        ],
+        antharas_lair: [
+            { text: '地龍 安塔瑞斯的咆哮從地底深處傳來，大地在顫抖。', hpDamage: 60, mpDamage: 30 },
+        ]
     };
 
     const events = eventPools[areaId] || eventPools['outskirts'];

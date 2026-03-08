@@ -11,6 +11,9 @@ export async function showHub(interaction, char, method = 'update') {
     const total = calculateTotalStats(char, eqList);
     const xpNeeded = getXpForLevel(char.level + 1);
 
+    const currentQuest = MAIN_QUESTS.find(q => q.id === char.quest_id) || MAIN_QUESTS[0];
+    const questText = currentQuest ? currentQuest.name : '冒險的開端';
+
     const embed = rpgEmbed(
         '🐕👑 吉吉王國騎士團總部',
         [
@@ -22,7 +25,7 @@ export async function showHub(interaction, char, method = 'update') {
                 mpBarBare(char.mp, total.max_mp)
             ].join('\n') + '\n```',
             '',
-            `📜 **當前主線**: ${questText.replace('📜主線任務: ', '')}`,
+            `📜 **當前主線**: ${questText}`,
         ].join('\n'),
     )
         .addFields(getStatusFields(char, total, { showResources: true, showCombat: true, xpNeeded }))
