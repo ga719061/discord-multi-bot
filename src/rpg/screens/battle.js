@@ -1,7 +1,6 @@
-// ===== 戰鬥畫面 =====
 import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { getBattle, updateBattle, deleteBattle, getCharacter, updateCharacter, addGold, addToInventory, addEquipment, getLearnedSkills, registerFirstKill, addMercenaryHistory } from '../rpgDatabase.js';
-import { rpgEmbed, rpgButton, hpBar, mpBar, battleActionRows, backButton, getUnlockedSkills, qualityLabel, broadcastRpgEvent, calcDamage, isCrit, isDodge, applyBuffsAndStates, processTurnEndStates, hasState, consumeShield, getJobTitle, formatItemName, executeSetHooks } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, hpBar, mpBar, battleActionRows, backButton, getUnlockedSkills, qualityLabel, broadcastRpgEvent, calcDamage, isCrit, isDodge, applyBuffsAndStates, processTurnEndStates, hasState, consumeShield, getJobTitle, formatItemName, executeSetHooks, formatBattleLog } from '../rpgHelpers.js';
 import { fmt, COLORS } from '../../utils/style.js';
 import { logger } from '../../utils/logger.js';
 import { SKILLS, EQUIPMENT, SHOP_ITEMS, getXpForLevel, getItemDisplayName, SKILL_BOOK_DROP_POOLS, SKILL_BOOKS, getSkillDef, AREAS, QUALITY_MULTIPLIER, CLASSES } from '../data/gameData.js';
@@ -63,27 +62,27 @@ export async function renderBattle(interaction, battleId, actionLog = '') {
     let formattedLog = '';
     if (actionLog) {
         const lines = actionLog.split('\n').filter(Boolean);
+        // 如果 actionLog 已經包含 ANSI 代碼 (由 handleBattleAction 生成)，則直接包裹
+        // 否則進行基本的預處理
         const stylizedLines = lines.map(line => {
             const trimmed = line.trim();
-            // 如果已經有表情符號(像是 ☠️)，就不再重複加 🩸 或 🔹
-            const hasEmoji = /^\p{Emoji}/u.test(trimmed);
-            let prefix = hasEmoji ? '' : (trimmed.includes('傷害') ? '🩸 ' : '🔹 ');
+            if (trimmed.includes('\u001b[')) return trimmed; // 已有 ANSI
 
             if (trimmed.includes('傷害') && !trimmed.includes('回復')) {
-                return `> ${prefix}${trimmed.replace(/(\d+)\s*傷害/, '**$1** 傷害')}`;
+                return `🩸 ${trimmed}`;
             } else if (trimmed.includes('回復')) {
-                return `> 💚 ${trimmed.replace(/(\d+)\s*(HP|MP)/, '**$1** $2')}`;
+                return `💚 ${trimmed}`;
             } else if (trimmed.includes('閃避')) {
-                return `> 💨 ${trimmed}`;
+                return `💨 ${trimmed}`;
             } else if (trimmed.includes('倒下了') || trimmed.includes('被擊散了')) {
-                return `> 💀 **${trimmed}**`;
+                return `💀 ${trimmed}`;
             } else if (trimmed.includes('遇到') || trimmed.includes('警告')) {
-                return `> ⚠️ **${trimmed}**`;
+                return `⚠️ ${trimmed}`;
             } else {
-                return `> ${prefix}${trimmed}`;
+                return `🔹 ${trimmed}`;
             }
         });
-        formattedLog = `\n**📜 戰鬥日誌：**\n${stylizedLines.join('\n')}`;
+        formattedLog = `\n**📜 戰鬥日誌：**\n\`\`\`ansi\n${stylizedLines.join('\n')}\n\`\`\``;
     }
 
     // 6. 處理冷卻顯示 (僅顯示當前玩家的)
@@ -338,13 +337,13 @@ export async function handleBattleAction(interaction) {
                     if (skill.type === 'heal') {
                         const heal = Math.floor(target.max_hp * (skill.healPercent / 100));
                         target.hp = Math.min(target.max_hp, target.hp + (heal || 0));
-                        log = `<@${userId}> 使用了 ${skill.emoji} ${skill.name}！回復了 ${isSummon ? target.name : `<@${targetId}>`} ${heal} HP！`;
+                        log = formatBattleLog(`<@${userId}> 使用了 ${skill.emoji} ${skill.name}！回復了 ${isSummon ? target.name : `<@${targetId}>`} ${heal} HP！`, { type: 'heal' });
                     } else if (skill.special === 'sacrifice_heal') {
                         const cost = Math.floor(ps.max_hp * 0.2);
                         const heal = Math.floor(target.max_hp * 0.5);
                         ps.hp = Math.max(1, ps.hp - cost);
                         target.hp = Math.min(target.max_hp, target.hp + (heal || 0));
-                        log = `<@${userId}> 使用了 ${skill.emoji} ${skill.name}！犧牲生命為 ${isSummon ? target.name : `<@${targetId}>`} 回復了 ${heal} HP！`;
+                        log = formatBattleLog(`<@${userId}> 使用了 ${skill.emoji} ${skill.name}！犧牲生命為 ${isSummon ? target.name : `<@${targetId}>`} 回復了 ${heal} HP！`, { type: 'heal' });
                     } else {
                         log = `<@${userId}> 使用了 ${skill.emoji} ${skill.name} 於 ${isSummon ? target.name : `<@${targetId}>`}！${skill.desc}`;
                     }
@@ -366,7 +365,7 @@ export async function handleBattleAction(interaction) {
                             const dmg = calcDamage(ps.atk, target.def, 1, ps.penetration_pct) * (crit ? (ps.crit_dmg / 100) : 1);
                             const finalDmg = consumeShield(target, Math.floor(dmg));
                             target.currentHp -= finalDmg;
-                            log += `<@${userId}> 發動了普通攻擊！對 ${target.emoji} ${target.name} 造成 ${finalDmg} 傷害${crit ? ' 💥暴擊！' : ''}`;
+                            log += formatBattleLog(`<@${userId}> 發動了普通攻擊！對 ${target.emoji} ${target.name} 造成 ${finalDmg} 傷害${crit ? ' 💥暴擊！' : ''}`, { crit, type: 'physical' });
 
                             // --- 命中後 Hook (onHit) & 受到傷害 Hook (onDamaged) ---
                             const hitCtx = { actorIsPlayer: true };
@@ -393,7 +392,7 @@ export async function handleBattleAction(interaction) {
                                 const dmg2 = calcDamage(ps.atk, target.def, 1, ps.penetration_pct) * (crit2 ? (ps.crit_dmg / 100) : 1);
                                 const finalDmg2 = consumeShield(target, Math.floor(dmg2));
                                 target.currentHp -= finalDmg2;
-                                log += `\n> ⚔️ 二連擊對 ${target.name} 造成 ${finalDmg2} 傷害${crit2 ? ' 💥暴擊！' : ''}`;
+                                log += '\n> ' + formatBattleLog(`⚔️ 二連擊對 ${target.name} 造成 ${finalDmg2} 傷害${crit2 ? ' 💥暴擊！' : ''}`, { crit: crit2, type: 'physical' });
                                 log += executeSetHooks('onHit', ps, target, { isDoubleStrike: true, actorIsPlayer: true });
                                 log += executeSetHooks('onDamaged', target, ps, { originalDamage: finalDmg2 });
                                 if (target.currentHp <= 0) log += executeSetHooks('onKill', ps, target);
@@ -491,7 +490,8 @@ export async function handleBattleAction(interaction) {
                             }
 
                             target.currentHp = (Number(target.currentHp) || 0) - (Number(consumeShield(target, totalDmg)) || 0);
-                            log += `<@${userId}> 使用了 ${skill.emoji} ${skill.name}！對 ${target.name} 造成 ${totalDmg} 傷害${crit ? ' 💥暴擊！' : ''}${hits > 1 ? ` (${hits}連擊)` : ''}${extraMsg}`;
+                            const sType = skill.holyBurn ? 'holy' : (skill.type === 'magical' ? 'magical' : 'physical');
+                            log += formatBattleLog(`<@${userId}> 使用了 ${skill.emoji} ${skill.name}！對 ${target.name} 造成 ${totalDmg} 傷害${crit ? ' 💥暴擊！' : ''}${hits > 1 ? ` (${hits}連擊)` : ''}${extraMsg}`, { crit, type: sType });
 
                             // 設置冷卻時間
                             if (skill.cd) {
@@ -540,7 +540,7 @@ export async function handleBattleAction(interaction) {
                         const dmg = calcDamage(ps.atk, target.def, 1, ps.penetration_pct) * (crit ? (critDmgMult / 100) : 1);
                         const finalDmg = consumeShield(target, Math.floor(dmg));
                         target.currentHp = (Number(target.currentHp) || 0) - (Number(finalDmg) || 0);
-                        log = `<@${userId}> 發動了普通攻擊！對 ${target.emoji} ${target.name} 造成 ${finalDmg} 傷害${crit ? ' 💥暴擊！' : ''}`;
+                        log = formatBattleLog(`<@${userId}> 發動了普通攻擊！對 ${target.emoji} ${target.name} 造成 ${finalDmg} 傷害${crit ? ' 💥暴擊！' : ''}`, { crit, type: 'physical' });
 
                         // --- 命中後 Hook (onHit) & 受到傷害 Hook (onDamaged) ---
                         const hitCtx = { actorIsPlayer: true };
@@ -557,7 +557,7 @@ export async function handleBattleAction(interaction) {
                             const dmg2 = calcDamage(ps.atk, target.def, 1, ps.penetration_pct) * (crit2 ? (critDmgMult / 100) : 1);
                             const finalDmg2 = consumeShield(target, Math.floor(dmg2));
                             target.currentHp -= finalDmg2;
-                            log += `\n> ⚔️ 二連擊對 ${target.name} 造成 ${finalDmg2} 傷害${crit2 ? ' 💥暴擊！' : ''}`;
+                            log += '\n> ' + formatBattleLog(`⚔️ 二連擊對 ${target.name} 造成 ${finalDmg2} 傷害${crit2 ? ' 💥暴擊！' : ''}`, { crit: crit2, type: 'physical' });
                             log += executeSetHooks('onHit', ps, target, { isDoubleStrike: true, actorIsPlayer: true });
                             log += executeSetHooks('onDamaged', target, ps, { originalDamage: finalDmg2 });
                             if (target.currentHp <= 0) log += executeSetHooks('onKill', ps, target);

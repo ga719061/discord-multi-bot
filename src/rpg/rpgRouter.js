@@ -15,6 +15,7 @@ import { showAutoConfig, handleAutoConfigSelect } from './screens/autoConfig.js'
 import { showRanking } from './screens/ranking.js';
 import { showTavern, handleTavernAction } from './screens/tavern.js';
 import { showAuctionHub, showAuctionBrowse, handleAuctionBuy, showAuctionListSelection, handleAuctionListPrompt, handleAuctionSubmit, showMyAuctions, handleAuctionCancel, showAuctionHistory } from './screens/auction.js';
+import { showBlacksmith, showBlacksmithList, handleDismantle, handleReforge } from './screens/blacksmith.js';
 import { logger } from '../utils/logger.js';
 
 // Per-user 操作鎖：防止快速連點造成的 race condition（裝備複製、消耗品重複使用等）
@@ -50,8 +51,11 @@ export function registerRpgRouter(client) {
                     'rpg_battle_',
                     'rpg_skill_select',
                     'rpg_item_select',
-                    'rpg_target_select',
-                    'rpg_area_'
+                     'rpg_target_select',
+                     'rpg_area_',
+                     'rpg_bs_select_',
+                     'rpg_bs_dismantle_',
+                     'rpg_bs_reforge_'
                ];
                const isShared = sharedPrefixes.some(p => id.startsWith(p));
 
@@ -205,9 +209,27 @@ export function registerRpgRouter(client) {
                     if (id === 'rpg_lore') {
                          return await showTavern(interaction, char);
                     }
-                    if (id.startsWith('rpg_tavern_')) {
-                         return await handleTavernAction(interaction, char);
-                    }
+                     if (id.startsWith('rpg_tavern_')) {
+                          return await handleTavernAction(interaction, char);
+                     }
+
+                     // 鐵匠鋪
+                     if (id === 'rpg_blacksmith') {
+                          return await showBlacksmith(interaction);
+                     }
+                     if (id.startsWith('rpg_bs_dismantle_list_')) {
+                          return await showBlacksmithList(interaction, 'dismantle');
+                     }
+                     if (id.startsWith('rpg_bs_reforge_list_')) {
+                          return await showBlacksmithList(interaction, 'reforge');
+                     }
+                     if (id.startsWith('rpg_bs_select_')) {
+                          const parts = id.split('_');
+                          const type = parts[3];
+                          const eqId = parseInt(parts[4]);
+                          if (type === 'dismantle') return await handleDismantle(interaction, eqId);
+                          if (type === 'reforge') return await handleReforge(interaction, eqId);
+                     }
 
                     // ---------- Modal 提交處理 ----------
                     if (interaction.isModalSubmit()) {

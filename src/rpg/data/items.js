@@ -341,9 +341,7 @@ export const EQUIPMENT = {
     lord_of_chaos_head: { name: '混沌君王頭盔', emoji: '✨', type: 'head', quality: 'legendary', stats: { def: 42, mdef: 42 }, set_id: 'lord_of_chaos' },
     lord_of_chaos_legs: { name: '混沌君王腿甲', emoji: '✨', type: 'legs', quality: 'legendary', stats: { def: 56, mdef: 56 }, set_id: 'lord_of_chaos' },
     lord_of_chaos_feet: { name: '混沌君王戰靴', emoji: '✨', type: 'feet', quality: 'legendary', stats: { def: 35, mdef: 35, spd: 5 }, set_id: 'lord_of_chaos' },
-
     // ===== 商店基本裝備 =====
-    // 武器
     steel_sword: { name: '鋼鐵單手劍', emoji: '🗡️', type: 'weapon_1h', quality: 'common', stats: { atk: 10 } },
     hunter_bow: { name: '獵人之弓', emoji: '🏹', type: 'weapon_2h', quality: 'common', stats: { atk: 15, spd: 3 } },
     magic_staff: { name: '魔導法杖', emoji: '🔮', type: 'weapon_2h', quality: 'common', stats: { matk: 22 } },
@@ -395,22 +393,18 @@ export const SHOP_ITEMS = {
         { id: 'speed_boots', name: '疾風靴', emoji: '👢', price: 350, type: 'feet', quality: 'common', stats: { spd: 5 }, desc: '足部 SPD+5' },
     ],
     skillbooks: [
-        // Lv 1 基礎技能（300g，幾場戰鬥即可購）
         { id: 'book_power_slash', name: '猛力斬擊 技能書', emoji: '📖', price: 300, type: 'book', quality: 'common', desc: '學習戰士技能：猛力斬擊' },
         { id: 'book_precise_shot', name: '精準射擊 技能書', emoji: '📖', price: 300, type: 'book', quality: 'common', desc: '學習遊俠技能：精準射擊' },
         { id: 'book_fireball', name: '火球術 技能書', emoji: '📖', price: 300, type: 'book', quality: 'common', desc: '學習法師技能：火球術' },
         { id: 'book_holy_strike', name: '聖光打擊 技能書', emoji: '📖', price: 300, type: 'book', quality: 'common', desc: '學習聖騎士技能：聖光打擊' },
-        // Lv 5 技能（600g）
         { id: 'book_war_guard', name: '防禦架勢 技能書', emoji: '📖', price: 600, type: 'book', quality: 'common', desc: '學習戰士技能：防禦架勢' },
         { id: 'book_agility', name: '靈動 技能書', emoji: '📖', price: 600, type: 'book', quality: 'common', desc: '學習遊俠技能：靈動' },
         { id: 'book_mana_surge', name: '魔力湧動 技能書', emoji: '📖', price: 600, type: 'book', quality: 'common', desc: '學習法師技能：魔力湧動' },
         { id: 'book_pal_protection', name: '聖光加持 技能書', emoji: '📖', price: 600, type: 'book', quality: 'common', desc: '學習聖騎士技能：聖光加持' },
-        // Lv 8 技能（1000g）
         { id: 'book_war_bash', name: '盾擊 技能書', emoji: '📖', price: 1000, type: 'book', quality: 'common', desc: '學習戰士技能：盾擊' },
         { id: 'book_pal_bash', name: '制裁之錘 技能書', emoji: '📖', price: 1000, type: 'book', quality: 'common', desc: '學習聖騎士技能：制裁之錘' },
     ],
 };
-
 export const ITEM_NAMES = {
     // 近郊（怪物 gold: 8~25）
     slime_gel: { name: '史萊姆凝膠', emoji: '🟢', sellPrice: 4 },
@@ -462,9 +456,8 @@ export const ITEM_NAMES = {
     boss_lure: { name: '首領誘餌', emoji: '🍖', sellPrice: 200 },
     teleport_scroll: { name: '傳送卷軸', emoji: '📜', sellPrice: 75 },
     revive_scroll: { name: '復活卷軸', emoji: '💀', sellPrice: 200 },
-
-    // 其他雜項
-    stolen_pouch: { name: '贓物袋', emoji: '💰', sellPrice: 12 },
+    magic_shard: { name: '魔力碎片', emoji: '✨', sellPrice: 50 },
+    chaos_essence: { name: '混沌精華', emoji: '🌀', sellPrice: 500 },
 };
 
 export function getItemDisplayName(itemId) {
@@ -485,4 +478,3 @@ export function getItemDisplayName(itemId) {
     }
     return `📦 ${itemId}`;
 }
-

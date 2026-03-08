@@ -23,7 +23,16 @@ export const COLORS = {
     // 背景色 (選用)
     BG_FIRE: '41',
     BG_NATURE: '42',
-    BG_SEA: '44'
+    BG_GOLD: '43',      // 黃色背景 (Critical Hit)
+    BG_SEA: '44',
+};
+
+// 戰鬥傷害類型顏色對應
+export const DAMAGE_COLORS = {
+    physical: COLORS.RED,
+    magical: COLORS.BLUE,
+    holy: COLORS.GOLD,
+    poison: COLORS.GREEN
 };
 
 /**

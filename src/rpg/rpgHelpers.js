@@ -25,7 +25,32 @@ export function xpBar(current, max, length = 15) {
 // ---------- ANSI 顏色文字 ----------
 export function ansiText(colorId, text) {
     const esc = String.fromCharCode(27);
-    return '```ansi\n' + esc + '[' + colorId + 'm' + text + esc + '[0m\n```';
+    return esc + '[' + colorId + 'm' + text + esc + '[0m';
+}
+
+/**
+ * 格式化戰鬥日誌行 (ANSI)
+ * @param {string} text - 文字內容
+ * @param {object} options - { crit: boolean, type: 'physical'|'magical'|'holy'|'poison'|'heal' }
+ */
+export function formatBattleLog(text, options = {}) {
+    let result = text;
+    const { crit, type } = options;
+
+    // 處理傷害跳字顏色
+    if (type && StyleUtils.DAMAGE_COLORS[type]) {
+        const color = StyleUtils.DAMAGE_COLORS[type];
+        result = result.replace(/(\d+)\s*傷害/, (match, p1) => ansiText(color, p1) + ' 傷害');
+    } else if (type === 'heal') {
+        result = result.replace(/(\d+)\s*(HP|MP)/, (match, p1, p2) => ansiText(StyleUtils.COLORS.GREEN, p1) + ' ' + p2);
+    }
+
+    // 處理暴擊背景閃爍 (黃底)
+    if (crit) {
+        result = ansiText(StyleUtils.COLORS.BG_GOLD + ';1;37', result);
+    }
+
+    return result;
 }
 
 // ---------- 戰鬥公式 ----------
@@ -433,20 +458,20 @@ export function notOwnerReply(interaction) {
 export const ENHANCEMENT_CONFIG = {
     weapon: {
         safeZone: 6,
-        failRates: { 7: 40, 8: 60, 9: 80 },
-        breakRates: { 7: 40, 8: 50, 9: 60 }, // 失敗後消失機率
+        failRates: { 7: 50, 8: 70, 9: 90 },     // 原為 40, 60, 80
+        breakRates: { 7: 45, 8: 60, 9: 75 },    // 原為 40, 50, 60
         bonus: 0.12, // 每 +1 = 12% of base stat
     },
     armor: {
         safeZone: 4,
-        failRates: { 5: 25, 6: 40, 7: 55, 8: 70, 9: 85 },
-        breakRates: { 5: 50, 6: 50, 7: 60, 8: 70, 9: 80 },
+        failRates: { 5: 35, 6: 50, 7: 70, 8: 85, 9: 95 }, // 原為 25, 40, 55, 70, 85
+        breakRates: { 5: 55, 6: 65, 7: 75, 8: 85, 9: 95 }, // 原為 50, 50, 60, 70, 80
         bonus: 0.10,
     },
     accessory: {
         safeZone: 0,
-        failRates: { 1: 20, 2: 30, 3: 40, 4: 50, 5: 60, 6: 70, 7: 80, 8: 90, 9: 95 },
-        breakRates: { 1: 50, 2: 50, 3: 50, 4: 60, 5: 60, 6: 60, 7: 80, 8: 80, 9: 80 },
+        failRates: { 1: 25, 2: 40, 3: 55, 4: 70, 5: 80, 6: 85, 7: 90, 8: 95, 9: 98 },
+        breakRates: { 1: 50, 2: 50, 3: 55, 4: 65, 5: 75, 6: 80, 7: 85, 8: 90, 9: 95 },
         bonus: 0.08,
     },
 };
