@@ -1,7 +1,7 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { AREAS, MONSTERS, BOSSES, SUMMON_RECIPES, getItemDisplayName, ITEM_NAMES } from '../data/gameData.js';
 import { getCharacter, createBattle, updateCharacter, getLearnedSkills, getEquipmentList, getInventory } from '../rpgDatabase.js';
-import { rpgEmbed, rpgButton, areaSelectRows, hpBar, mpBar, backButton, charSummary, ansiText, safeReply, getStatusFields, calculateTotalStats } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, areaSelectRows, hpBar, mpBar, hpBarBare, mpBarBare, backButton, charSummary, ansiText, safeReply, getStatusFields, calculateTotalStats } from '../rpgHelpers.js';
 import { renderBattle } from './battle.js';
 import { activeMercenaries } from './mercenary.js';
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
@@ -30,9 +30,11 @@ export async function showAdventure(interaction, char) {
         [
             ansiText('2;32', '選擇你要前往的區域，本王會為你祈福的！汪！'),
             '**👤【當前勇者狀態】**',
-            '```ansi\n' + charSummary(char) + '\n```',
-            hpBar(char.hp, total.max_hp),
-            mpBar(char.mp, total.max_mp),
+            '```ansi\n' + [
+                charSummary(char),
+                hpBarBare(char.hp, total.max_hp),
+                mpBarBare(char.mp, total.max_mp)
+            ].join('\n') + '\n```',
             '',
             '💡 *區域難度隨顏色加深，請量力而行。*',
         ].join('\n'),
@@ -152,10 +154,10 @@ export async function showShrineMenu(interaction, char) {
     const inv = getInventory(interaction.guildId, interaction.user.id);
 
     // ANSI Header
-    const header = ansiBlock([
+    const headerContent = [
         { color: COLORS.GOLD + ';' + COLORS.BOLD, text: ` 🏮 【 遠 古 祭 壇 — 靈 魂 喚 醒 】 🏮 ` },
         { color: COLORS.CYAN, text: ` 汪！供奉特定的怪物素材，就能強行喚醒該區域的領主！ ` }
-    ]);
+    ];
 
     let areaListText = '';
     const options = [];
@@ -189,8 +191,10 @@ export async function showShrineMenu(interaction, char) {
         });
     }
 
-    let finalDesc = header + '\n';
-    finalDesc += '```ansi\n';
+    let finalDesc = '```ansi\n';
+    headerContent.forEach(h => {
+        finalDesc += fmt(h.color, h.text) + '\n';
+    });
     finalDesc += fmt(COLORS.WHITE, '💡 召喚後將立即進入首領戰，請做好準備！') + '\n';
     finalDesc += fmt(COLORS.GRAY, '═══ 目前可感應到的祭壇 ═══') + '\n';
     finalDesc += (areaListText || fmt(COLORS.RED, '汪嗚...目前沒有發現任何可召喚的首領祭壇。')) + '\n```';
@@ -371,19 +375,23 @@ async function foundTreasure(interaction, char, areaId) {
     const { addGold } = await import('../rpgDatabase.js');
     addGold(interaction.guildId, interaction.user.id, goldFound);
 
-    const header = ansiBlock([
+    const headerContent = [
         { color: COLORS.GOLD + ';' + COLORS.BOLD, text: ` 🎁 【驚喜發現！】 🎁 ` },
         { color: COLORS.CYAN, text: ` 汪！這是在角落發現的無主財寶！ ` }
-    ]);
+    ];
 
-    const embed = rpgEmbed(null, header, 0xF1C40F);
-    embed.setDescription('```ansi\n' + [
+    let desc = '```ansi\n';
+    headerContent.forEach(h => desc += fmt(h.color, h.text) + '\n');
+    desc += [
+        '',
         `你在 ${AREAS.find(a => a.id === areaId)?.emoji} ${fmt(COLORS.WHITE, AREAS.find(a => a.id === areaId)?.name)} 發現了一個寶箱！`,
         '',
         `${fmt(COLORS.WHITE, '💰 獲得金幣:')} ${fmt(COLORS.GOLD + ';' + COLORS.BOLD, goldFound.toLocaleString())}`,
         '',
         `${fmt(COLORS.GREEN, '🐕 汪！運氣不錯嘛！繼續冒險吧！')}`
-    ].join('\n') + '\n```');
+    ].join('\n') + '\n```';
+
+    const embed = rpgEmbed(null, desc, 0xF1C40F);
 
     const row = new ActionRowBuilder().addComponents(
         rpgButton(`rpg_area_${areaId}`, '繼續冒險', undefined, '⚔️'),

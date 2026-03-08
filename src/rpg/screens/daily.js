@@ -73,18 +73,18 @@ export async function showDaily(interaction, char) {
 
     const embed = rpgEmbed(
         '🎁 每日簽到成功！',
-        [
-            ansiText('2;36', '恭喜！領取了國王的賞賜，祝你今天冒險順利！'),
-            bonusText,
-            `🔥 連續簽到: **${streak}** 天`,
+        '```ansi\n' + [
+            fmt(COLORS.CYAN, '恭喜！領取了國王的賞賜，祝你今天冒險順利！'),
+            bonusText ? fmt(COLORS.GOLD + ';' + COLORS.BOLD, bonusText) : '',
+            `${fmt(COLORS.GOLD, '🔥 連續簽到:')} ${fmt(COLORS.WHITE + ';' + COLORS.BOLD, streak.toString())} 天`,
             '',
-            `💰 金幣 +${goldReward}`,
-            gemReward > 0 ? `💎 寶石 +${gemReward}` : '',
-            `❤️ HP 回復 +${hpHeal}`,
-            `💙 MP 回復 +${mpHeal}`,
+            `${fmt(COLORS.WHITE, '💰 金幣')} ${fmt(COLORS.GOLD, `+${goldReward}`)}`,
+            gemReward > 0 ? `${fmt(COLORS.WHITE, '💎 寶石')} ${fmt(COLORS.CYAN, `+${gemReward}`)}` : '',
+            `${fmt(COLORS.WHITE, '❤️ HP 回復')} ${fmt(COLORS.GREEN, `+${hpHeal}`)}`,
+            `${fmt(COLORS.WHITE, '💙 MP 回復')} ${fmt(COLORS.BLUE, `+${mpHeal}`)}`,
             '',
-            '🐕 明天也要來找本王簽到喔！汪！',
-        ].filter(Boolean).join('\n'),
+            fmt(COLORS.GRAY, '🐕 明天也要來找本王簽到喔！汪！'),
+        ].filter(Boolean).join('\n') + '\n```',
         0xF1C40F // Gold for daily
     ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
 

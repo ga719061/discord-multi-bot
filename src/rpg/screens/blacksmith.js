@@ -1,5 +1,12 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
-import { getCharacter, getEquipmentList, getEquipment, removeEquipment, addToInventory, removeFromInventory, deductGold, updateEquipment, updateCharacter, getDb } from '../rpgDatabase.js';
+import { 
+    getCharacter, getEquipmentList, getEquipment, removeEquipment, addToInventory, removeFromInventory, 
+    deductGold, updateEquipment, updateCharacter, getDb, getInventory, addAuction, getAuctions, 
+    getAuctionById, deleteAuction, getAuctionsBySeller, getTotalAuctionsCount, addGold, addEquipment, 
+    addAuctionHistory, getPersonalAuctionHistory, getQuestProgress, getLearnedSkills, setAutoSkills,
+    getStashedEquipmentList, getStashedInventory, stashEquipment, unstashEquipment, resetCharacterStats,
+    stashItem, unstashItem
+} from '../rpgDatabase.js';
 import { rpgEmbed, rpgButton, safeReply, formatItemName, backButton, generateRandomAffixes, getEquipCategory, getScrollForCategory, ENHANCEMENT_CONFIG, broadcastRpgEvent, calculateTotalStats } from '../rpgHelpers.js';
 import { fmt, COLORS } from '../../utils/style.js';
 import { EQUIPMENT, QUALITY_MULTIPLIER } from '../data/gameData.js';
@@ -14,16 +21,16 @@ export async function showBlacksmith(interaction) {
 
     const embed = rpgEmbed(
         '⚒️ 鐵匠鋪 — 葛魯尼的工坊',
-        [
-            '「歡迎來到鐵匠鋪！勇者，你是要打造神兵利器，還是要把那些破爛回收掉？」',
+        '```ansi\n' + [
+            fmt(COLORS.WHITE, '「歡迎來到鐵匠鋪！勇者，你是要打造神兵利器，還是要把那些破爛回收掉？」'),
             '',
-            '**⚒️ 服務項目：**',
-            '1. **裝備強化**：消耗強化卷軸提升裝備基礎屬性。',
-            '2. **裝備拆解**：將多餘的裝備拆解為素材（魔力碎片/混沌精華）。',
-            '3. **屬性洗煉**：消耗素材重新隨機抽取裝備的額外詞條。',
+            fmt(COLORS.YELLOW + ';' + COLORS.BOLD, '⚒️ 服務項目：'),
+            fmt(COLORS.WHITE, '1. 裝備強化：消耗強化卷軸提升裝備基礎屬性。'),
+            fmt(COLORS.WHITE, '2. 裝備拆解：將多餘的裝備拆解為素材。'),
+            fmt(COLORS.WHITE, '3. 屬性洗煉：消耗素材重新隨機抽取裝備詞條。'),
             '',
-            `💰 **當前金幣**: ${char.gold}`,
-        ].join('\n')
+            `${fmt(COLORS.WHITE, '💰 目前金幣')}: ${fmt(COLORS.GOLD + ';' + COLORS.BOLD, char.gold.toLocaleString())}`,
+        ].join('\n') + '\n```'
     );
 
     const row = new ActionRowBuilder().addComponents(
@@ -65,9 +72,11 @@ export async function showBlacksmithList(interaction, actionType) {
     const options = eqList.map(eq => {
         const def = EQUIPMENT[eq.item_id];
         const quality = QUALITY_MULTIPLIER[eq.quality]?.label || eq.quality;
+        const namePart = `${def.name} (+${eq.enhancement || 0})`;
+        const descPart = `[${quality}] ${def.type}${eq.equipped ? ' (裝備中)' : ''}`;
         return {
-            label: `${def.name} (+${eq.enhancement || 0})`,
-            description: `[${quality}] ${def.type}${eq.equipped ? ' (裝備中)' : ''}`,
+            label: namePart,
+            description: descPart.slice(0, 100),
             value: `rpg_bs_select_${actionType}_${eq.id}`,
             emoji: def.emoji || '📦'
         };
@@ -115,11 +124,11 @@ export async function handleDismantle(interaction, eqId) {
     if (shardCount > 0) addToInventory(guildId, userId, 'magic_shard', shardCount);
     if (essenceCount > 0) addToInventory(guildId, userId, 'chaos_essence', essenceCount);
 
-    const resultMsg = [
-        `✅ 成功拆解了 ${def.emoji} **${def.name}**！`,
-        shardCount > 0 ? `✨ 獲得 **魔力碎片 x${shardCount}**` : '',
-        essenceCount > 0 ? `🌀 獲得 **混沌精華 x${essenceCount}**` : '',
-    ].filter(Boolean).join('\n');
+    const resultMsg = '```ansi\n' + [
+        fmt(COLORS.GREEN, `✅ 成功拆解了 ${def.emoji} ${def.name}！`),
+        shardCount > 0 ? fmt(COLORS.CYAN, `✨ 獲得 魔力碎片 x${shardCount}`) : '',
+        essenceCount > 0 ? fmt(COLORS.PURPLE, `🌀 獲得 混沌精華 x${essenceCount}`) : '',
+    ].filter(Boolean).join('\n') + '\n```';
 
     await interaction.reply({ content: resultMsg, flags: ['Ephemeral'] });
     await showBlacksmith(interaction);
@@ -157,7 +166,7 @@ export async function handleReforge(interaction, eqId) {
 
     const embed = rpgEmbed(
         '🌀 洗煉成功！',
-        `你消耗了 ${goldCost} 金幣與 ${materialCost} 個 ${materialName}，為 **${def.name}** 注入了新的靈魂！`
+        fmt(COLORS.GREEN, `你消耗了 ${fmt(COLORS.GOLD, `${goldCost} 金幣`)} 與 ${fmt(COLORS.CYAN, `${materialCost} 個 ${materialName}`)}，為 **${def.name}** 注入了新的靈魂！`)
     );
 
     await safeReply(interaction, { embeds: [embed], components: [backButton()] });

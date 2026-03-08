@@ -11,17 +11,19 @@ const AUCTIONS_PER_PAGE = 5;
 export async function showAuctionHub(interaction) {
     const embed = rpgEmbed(
         '⚖️ 吉吉王國拍賣場',
-        [
-            ansiText('2;33', '歡迎來到吉吉王國最大的拍賣與交易聚落！'),
-            '在這裡你可以將不需要的物品變現，或是尋星踏月尋找其他冒險者割愛的神兵利器。',
+        '```ansi\n' + [
+            fmt(COLORS.YELLOW, '歡迎來到吉吉王國最大的拍賣與交易聚落！'),
             '',
-            '✨ **上架商品**：從背包中選擇珍藏，自訂價格掛牌出售。',
-            '✨ **瀏覽拍賣**：走入人聲鼎沸的市集，尋找心儀的寶物，即買即得。',
-            '✨ **我的拍賣**：管理您架上的商品，或是取回尚未售出的物件。',
-            '✨ **交易紀錄**：回顧您的輝煌買賣史。',
+            fmt(COLORS.WHITE, '在此將物品變現，或尋覓他人的神兵利器。'),
             '',
-            '*🐕 汪嗚... 小心別用天價買到垃圾了喔！*'
-        ].join('\n'),
+            fmt(COLORS.GOLD + ';' + COLORS.BOLD, '⚖️ 設施指南：'),
+            fmt(COLORS.WHITE, '1. 上架商品：自訂物品與售價。'),
+            fmt(COLORS.WHITE, '2. 瀏覽市集：尋找心儀的寶物。'),
+            fmt(COLORS.WHITE, '3. 我的拍賣：管理架上商品與下架。'),
+            fmt(COLORS.WHITE, '4. 交易紀錄：回顧個人買賣史。'),
+            '',
+            fmt(COLORS.GRAY, '「汪嗚... 小心別用天價買到垃圾了喔！」')
+        ].join('\n') + '\n```',
         0xF1C40F // Gold
     ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
 
@@ -117,11 +119,12 @@ export async function showAuctionBrowse(interaction, page = 0, message = null) {
 
     for (const a of auctions) {
         const info = getItemDisplayInfo(a.item_type, a.item_id, a.quality, a.enhancement);
+        const namePart = widePad(`${info.name} x${a.quantity}`, 24);
         const priceStr = a.price.toLocaleString();
         const sellerName = sellerNames[a.seller_id];
 
-        lines.push(`**ID:${a.id}** | ${info.name} x${a.quantity}`);
-        lines.push(`> 💰 **${priceStr}** 金幣 | 賣家: ${sellerName}`);
+        lines.push(`${fmt(COLORS.WHITE, `ID:${a.id}`)} | ${namePart}`);
+        lines.push(`  └ 💰 ${fmt(COLORS.GOLD, priceStr)} G | 賣家: ${fmt(COLORS.CYAN, sellerName)}`);
         lines.push(''); // 空行分隔
 
         // 如果是自己賣的就不放進購買選單 (或者放進去但後端檢查擋掉)
@@ -137,7 +140,7 @@ export async function showAuctionBrowse(interaction, page = 0, message = null) {
 
     const embed = rpgEmbed(
         `🔍 瀏覽拍賣場 (第 ${page + 1}/${totalPages} 頁)`,
-        lines.join('\n'),
+        '```ansi\n' + lines.join('\n') + '\n```',
         0x3498db // Blue
     ).setFooter({ text: `共 ${totalAuctions} 項商品 | uid:${interaction.user.id}` });
 

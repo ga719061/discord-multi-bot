@@ -2,19 +2,20 @@
 import { ActionRowBuilder } from 'discord.js';
 import { RACES, CLASSES, calculateInitialStats } from '../data/gameData.js';
 import { createCharacter, getCharacter, addEquipment, updateCharacter, learnSkill, getEquipmentList } from '../rpgDatabase.js';
-import { rpgEmbed, rpgButton, charSummary, getActualStats, calculateTotalStats, safeReply } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, charSummary, getActualStats, calculateTotalStats, safeReply, widePad } from '../rpgHelpers.js';
 import { showHub } from './hub.js';
+import { fmt, COLORS } from '../../utils/style.js';
 
 export async function showCreate(interaction, method = 'reply') {
     const embed = rpgEmbed(
         '🏮 吉吉王國冒險者登記處',
-        [
-            '汪！歡迎來到吉吉王國！本王需要登記你的身份～',
+        '```ansi\n' + [
+            fmt(COLORS.CYAN, '汪！歡迎來到吉吉王國！本王需要登記你的身份～'),
             '',
-            '📋 **第一步：選擇你的種族**',
+            fmt(COLORS.YELLOW + ';' + COLORS.BOLD, '📋 第一步：選擇你的種族'),
             '',
-            ...Object.values(RACES).map(r => `${r.emoji} **${r.name}** — ${r.desc}`),
-        ].join('\n'),
+            ...Object.values(RACES).map(r => `${r.emoji} ${fmt(COLORS.WHITE, widePad(r.name, 8))} ${fmt(COLORS.GRAY, r.desc)}`),
+        ].join('\n') + '\n```',
     ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
 
     const row = new ActionRowBuilder().addComponents(
@@ -45,13 +46,13 @@ export async function handleCreate(interaction) {
 
         const embed = rpgEmbed(
             '🏮 吉吉王國冒險者登記處',
-            [
-                `種族：${race.emoji} **${race.name}**`,
+            '```ansi\n' + [
+                `${fmt(COLORS.WHITE, '種族：')}${race.emoji} ${fmt(COLORS.CYAN, race.name)}`,
                 '',
-                '📋 **第二步：選擇你的職業**',
+                fmt(COLORS.YELLOW + ';' + COLORS.BOLD, '📋 第二步：選擇你的職業'),
                 '',
-                ...Object.values(CLASSES).map(c => `${c.emoji} **${c.name}** — ${c.desc}`),
-            ].join('\n'),
+                ...Object.values(CLASSES).map(c => `${c.emoji} ${fmt(COLORS.WHITE, widePad(c.name, 8))} ${fmt(COLORS.GRAY, c.desc)}`),
+            ].join('\n') + '\n```',
         ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
 
         const row = new ActionRowBuilder().addComponents(

@@ -10,22 +10,56 @@ export function makeBar(current, max, length = 10) {
     return '▰'.repeat(Math.max(0, filled)) + '▱'.repeat(Math.max(0, length - filled));
 }
 
+// ---------- HP / MP / XP 長條圖 (裸露版) ----------
+export function hpBarBare(current, max, length = 15) {
+    return `❤️ HP ${ansiBar(current, max, COLORS.RED, length)} ${current}/${max}`;
+}
+
+export function mpBarBare(current, max, length = 15) {
+    return `💙 MP ${ansiBar(current, max, COLORS.BLUE, length)} ${current}/${max}`;
+}
+
+export function xpBarBare(current, max, length = 15) {
+    return `✨ XP ${ansiBar(current, max, COLORS.GOLD || '0;33', length)} ${current}/${max}`;
+}
+
+// ---------- HP / MP / XP 長條圖 (代碼塊版) ----------
 export function hpBar(current, max) {
-    return '```ansi\n' + `❤️ HP ${ansiBar(current, max, COLORS.RED, 15)} ${current}/${max}` + '\n```';
+    return '```ansi\n' + hpBarBare(current, max) + '\n```';
 }
 
 export function mpBar(current, max) {
-    return '```ansi\n' + `💙 MP ${ansiBar(current, max, COLORS.BLUE, 15)} ${current}/${max}` + '\n```';
+    return '```ansi\n' + mpBarBare(current, max) + '\n```';
 }
 
 export function xpBar(current, max, length = 15) {
-    return '```ansi\n' + `✨ XP ${ansiBar(current, max, COLORS.GOLD || '0;33', length)} ${current}/${max}` + '\n```';
+    return '```ansi\n' + xpBarBare(current, max, length) + '\n```';
 }
 
 // ---------- ANSI 顏色文字 ----------
 export function ansiText(colorId, text) {
-    const esc = String.fromCharCode(27);
-    return esc + '[' + colorId + 'm' + text + esc + '[0m';
+    return fmt(colorId, text);
+}
+
+// ---------- 寬字元對齊工具 ----------
+// 處理包含 Emojis 的對齊問題
+export function widePad(text, targetLen, align = 'start') {
+    const getVisualLen = (str) => {
+        let len = 0;
+        for (let i = 0; i < str.length; i++) {
+            const code = str.charCodeAt(i);
+            // 簡化的寬字元判斷：中文字與大部分 Emoji (粗略估計)
+            if (code >= 0x4E00 && code <= 0x9FFF) len += 2; // CJK
+            else if (code > 255) len += 2; // Emoji etc.
+            else len += 1;
+        }
+        return len;
+    };
+
+    const visualLen = getVisualLen(text);
+    const padCount = Math.max(0, targetLen - visualLen);
+    const padding = ' '.repeat(padCount);
+    return align === 'start' ? text + padding : padding + text;
 }
 
 /**

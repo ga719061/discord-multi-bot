@@ -1,6 +1,6 @@
 import { ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { getCharacter, updateCharacter, addToInventory, addEquipment, getInventory, getEquipmentList, removeFromInventory } from '../rpgDatabase.js';
-import { rpgEmbed, rpgButton, qualityLabel, backButton, ansiText, safeReply, getEquipFullName, formatItemName } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, qualityLabel, backButton, ansiText, safeReply, getEquipFullName, formatItemName, widePad } from '../rpgHelpers.js';
 import { SHOP_ITEMS, EQUIPMENT, ITEM_NAMES, QUALITY_MULTIPLIER, getItemDisplayName, SKILL_BOOKS, getSkillDef, EQUIP_SELL_PRICES, STAT_LABELS } from '../data/gameData.js';
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
 
@@ -119,26 +119,30 @@ async function showSellTab(interaction, char) {
     const matLines = sellableMats.map(i => {
         const mat = ITEM_NAMES[i.item_id];
         if (mat) {
-            return `${mat.emoji} ${mat.name} x${i.quantity} — 單價 ${mat.sellPrice}💰 (共 ${mat.sellPrice * i.quantity}💰)`;
+            const nameStr = widePad(`${mat.emoji} ${mat.name}`, 14);
+            const qtyStr = widePad(`x${i.quantity}`, 6);
+            return `${nameStr} ${qtyStr} — 單價 ${widePad(mat.sellPrice.toString(), 4)}💰 (共 ${mat.sellPrice * i.quantity}💰)`;
         }
         const book = SKILL_BOOKS[i.item_id];
         if (book) {
             const skill = getSkillDef(book.skillId);
             const price = EQUIP_SELL_PRICES[book.quality] || 50;
             const coloredName = formatItemName(skill ? skill.name : i.item_id, book.quality);
-            return `📖 ${coloredName} 技能書 x${i.quantity} — 單價 ${price}💰 (共 ${price * i.quantity}💰)`;
+            const nameStr = widePad(`📖 ${skill ? skill.name : i.item_id}`, 14);
+            const qtyStr = widePad(`x${i.quantity}`, 6);
+            return `${nameStr} ${qtyStr} — 單價 ${widePad(price.toString(), 4)}💰 (共 ${price * i.quantity}💰)`;
         }
-        return `📦 ${i.item_id} x${i.quantity}`;
+        return `📦 ${widePad(i.item_id, 14)} x${i.quantity}`;
     });
 
     const eqLines = sellableEquips.slice(0, 10).map(e => {
         const def = EQUIPMENT[e.item_id];
         const basePrice = EQUIP_SELL_PRICES[e.quality] || 30;
         const price = Math.floor(basePrice * (1 + (e.enhancement || 0) * 0.2));
-        if (!def) return `📦 ${e.item_id} — ${price}💰`;
+        if (!def) return `📦 ${widePad(e.item_id, 14)} — ${price}💰`;
         const fullName = getEquipFullName(e, def);
-        const coloredName = formatItemName(fullName, e.quality);
-        return `${def.emoji} ${coloredName}${e.enhancement ? `(+${e.enhancement})` : ''} — ${price}💰`;
+        const namePart = widePad(`${def.emoji} ${fullName}${e.enhancement ? `(+${e.enhancement})` : ''}`, 20);
+        return `${namePart} — ${price}💰`;
     });
 
     const header = ansiBlock([

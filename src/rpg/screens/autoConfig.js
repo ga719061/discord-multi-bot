@@ -52,7 +52,7 @@ export async function showAutoConfig(interaction, char = null) {
 
     const embed = rpgEmbed(
         '⚙️ 自動戰鬥設定',
-        lines.join('\n'),
+        '```ansi\n' + lines.join('\n') + '\n```',
         0x1ABC9C // Turquoise
     ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${userId}` });
 

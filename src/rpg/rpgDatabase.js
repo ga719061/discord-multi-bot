@@ -1,6 +1,6 @@
 // ===== RPG 專用資料庫操作函數 =====
 import { getDb as _getDb, getGuildSettings } from '../utils/database.js';
-import { generateRandomAffixes } from './rpgHelpers.js';
+import { generateRandomAffixes, calculateTotalStats } from './rpgHelpers.js';
 export const getDb = _getDb;
 
 // ---------- 初始化 RPG 表 ----------
@@ -262,6 +262,16 @@ export function getCharacter(guildId, userId) {
 export function createCharacter(guildId, userId, data) {
     const db = getDb();
     const now = Date.now();
+
+    // 確保有基礎屬性，若無則計算（防止 NOT NULL 報錯）
+    if (data.hp === undefined) {
+        const fullStats = calculateTotalStats({
+            level: 1, race: data.race, class: data.class,
+            str: data.str || 10, int: data.int || 10, vit: data.vit || 10, agi: data.agi || 10, luk: data.luk || 10
+        }, []);
+        data = { ...data, ...fullStats };
+    }
+
     db.prepare(`INSERT INTO rpg_characters(guild_id, user_id, race, class, hp, max_hp, mp, max_mp, atk, matk, def, mdef, spd, str, int, vit, agi, luk, last_active, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
         .run(guildId, userId, data.race, data.class, data.hp, data.max_hp, data.mp, data.max_mp, data.atk, data.matk, data.def, data.mdef, data.spd, data.str || 10, data.int || 10, data.vit || 10, data.agi || 10, data.luk || 10, now, now);
     return getCharacter(guildId, userId);

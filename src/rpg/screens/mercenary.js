@@ -41,15 +41,16 @@ export async function showMercenaryHub(interaction, char = null) {
 
     const embed = rpgEmbed(
         '🛡️ 吉吉傭兵公會',
-        [
-            ansiText('2;34', '歡迎來到傭兵公會！在此締結無畏的契約，尋找最可靠的戰友！'),
-            '你可以僱用伺服器內其他開放助戰的玩家作為你的傭兵。在戰鬥中，他們會由系統 AI 操控，為你提供火力支援或治療。戰鬥獲勝後，傭兵的主人也能獲得豐厚的分紅！',
+        '```ansi\n' + [
+            fmt(COLORS.CYAN, '歡迎來到傭兵公會！在此締結無畏的契約，尋找最可靠的戰友！'),
             '',
-            '**【你目前的傭兵小隊】** (最多 3 人)',
-            hiredInfos.length > 0 ? hiredInfos.join('\n') : '> 尚無傭兵，快去招募吧！',
+            fmt(COLORS.WHITE, '你可以僱用其他冒險者作為傭兵。他們會在戰鬥中由系統 AI 操控提供支援。'),
             '',
-            '💡 *出發去冒險時，這些傭兵就會自動跟著你上陣囉！*'
-        ].join('\n'),
+            fmt(COLORS.YELLOW + ';' + COLORS.BOLD, '【你目前的傭兵小隊】 (最多 3 人)'),
+            hiredInfos.length > 0 ? hiredInfos.join('\n') : fmt(COLORS.GRAY, '> 尚無傭兵，快去招募吧！'),
+            '',
+            fmt(COLORS.GRAY, '💡 出發去冒險時，這些傭兵就會自動跟著你上陣囉！')
+        ].join('\n') + '\n```',
         0x3498DB // Blue
     ).setFooter({ text: `🐕👑 吉吉王國冒險者公會 | uid:${userId}` });
 
@@ -171,16 +172,17 @@ export async function showMercenaryHistory(interaction) {
     }));
 
     for (const h of history) {
-        const timeStr = `<t:${Math.floor(h.fought_at / 1000)}:R>`;
-        const employerName = userNamesCache[h.employer_id];
+        const timeStr = new Date(h.fought_at * 1).toLocaleString('zh-TW', { hour12: false, month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' });
+        const employerName = widePad(userNamesCache[h.employer_id], 12);
 
-        lines.push(`> ⚔️ ${timeStr}\n> ↳ 協助 **${employerName}** 擊敗了 **${h.monster_name}**，獲得了 **${h.reward_gold} G** 與 **${h.reward_xp} XP**！`);
+        lines.push(`${fmt(COLORS.GRAY, timeStr)} 協助 ${fmt(COLORS.CYAN, employerName)} 擊敗 ${fmt(COLORS.RED, h.monster_name)}`);
+        lines.push(`  ↳ 獲得 ${fmt(COLORS.GOLD, `💰${h.reward_gold} G`)} XP ${fmt(COLORS.GREEN, `⭐${h.reward_xp}`)}`);
         lines.push('');
     }
 
     const embed = rpgEmbed(
         '📜 我的助戰紀錄 (最近 20 筆)',
-        lines.join('\n'),
+        '```ansi\n' + lines.join('\n') + '\n```',
         0x1ABC9C // Turquoise
     ).setFooter({ text: `uid:${userId}` });
 

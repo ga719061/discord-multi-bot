@@ -1,7 +1,7 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { RACES, CLASSES, SKILLS, getXpForLevel, SKILL_BOOKS, getSkillDef } from '../data/gameData.js';
 import { getCharacter, updateCharacter, getEquipmentList, getLearnedSkills, toggleMercenaryStatus, setEquippedSkills } from '../rpgDatabase.js';
-import { rpgEmbed, rpgButton, charSummary, hpBar, mpBar, xpBar, backButton, qualityLabel, getActualStats, safeReply, calculateTotalStats, getJobTitle, formatItemName, getJobAdvancement, getEquipFullName, getQualityColor } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, charSummary, hpBar, mpBar, xpBar, hpBarBare, mpBarBare, xpBarBare, widePad, backButton, qualityLabel, getActualStats, safeReply, calculateTotalStats, getJobTitle, formatItemName, getJobAdvancement, getEquipFullName, getQualityColor } from '../rpgHelpers.js';
 import { EQUIPMENT, QUALITY_MULTIPLIER, STAT_LABELS } from '../data/gameData.js';
 import * as StyleUtils from '../../utils/style.js';
 const { fmt, COLORS, ansi, ansiBar } = StyleUtils;
@@ -36,24 +36,26 @@ export async function showProfile(interaction, char) {
             `**稱號:**`,
             `\`\`\`ansi\n${getJobTitle(char, true)}\n\`\`\``,
             `**等級:** Lv.${char.level} | **XP:** ${char.xp}/${xpNeeded}`,
-            xpBar(char.xp, xpNeeded),
+            '```ansi\n' + xpBarBare(char.xp, xpNeeded) + '\n```',
         ].join('\n');
 
         const mainStats = [
-            hpBar(char.hp, total.max_hp),
-            mpBar(char.mp, total.max_mp),
             '```ansi\n' + [
-                `⚔️ 攻擊: ${String(total.atk).padEnd(4)} 🔮 魔攻: ${total.matk}`,
-                `🛡️ 防禦: ${String(total.def).padEnd(4)} 🏰 魔防: ${total.mdef}`,
-                `💥 暴擊: ${String(total.crit + '%').padEnd(4)} 🔥 暴傷: ${total.crit_dmg}%`,
-                `💨 速度: ${String(total.spd).padEnd(4)} 🎯 點數: ${char.free_points || 0}`
+                hpBarBare(char.hp, total.max_hp),
+                mpBarBare(char.mp, total.max_mp)
+            ].join('\n') + '\n```',
+            '```ansi\n' + [
+                `${widePad('⚔️ 攻擊:', 10)} ${String(total.atk).padEnd(6)} ${widePad('🔮 魔攻:', 10)} ${total.matk}`,
+                `${widePad('🛡️ 防禦:', 10)} ${String(total.def).padEnd(6)} ${widePad('🏰 魔防:', 10)} ${total.mdef}`,
+                `${widePad('💥 暴擊:', 10)} ${String(total.crit + '%').padEnd(6)} ${widePad('🔥 暴傷:', 10)} ${total.crit_dmg}%`,
+                `${widePad('💨 速度:', 10)} ${String(total.spd).padEnd(6)} ${widePad('🎯 點數:', 10)} ${char.free_points || 0}`
             ].join('\n') + '\n```'
         ].join('\n');
 
         const attrInfo = '```ansi\n' + [
-            `💪 力量: ${String(char.str || 10).padEnd(4)} 🧠 智力: ${char.int || 10}`,
-            `🦴 體質: ${String(char.vit || 10).padEnd(4)} ⚡ 敏捷: ${char.agi || 10}`,
-            `🍀 幸運: ${char.luk || 10}`
+            `${widePad('💪 力量:', 10)} ${String(char.str || 10).padEnd(6)} ${widePad('🧠 智力:', 10)} ${char.int || 10}`,
+            `${widePad('🦴 體質:', 10)} ${String(char.vit || 10).padEnd(6)} ${widePad('⚡ 敏捷:', 10)} ${char.agi || 10}`,
+            `${widePad('🍀 幸運:', 10)} ${char.luk || 10}`
         ].join('\n') + '\n```';
 
         const careerInfo = [

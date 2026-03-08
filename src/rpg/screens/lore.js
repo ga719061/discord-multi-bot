@@ -97,7 +97,12 @@ export async function showLore(interaction, page = 0) {
     if (page >= LORE_PAGES.length) page = LORE_PAGES.length - 1;
 
     const lore = LORE_PAGES[page];
-    const embed = rpgEmbed(lore.title, lore.content, 0x8E44AD) // Dark purple for lore
+    const ansiContent = '```ansi\n' + lore.content.replace(/\*\*(.*?)\*\*/g, (_, text) => fmt(COLORS.YELLOW + ';' + COLORS.BOLD, text))
+        .split('\n')
+        .map(line => line.startsWith('　') ? fmt(COLORS.GRAY, line) : line)
+        .join('\n') + '\n```';
+
+    const embed = rpgEmbed(lore.title, ansiContent, 0x8E44AD) // Dark purple for lore
         .setFooter({ text: `📖 ${page + 1}/${LORE_PAGES.length} | 🐕👑 吉吉王國冒險者公會 | uid:${interaction.user.id}` });
 
     const row = new ActionRowBuilder().addComponents(

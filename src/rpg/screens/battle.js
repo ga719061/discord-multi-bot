@@ -1,6 +1,6 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { getBattle, updateBattle, deleteBattle, getCharacter, updateCharacter, addGold, addToInventory, addEquipment, getLearnedSkills, registerFirstKill, addMercenaryHistory } from '../rpgDatabase.js';
-import { rpgEmbed, rpgButton, hpBar, mpBar, battleActionRows, backButton, getUnlockedSkills, qualityLabel, broadcastRpgEvent, calcDamage, isCrit, isDodge, applyBuffsAndStates, processTurnEndStates, hasState, consumeShield, getJobTitle, formatItemName, executeSetHooks, formatBattleLog } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, hpBar, mpBar, hpBarBare, mpBarBare, battleActionRows, backButton, getUnlockedSkills, qualityLabel, broadcastRpgEvent, calcDamage, isCrit, isDodge, applyBuffsAndStates, processTurnEndStates, hasState, consumeShield, getJobTitle, formatItemName, executeSetHooks, formatBattleLog } from '../rpgHelpers.js';
 import { fmt, COLORS } from '../../utils/style.js';
 import { logger } from '../../utils/logger.js';
 import { SKILLS, EQUIPMENT, SHOP_ITEMS, getXpForLevel, getItemDisplayName, SKILL_BOOK_DROP_POOLS, SKILL_BOOKS, getSkillDef, AREAS, QUALITY_MULTIPLIER, CLASSES } from '../data/gameData.js';
@@ -37,7 +37,7 @@ export async function renderBattle(interaction, battleId, actionLog = '') {
     monsters.forEach((m, idx) => {
         const isDead = m.currentHp <= 0 ? ' 💀' : '';
         monsterLines.push(`${m.emoji} ** ${m.name}** ${isDead} `);
-        monsterLines.push(`${hpBar(m.currentHp, m.hp)}`);
+        monsterLines.push('```ansi\n' + hpBarBare(m.currentHp, m.hp) + '\n```');
     });
 
     // 4. 處理隊員與召喚物顯示
@@ -45,7 +45,7 @@ export async function renderBattle(interaction, battleId, actionLog = '') {
         const ps = battle.player_states[pid];
         const p_name = pid === interaction.user.id ? `**${interaction.user.displayName}**` : `<@${pid}>`;
         const status = ps.hp <= 0 ? ' 💀' : '';
-        return `${p_name}${status} (Lv.${ps.level})\n${hpBar(ps.hp, ps.max_hp)}\n${mpBar(ps.mp, ps.max_mp)}`;
+        return `${p_name}${status} (Lv.${ps.level})\n\`\`\`ansi\n${hpBarBare(ps.hp, ps.max_hp)}\n${mpBarBare(ps.mp, ps.max_mp)}\n\`\`\``;
     });
 
     if (battle.ally_summons && battle.ally_summons.length > 0) {
@@ -53,7 +53,7 @@ export async function renderBattle(interaction, battleId, actionLog = '') {
             const isDead = s.hp <= 0 ? ' 💀' : '';
             playersInfo.push(
                 `**${s.emoji} ${s.name}**${isDead}`,
-                `${hpBar(s.hp, s.max_hp)}`
+                '```ansi\n' + hpBarBare(s.hp, s.max_hp) + '\n```'
             );
         }
     }

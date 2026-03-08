@@ -4,14 +4,14 @@ import { getItemDisplayName } from '../data/gameData.js';
 import { TAVERN_NPC, LORE_RUMORS, TAVERN_REWARDS } from '../data/loreData.js';
 import { updateCharacter, getCharacter, deductGold, addToInventory, getEquipmentList, getStashedEquipmentList, stashEquipment, unstashEquipment, resetCharacterStats, getInventory, getStashedInventory, stashItem, unstashItem } from '../rpgDatabase.js';
 export async function showTavern(interaction, char, dialogue = null, activeNpc = null) {
-    let mainDescription = [
-        '「汪！歡迎來到冒險者的休息站。想找誰聊聊，或是休息一下？」',
+    let mainDescription = '```ansi\n' + [
+        fmt(COLORS.WHITE, '「汪！歡迎來到冒險者的休息站。想找誰聊聊，或是休息一下？」'),
         '',
-        ansiText('0;33', '【可互動的神祕客】'),
-        `👨‍🍳 **${TAVERN_NPC['bartender'].name}** — 提供酒水與恢復服務。`,
-        `🧔 **${TAVERN_NPC['veteran'].name}** — 提供各地的冒險傳聞。`,
-        `👤 **${TAVERN_NPC['traveler'].name}** — 似乎藏著稀有情報與物品。`
-    ].join('\n');
+        fmt(COLORS.YELLOW + ';' + COLORS.BOLD, '【可互動的神祕客】'),
+        `${fmt(COLORS.WHITE, `👨‍🍳 ${TAVERN_NPC['bartender'].name}`)} — 提供酒水與恢復服務。`,
+        `${fmt(COLORS.WHITE, `🧔 ${TAVERN_NPC['veteran'].name}`)} — 提供各地的冒險傳聞。`,
+        `${fmt(COLORS.WHITE, `👤 ${TAVERN_NPC['traveler'].name}`)} — 似乎藏著稀有情報與物品。`
+    ].join('\n') + '\n```';
 
     if (activeNpc) {
         const npc = TAVERN_NPC[activeNpc];

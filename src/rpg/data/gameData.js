@@ -352,3 +352,84 @@ export const MONSTERS = {
     ]
 };
 // 由於檔案過長，後續怪物與 BOSS 暫略或後續補齊，此處優先恢復結構。
+
+// ---------- BOSSES ----------
+export const BOSSES = {
+    outskirts: { id: 'wild_boar_king', name: '野豬王', emoji: '🐗👑', hp: 500, atk: 60, def: 30, mdef: 20, spd: 15, xp: 500, gold: 1000 },
+    dark_forest: { id: 'goblin_chief', name: '哥布林酋長', emoji: '👺👑', hp: 1500, atk: 120, def: 60, mdef: 40, spd: 25, xp: 2000, gold: 4000 },
+    dragon_ridge: { id: 'young_dragon', name: '幼龍', emoji: '🐉', hp: 5000, atk: 300, def: 150, mdef: 150, spd: 40, xp: 10000, gold: 20000 },
+};
+
+// ---------- 召喚配方 (Summon Recipes) ----------
+export const SUMMON_RECIPES = [
+    { id: 'mage_summon_1', name: '召喚龍魂', cost: { mp: 50 }, result: 'dragon_spirit' }
+];
+
+
+// ---------- 任務系統 (Quests) ----------
+export const MAIN_QUESTS = [
+    {
+        id: 'prologue',
+        chapter: '序章',
+        name: '冒險的起點',
+        objectives: [
+            { type: 'create_character', count: 1, desc: '踏入吉吉王國' }
+        ],
+        rewards: { gold: 100, xp: 50 }
+    },
+    {
+        id: 'outskirts_exploration',
+        chapter: '第一章',
+        name: '森林的騷動',
+        objectives: [
+            { type: 'kill_monster', monsterId: 'slime', count: 5, desc: '擊敗 5 隻史萊姆' },
+            { type: 'kill_monster', monsterId: 'wild_boar', count: 3, desc: '擊敗 3 隻野豬' }
+        ],
+        rewards: { gold: 300, xp: 200, gems: 5 }
+    },
+    {
+        id: 'bandit_threat',
+        chapter: '第二章',
+        name: '平定盜賊',
+        objectives: [
+            { type: 'kill_monster', monsterId: 'bandit', count: 10, desc: '擊敗 10 名盜賊' }
+        ],
+        rewards: { gold: 600, xp: 500, gems: 10, equipment: 'bandit_cloak' }
+    },
+    {
+        id: 'dark_forest_depths',
+        chapter: '第三章',
+        name: '深入黑霧',
+        objectives: [
+            { type: 'kill_monster', monsterId: 'goblin', count: 15, desc: '擊敗 15 隻哥布林' },
+            { type: 'kill_monster', monsterId: 'giant_spider', count: 5, desc: '擊敗 5 隻巨蜘蛛' }
+        ],
+        rewards: { gold: 1200, xp: 1200, gems: 20 }
+    },
+    {
+        id: 'mountain_ascent',
+        chapter: '第四章',
+        name: '攀登龍脊',
+        objectives: [
+            { type: 'kill_monster', monsterId: 'mountain_troll', count: 8, desc: '擊敗 8 隻山丘巨魔' },
+            { type: 'kill_monster', monsterId: 'rock_golem', count: 5, desc: '擊敗 5 隻石巨人' }
+        ],
+        rewards: { gold: 2500, xp: 3000, gems: 50 }
+    },
+    {
+        id: 'swamp_menace',
+        chapter: '第五章',
+        name: '沼澤之影',
+        objectives: [
+            { type: 'kill_monster', monsterId: 'swamp_hydra', count: 3, desc: '擊潰 3 隻沼澤九頭蛇' },
+            { type: 'kill_monster', monsterId: 'undead_knight', count: 10, desc: '驅逐 10 名不死騎士' }
+        ],
+        rewards: { gold: 5000, xp: 8000, gems: 100 }
+    }
+];
+
+export const DAILY_QUEST_POOL = [
+    { id: 'daily_kill_slime', type: 'kill_monster', monsterId: 'slime', count: 10, name: '史萊姆清理', rewards: { gold: 200, xp: 150 } },
+    { id: 'daily_kill_goblin', type: 'kill_monster', monsterId: 'goblin', count: 8, name: '哥布林獵人', rewards: { gold: 400, xp: 300 } },
+    { id: 'daily_win_battles', type: 'win_battle', count: 5, name: '戰鬥磨練', rewards: { gold: 500, xp: 400, gems: 2 } },
+];

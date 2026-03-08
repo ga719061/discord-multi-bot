@@ -1,6 +1,6 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { getInventory, getEquipmentList, getCharacter, updateCharacter, removeFromInventory, learnSkill, hasLearnedSkill, getEquipment, updateEquipment, getDb } from '../rpgDatabase.js';
-import { rpgEmbed, rpgButton, qualityLabel, backButton, getActualStats, ENHANCEMENT_CONFIG, getEquipCategory, getScrollForCategory, ansiText, broadcastRpgEvent, safeReply, formatItemName, getEquipFullName, calculateTotalStats, getQualityColor } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, qualityLabel, backButton, getActualStats, ENHANCEMENT_CONFIG, getEquipCategory, getScrollForCategory, ansiText, broadcastRpgEvent, safeReply, formatItemName, getEquipFullName, calculateTotalStats, getQualityColor, widePad } from '../rpgHelpers.js';
 import { fmt, COLORS } from '../../utils/style.js';
 import { EQUIPMENT, SHOP_ITEMS, getItemDisplayName, SKILL_BOOKS, getSkillDef, CLASSES, QUALITY_MULTIPLIER, AFFIX_REGISTRY, SET_REGISTRY, STAT_LABELS } from '../data/gameData.js';
 
@@ -279,7 +279,7 @@ async function showInventoryWithMessage(interaction, char, message) {
 
         const fullName = getEquipFullName(e, def);
         const coloredName = formatItemName(fullName, e.quality);
-        let line = `${def.emoji} ${coloredName}${enhStr} — ${statsText} `;
+        let line = `${def.emoji} ${coloredName}${enhStr} — ${statsText}`;
 
         // 顯示詞條詳細數值
         if (bonusData.affixes && bonusData.affixes.length > 0) {
@@ -321,7 +321,9 @@ async function showInventoryWithMessage(interaction, char, message) {
             const eq = eqList.find(x => x.id === eqId);
             if (eq) {
                 const def = EQUIPMENT[eq.item_id];
-                if (def && def.set_id) setCounts[def.set_id] = (setCounts[def.set_id] || 0) + 1;
+                if (!def) continue; // 防禦程式碼：如果裝備定義不存在則跳過
+
+                if (def.set_id) setCounts[def.set_id] = (setCounts[def.set_id] || 0) + 1;
 
                 const enh = eq.enhancement || 0;
                 const enhStr = enh > 0 ? ` + ${enh} ` : '';
@@ -338,7 +340,7 @@ async function showInventoryWithMessage(interaction, char, message) {
 
                 const fullName = getEquipFullName(eq, def);
                 const coloredName = formatItemName(fullName, eq.quality);
-                let eqLine = `🔹 **${labelName}:** ${def.emoji} ${coloredName}${enhStr} — ${statsText} `;
+                let eqLine = `🔹 ${widePad(`${labelName}:`, 8)} ${def.emoji} ${coloredName}${enhStr} — ${statsText}`;
 
                 // 在裝備欄也顯示詞條狀態
                 if (bonusData.affixes && bonusData.affixes.length > 0) {

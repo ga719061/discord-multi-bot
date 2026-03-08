@@ -1,5 +1,5 @@
 import { getCharacter, getEquipmentList } from '../rpgDatabase.js';
-import { rpgEmbed, charSummary, hpBar, mpBar, xpBar, mainMenuRows, ansiText, calculateTotalStats, getStatusFields, safeReply } from '../rpgHelpers.js';
+import { rpgEmbed, charSummary, hpBar, mpBar, xpBar, hpBarBare, mpBarBare, mainMenuRows, ansiText, calculateTotalStats, getStatusFields, safeReply } from '../rpgHelpers.js';
 import { getXpForLevel, MAIN_QUESTS } from '../data/gameData.js';
 
 export async function showHub(interaction, char, method = 'update') {
@@ -20,9 +20,11 @@ export async function showHub(interaction, char, method = 'update') {
         [
             ansiText('2;36', `歡迎回到公會大廳！勇者 ${interaction.user.displayName}，本王在此為你祈福～`),
             '**📊【勇者當前狀態】**',
-            '```ansi\n' + charSummary(char) + '\n```',
-            hpBar(char.hp, total.max_hp),
-            mpBar(char.mp, total.max_mp),
+            '```ansi\n' + [
+                charSummary(char),
+                hpBarBare(char.hp, total.max_hp),
+                mpBarBare(char.mp, total.max_mp)
+            ].join('\n') + '\n```',
             '',
             `📜 **當前主線**: ${questText.replace('📜主線任務: ', '')}`,
         ].join('\n'),
