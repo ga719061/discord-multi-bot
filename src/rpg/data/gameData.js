@@ -25,12 +25,134 @@ export const STAT_LABELS = {
 
 // ---------- 職業 (Classes) ----------
 export const CLASSES = {
-    warrior: { name: '戰士', emoji: '⚔️', desc: '擁有強大的物理攻擊與防禦力。', bonus: { hp: 50, atk: 10, def: 10 } },
-    ranger: { name: '遊俠', emoji: '🏹', desc: '擅長遠程攻擊與高速度、高暴擊。', bonus: { spd: 15, crit: 5, atk: 5 } },
-    mage: { name: '法師', emoji: '🔮', desc: '精通毀滅性的魔法與大範圍打擊。', bonus: { mp: 50, matk: 15, mdef: 5 } },
-    paladin: { name: '聖騎士', emoji: '🛡️', desc: '守護與治癒的化身，能抗能補。', bonus: { hp: 80, def: 15, mdef: 15 } },
-    magic_swordsman: { name: '魔劍士', emoji: '✨', desc: '物法雙修的精英，追求極致的平衡。', bonus: { atk: 8, matk: 8, spd: 5 } }
+    warrior: {
+        id: 'warrior', name: '戰士', emoji: '⚔️', desc: '攻守兼備的近戰大師。',
+        baseStats: { hp: 150, mp: 30, atk: 25, matk: 10, def: 20, mdef: 15, spd: 15 },
+        growth: { hp: 25, mp: 5, atk: 5, matk: 2, def: 4, mdef: 3, spd: 3 },
+        statConversion: { str: { atk: 1.5, hp: 2 }, vit: { hp: 8, def: 1.2 } },
+        advancements: [
+            { level: 30, name: '精英戰士', color: 'WHITE' },
+            { level: 60, name: '戰爭大師', color: 'GOLD' },
+            { level: 99, name: '不朽戰神', color: 'RED' }
+        ],
+        weapon: 'rusty_sword', initialSkill: 'power_slash'
+    },
+    ranger: {
+        id: 'ranger', name: '遊俠', emoji: '🏹', desc: '遠程打擊與速度的化身。',
+        baseStats: { hp: 120, mp: 40, atk: 28, matk: 10, def: 12, mdef: 12, spd: 25 },
+        growth: { hp: 18, mp: 6, atk: 6, matk: 2, def: 2, mdef: 2, spd: 5 },
+        statConversion: { agi: { spd: 1.2, atk: 1.0, crit: 0.1 }, luk: { crit: 0.2, crit_dmg: 0.5 } },
+        advancements: [
+            { level: 30, name: '巡林客', color: 'WHITE' },
+            { level: 60, name: '神射手', color: 'GOLD' },
+            { level: 99, name: '追風者', color: 'CYAN' }
+        ],
+        weapon: 'novice_bow', initialSkill: 'precise_shot'
+    },
+    mage: {
+        id: 'mage', name: '法師', emoji: '🔮', desc: '操縱元素與奧術的高塔主人。',
+        baseStats: { hp: 100, mp: 100, atk: 10, matk: 30, def: 10, mdef: 25, spd: 12 },
+        growth: { hp: 15, mp: 15, atk: 1, matk: 8, def: 2, mdef: 5, spd: 2 },
+        statConversion: { int: { matk: 1.8, mp: 10 }, luk: { crit: 0.1, echo_chance: 0.1 } },
+        advancements: [
+            { level: 30, name: '元素術士', color: 'WHITE' },
+            { level: 60, name: '大魔導師', color: 'GOLD' },
+            { level: 99, name: '奧術主宰', color: 'PURPLE' }
+        ],
+        weapon: 'novice_staff', initialSkill: 'fireball'
+    },
+    paladin: {
+        id: 'paladin', name: '聖騎士', emoji: '🛡️', desc: '神聖的護盾與救贖的福音。',
+        baseStats: { hp: 180, mp: 50, atk: 18, matk: 18, def: 25, mdef: 20, spd: 10 },
+        growth: { hp: 35, mp: 8, atk: 3, matk: 3, def: 6, mdef: 5, spd: 1 },
+        statConversion: { vit: { hp: 12, def: 1.5 }, int: { mdef: 1.0, matk: 0.8 } },
+        advancements: [
+            { level: 30, name: '守誓者', color: 'WHITE' },
+            { level: 60, name: '聖教軍', color: 'GOLD' },
+            { level: 99, name: '大天使長', color: 'GOLD' }
+        ],
+        weapon: 'rusty_mace', initialSkill: 'holy_strike'
+    },
+    magic_swordsman: {
+        id: 'magic_swordsman', name: '魔劍士', emoji: '✨', desc: '結合劍術與魔法的精英。',
+        baseStats: { hp: 130, mp: 60, atk: 22, matk: 22, def: 15, mdef: 15, spd: 18 },
+        growth: { hp: 20, mp: 10, atk: 4.5, matk: 4.5, def: 3, mdef: 3, spd: 4 },
+        statConversion: { str: { atk: 1.0, spd: 0.2 }, int: { matk: 1.0, mp: 5 }, agi: { spd: 0.5, atk: 0.5 } },
+        advancements: [
+            { level: 30, name: '符文戰士', color: 'WHITE' },
+            { level: 60, name: '法術熔爐', color: 'GOLD' },
+            { level: 99, name: '永恆魔導', color: 'BLUE' }
+        ],
+        weapon: 'apprentice_sword', initialSkill: 'magic_blade'
+    }
 };
+
+// ---------- 種族 (Races) ----------
+export const RACES = {
+    human: { id: 'human', name: '人類', emoji: '🧑', desc: '適應力極強，潛力無窮。', bonus: { all: 2 } },
+    elf: { id: 'elf', name: '精靈', emoji: '🧝', desc: '自然的寵兒，精通奧術。', bonus: { int: 5, agi: 5 } },
+    dwarf: { id: 'dwarf', name: '矮人', emoji: '🧔', desc: '地底的堅毅守護者。', bonus: { vit: 5, str: 5 } },
+    orc: { id: 'orc', name: '獸人', emoji: '👹', desc: '咆哮的戰士，力量至上。', bonus: { str: 10 } },
+    undead: { id: 'undead', name: '不死者', emoji: '💀', desc: '死亡亦非終結。', bonus: { vit: 15 } }
+};
+
+// ---------- 套裝註冊 (Set Registry) ----------
+export const SET_REGISTRY = {
+    slime_set: {
+        name: '史萊姆套裝',
+        bonuses: { '3': { stats: { def: 10, hp: 100 } } }
+    },
+    goblin_set: {
+        name: '哥布林套裝',
+        bonuses: { '3': { stats: { atk: 20, spd: 10 } } }
+    },
+    dragon_set: {
+        name: '龍鱗套裝',
+        bonuses: { '3': { stats: { atk: 30, def: 20 } }, '5': { hooks: { onDamaged: 'dragon_retribution_10' } } }
+    },
+    crystal_set: {
+        name: '水晶套裝',
+        bonuses: { '3': { stats: { matk: 30, mdef: 20 } }, '5': { hooks: { onDamaged: 'crystal_reflect_20' } } }
+    },
+    mana_set: {
+        name: '魔力結晶套裝',
+        bonuses: { '3': { stats: { matk: 40, mp: 200 } }, '5': { hooks: { onDamaged: 'mana_shield_20' } } }
+    },
+    stone_set: {
+        name: '堅石套裝',
+        bonuses: { '3': { stats: { def: 40, hp: 300 } }, '5': { hooks: { onDamaged: 'stone_skin_5' } } }
+    },
+    bone_set: {
+        name: '白骨套裝',
+        bonuses: { '3': { stats: { atk: 40, lifesteal: 10 } }, '5': { hooks: { onKill: 'soul_reap_10' } } }
+    },
+    radiant_cross: {
+        name: '光輝十字套裝',
+        bonuses: { '3': { stats: { atk: 50, matk: 50 } }, '5': { hooks: { onDamaged: 'radiant_heal_15' } } }
+    },
+    chaos_set: {
+        name: '混沌套裝',
+        bonuses: { '3': { stats: { atk: 60, matk: 60, all_pct: 10 } }, '5': { hooks: { onAttack: 'chaos_resonance_10' } } }
+    }
+};
+
+// ---------- 經驗值與初始化 ----------
+export function getXpForLevel(level) {
+    if (level <= 1) return 100;
+    return Math.floor(100 * Math.pow(level, 1.8));
+}
+
+export function calculateInitialStats(raceId, classId) {
+    const race = RACES[raceId];
+    const base = { str: 10, int: 10, vit: 10, agi: 10, luk: 10 };
+    if (race?.bonus) {
+        Object.entries(race.bonus).forEach(([k, v]) => {
+            if (k === 'all') Object.keys(base).forEach(sk => base[sk] += v);
+            else base[k] += v;
+        });
+    }
+    return base;
+}
 
 // ---------- 裝備隨機詞綴 (Modular Affixes) ----------
 export const AFFIX_REGISTRY = {
