@@ -23,6 +23,15 @@ export const STAT_LABELS = {
     spd_pct: '速度%', hp_pct: '生命%', mp_pct: '魔力%'
 };
 
+// ---------- 職業 (Classes) ----------
+export const CLASSES = {
+    warrior: { name: '戰士', emoji: '⚔️', desc: '擁有強大的物理攻擊與防禦力。', bonus: { hp: 50, atk: 10, def: 10 } },
+    ranger: { name: '遊俠', emoji: '🏹', desc: '擅長遠程攻擊與高速度、高暴擊。', bonus: { spd: 15, crit: 5, atk: 5 } },
+    mage: { name: '法師', emoji: '🔮', desc: '精通毀滅性的魔法與大範圍打擊。', bonus: { mp: 50, matk: 15, mdef: 5 } },
+    paladin: { name: '聖騎士', emoji: '🛡️', desc: '守護與治癒的化身，能抗能補。', bonus: { hp: 80, def: 15, mdef: 15 } },
+    magic_swordsman: { name: '魔劍士', emoji: '✨', desc: '物法雙修的精英，追求極致的平衡。', bonus: { atk: 8, matk: 8, spd: 5 } }
+};
+
 // ---------- 裝備隨機詞綴 (Modular Affixes) ----------
 export const AFFIX_REGISTRY = {
     // 前綴 (Prefixes)
