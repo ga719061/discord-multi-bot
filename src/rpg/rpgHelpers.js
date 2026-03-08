@@ -433,20 +433,20 @@ export function notOwnerReply(interaction) {
 export const ENHANCEMENT_CONFIG = {
     weapon: {
         safeZone: 6,
-        failRates: { 7: 30, 8: 50, 9: 70 },
-        breakRates: { 7: 30, 8: 30, 9: 30 }, // 失敗後消失機率
+        failRates: { 7: 40, 8: 60, 9: 80 },
+        breakRates: { 7: 40, 8: 50, 9: 60 }, // 失敗後消失機率
         bonus: 0.12, // 每 +1 = 12% of base stat
     },
     armor: {
         safeZone: 4,
-        failRates: { 5: 10, 6: 18, 7: 28, 8: 40, 9: 55 },
-        breakRates: { 5: 40, 6: 40, 7: 40, 8: 40, 9: 40 },
+        failRates: { 5: 25, 6: 40, 7: 55, 8: 70, 9: 85 },
+        breakRates: { 5: 50, 6: 50, 7: 60, 8: 70, 9: 80 },
         bonus: 0.10,
     },
     accessory: {
         safeZone: 0,
-        failRates: { 1: 15, 2: 20, 3: 25, 4: 30, 5: 40, 6: 50, 7: 60, 8: 70, 9: 80 },
-        breakRates: { 1: 50, 2: 50, 3: 50, 4: 50, 5: 50, 6: 50, 7: 50, 8: 50, 9: 50 },
+        failRates: { 1: 20, 2: 30, 3: 40, 4: 50, 5: 60, 6: 70, 7: 80, 8: 90, 9: 95 },
+        breakRates: { 1: 50, 2: 50, 3: 50, 4: 60, 5: 60, 6: 60, 7: 80, 8: 80, 9: 80 },
         bonus: 0.08,
     },
 };
