@@ -78,7 +78,10 @@ export async function getAiResponse(userMessage, systemPrompt, modelName = 'gemi
             const isRetryable = err.status === 503 ||
                 err.message?.includes('503') ||
                 err.message?.includes('Service Unavailable') ||
-                err.message?.includes('finishReason: RECITATIONS'); // 有時觸發引用攔截也可以重試
+                err.message?.includes('finishReason: RECITATIONS') ||
+                err.message?.includes('fetch failed') ||
+                err.code === 'ECONNRESET' ||
+                err.code === 'ETIMEDOUT'; // 有時觸發引用攔截也可以重試
 
             if (isRetryable && currentRetry > 0) {
                 const delay = (3 - currentRetry) * 2000; // 指數退避延遲 2s, 4s

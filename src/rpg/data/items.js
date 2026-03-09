@@ -18,6 +18,11 @@ export const EQUIPMENT = {
     short_bow: { name: '新手長弓', emoji: '🏹', type: 'weapon_2h', quality: 'common', stats: { atk: 8, spd: 4 }, forClass: 'ranger' },
     apprentice_staff: { name: '新手魔杖', emoji: '🔮', type: 'weapon_2h', quality: 'common', stats: { matk: 10 }, forClass: 'mage' },
     wooden_hammer: { name: '新手戰鎚', emoji: '🔨', type: 'weapon_1h', quality: 'common', stats: { atk: 4, def: 2 }, forClass: 'paladin' },
+    // 兼容性別名 (相容舊版角色資料)
+    novice_bow: { name: '新手長弓', emoji: '🏹', type: 'weapon_2h', quality: 'common', stats: { atk: 8, spd: 4 }, forClass: 'ranger' },
+    novice_staff: { name: '新手魔杖', emoji: '🔮', type: 'weapon_2h', quality: 'common', stats: { matk: 10 }, forClass: 'mage' },
+    rusty_mace: { name: '新手戰鎚', emoji: '🔨', type: 'weapon_1h', quality: 'common', stats: { atk: 4, def: 2 }, forClass: 'paladin' },
+    apprentice_sword: { name: '新手短劍', emoji: '🗡️', type: 'weapon_1h', quality: 'common', stats: { atk: 5 }, forClass: 'magic_swordsman' },
 
     // ===== 王國近郊與地監淺層 (T1: 🟢精良) =====
     slime_hat: { name: '史萊姆黏液帽', emoji: '🧢', type: 'head', quality: 'common', stats: { def: 3, mdef: 2, hp: 20 }, set_id: 'slime_set' },

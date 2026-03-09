@@ -57,7 +57,7 @@ export async function handleCreate(interaction) {
 
         const row = new ActionRowBuilder().addComponents(
             ...Object.values(CLASSES).map(c =>
-                rpgButton(`rpg_create_class_${raceId}_${c.id}`, c.name, undefined, c.emoji)
+                rpgButton(`rpg_create_class_${raceId}:${c.id}`, c.name, undefined, c.emoji)
             ),
         );
 
@@ -67,10 +67,8 @@ export async function handleCreate(interaction) {
     // 選擇職業 → 完成建角
     if (id.startsWith('rpg_create_class_')) {
         const payload = id.replace('rpg_create_class_', '');
-        // payload = raceId_classId (classId may contain underscores)
-        const firstUnderscore = payload.indexOf('_');
-        const raceId = payload.substring(0, firstUnderscore);
-        const classId = payload.substring(firstUnderscore + 1);
+        // 使用冒號分割，避免種族或職業 ID 內含底線造成的解析錯誤
+        const [raceId, classId] = payload.split(':');
         const race = RACES[raceId];
         const cls = CLASSES[classId];
         if (!race || !cls) return;

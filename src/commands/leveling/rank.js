@@ -29,6 +29,7 @@ export async function execute(interaction) {
         { color: COLORS.GOLD, text: `👑 目前爵位: ${rankTitle}` },
         { color: COLORS.BLUE, text: `⭐ 當前等級: Lv.${data.level}` },
         { color: COLORS.WHITE, text: `💬 累計發言: ${data.total_messages} 次` },
+        { color: COLORS.WHITE, text: `🎤 語音修行: ${data.total_voice_mins || 0} 分鐘` },
         '', // 分隔線
         { color: COLORS.GRAY, text: `進度: ${data.xp} / ${xpNeeded} XP (${Math.round((data.xp / xpNeeded) * 100)}%)` },
         { color: COLORS.CYAN, text: bar },

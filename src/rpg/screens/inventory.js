@@ -60,14 +60,14 @@ export async function handleInventoryUse(interaction, char) {
             const heal = Math.floor(total.max_hp * (shopDef.effect.percent / 100));
             const newHp = Math.min(total.max_hp, char.hp + heal);
             updateCharacter(interaction.guildId, interaction.user.id, { hp: newHp });
-            msg = `${shopDef.emoji} 使用了 ** ${shopDef.name}**！回復了 ${heal} HP！(${char.hp} → ${newHp})`;
+            msg = `${shopDef.emoji} 使用了 **${shopDef.name}**！回復了 ${heal} HP！(${char.hp} → ${newHp})`;
         } else if (shopDef.effect.type === 'heal_mp') {
             const eqList = getEquipmentList(interaction.guildId, interaction.user.id);
             const total = calculateTotalStats(char, eqList);
             const heal = Math.floor(total.max_mp * (shopDef.effect.percent / 100));
             const newMp = Math.min(total.max_mp, char.mp + heal);
             updateCharacter(interaction.guildId, interaction.user.id, { mp: newMp });
-            msg = `${shopDef.emoji} 使用了 ** ${shopDef.name}**！回復了 ${heal} MP！(${char.mp} → ${newMp})`;
+            msg = `${shopDef.emoji} 使用了 **${shopDef.name}**！回復了 ${heal} MP！(${char.mp} → ${newMp})`;
         }
 
         const updated = getCharacter(interaction.guildId, interaction.user.id);
@@ -97,7 +97,7 @@ export async function handleInventoryUse(interaction, char) {
         if (!ok) return safeReply(interaction, { content: '🚫 技能古卷不足。', flags: ['Ephemeral'] });
 
         learnSkill(interaction.guildId, interaction.user.id, book.skillId);
-        const msg = `📕✨ 學會了新技能！${skill.emoji} ** ${skill.name}**！`;
+        const msg = `📕✨ 學會了新技能！${skill.emoji} **${skill.name}**！`;
         const updated = getCharacter(interaction.guildId, interaction.user.id);
         return showInventoryWithMessage(interaction, updated, msg);
     }
@@ -122,20 +122,20 @@ export async function handleInventoryUse(interaction, char) {
         // 3. 重算屬性並寫入 DB
         const finalChar = recalcAndSaveStats(interaction.guildId, interaction.user.id);
         const def = oldEq ? EQUIPMENT[oldEq.item_id] : null;
-        return showInventoryWithMessage(interaction, finalChar, `⬇️ 卸下了 ** ${def ? def.name : '裝備'}**！`);
+        return showInventoryWithMessage(interaction, finalChar, `⬇️ 卸下了 **${def ? def.name : '裝備'}**！`);
     }
 
     // ===== 裝備物品 =====
     if (interaction.customId === 'rpg_inv_equip' && value.startsWith('equip_')) {
         const eqId = Number(value.replace('equip_', ''));
         const eq = getEquipment(eqId);
-        if (!eq) return interaction.reply({ content: '🚫 找不到指定的裝備。', flags: ['Ephemeral'] });
+        if (!eq) return safeReply(interaction, { content: '🚫 找不到指定的裝備。', flags: ['Ephemeral'] });
 
         const def = EQUIPMENT[eq.item_id];
-        if (!def) return interaction.reply({ content: '🚫 王國軍械庫中無此記載。', flags: ['Ephemeral'] });
+        if (!def) return safeReply(interaction, { content: '🚫 王國軍械庫中無此記載。', flags: ['Ephemeral'] });
 
         if (def.forClass && def.forClass !== char.class) {
-            return interaction.reply({ content: `🚫 此軍械僅供 ${CLASSES[def.forClass]?.name || def.forClass} 使用。`, flags: ['Ephemeral'] });
+            return safeReply(interaction, { content: `🚫 此軍械僅供 ${CLASSES[def.forClass]?.name || def.forClass} 使用。`, flags: ['Ephemeral'] });
         }
 
         let targetSlotKey = '';
@@ -153,7 +153,7 @@ export async function handleInventoryUse(interaction, char) {
                 const mhEq = getEquipment(char.main_hand_id);
                 const mhDef = mhEq ? EQUIPMENT[mhEq.item_id] : null;
                 if (mhDef && mhDef.type === 'weapon_2h') {
-                    return interaction.reply({ content: '🚫 雙手持武時無法佩備盾牌。請先卸下主手武器。', flags: ['Ephemeral'] });
+                    return safeReply(interaction, { content: '🚫 雙手持武時無法佩備盾牌。請先卸下主手武器。', flags: ['Ephemeral'] });
                 }
             }
         }
@@ -182,7 +182,7 @@ export async function handleInventoryUse(interaction, char) {
             else targetSlotKey = 'acc1_id';
         }
 
-        if (!targetSlotKey) return interaction.reply({ content: '🚫 無法判定合適的穿戴槽位。', flags: ['Ephemeral'] });
+        if (!targetSlotKey) return safeReply(interaction, { content: '🚫 無法判定合適的穿戴槽位。', flags: ['Ephemeral'] });
 
         let updates = {};
 
@@ -204,7 +204,7 @@ export async function handleInventoryUse(interaction, char) {
         updateEquipment(eq.id, { equipped: 1 });
         updateCharacter(interaction.guildId, interaction.user.id, updates);
 
-        const msg = `⚔️ 成功裝備了 ** ${def.emoji} ${def.name}**！`;
+        const msg = `⚔️ 成功裝備了 **${def.emoji} ${def.name}**！`;
         const updated = getCharacter(interaction.guildId, interaction.user.id);
         return showInventoryWithMessage(interaction, updated, msg);
     }
@@ -264,7 +264,7 @@ async function showInventoryWithMessage(interaction, char, message) {
         const def = EQUIPMENT[e.item_id];
         if (!def) return `📦 ${e.item_id} [${qualityLabel(e.quality)}]`;
         const enh = e.enhancement || 0;
-        const enhStr = enh > 0 ? ` ** +${enh}** ` : '';
+        const enhStr = enh > 0 ? ` **+${enh}**` : '';
 
         const bonusData = typeof e.bonus_stats === 'string' ? JSON.parse(e.bonus_stats || '{}') : (e.bonus_stats || {});
         const actualStats = getActualStats(e.item_id, e.quality, enh, bonusData);
@@ -299,14 +299,14 @@ async function showInventoryWithMessage(interaction, char, message) {
 
     let desc = '```ansi\n' + ansiText('2;35', '細心打點，這皆是閣下於吉吉王國各處所得之戰利品。') + '\n```';
     if (message) {
-        desc += `\n **✅ ${message}** `;
+        desc += `\n**✅ ${message}**`;
     }
     embed.setDescription(desc);
 
     embed.addFields(
         {
             name: '💰 財金',
-            value: `> ** ${char.gold.toLocaleString()}** 金幣　💎 ** ${char.gems}** 寶石`,
+            value: `> **${char.gold.toLocaleString()}** 金幣　💎 **${char.gems}** 寶石`,
             inline: false
         }
     );
@@ -326,7 +326,7 @@ async function showInventoryWithMessage(interaction, char, message) {
                 if (def.set_id) setCounts[def.set_id] = (setCounts[def.set_id] || 0) + 1;
 
                 const enh = eq.enhancement || 0;
-                const enhStr = enh > 0 ? ` + ${enh} ` : '';
+                const enhStr = enh > 0 ? `+${enh}` : '';
                 const bonusData = typeof eq.bonus_stats === 'string' ? JSON.parse(eq.bonus_stats || '{}') : (eq.bonus_stats || {});
                 const actualStats = getActualStats(eq.item_id, eq.quality, enh, bonusData);
 
@@ -365,7 +365,7 @@ async function showInventoryWithMessage(interaction, char, message) {
             const setDef = SET_REGISTRY[setId];
             if (!setDef) continue;
 
-            let setLine = `🧩 ** ${setDef.name}** (${count} 件已激活)`;
+            let setLine = `🧩 **${setDef.name}** (${count} 件已激活)`;
             const activeBonuses = [];
             const thresholds = Object.keys(setDef.bonuses).map(Number).sort((a, b) => a - b);
 
@@ -385,7 +385,7 @@ async function showInventoryWithMessage(interaction, char, message) {
                 if (bonus.hooks) bonusDescArr.push('特殊能力');
 
                 const bonusDesc = bonusDescArr.join(', ');
-                activeBonuses.push(`${isActive ? '✅' : '🔒'} ** ${req} 件:** ${bonusDesc} `);
+                activeBonuses.push(`${isActive ? '✅' : '🔒'} **${req} 件:** ${bonusDesc}`);
             }
 
             if (activeBonuses.length > 0) {
@@ -472,9 +472,9 @@ async function showInventoryWithMessage(interaction, char, message) {
         const def = EQUIPMENT[e.item_id];
         if (!def) continue;
         equipOptions.push({
-            label: `穿戴 ${def.name} `,
-            description: `${qualityLabel(e.quality)} | ${TYPE_TRANSLATIONS[def.type] || def.type} `,
-            value: `equip_${e.id} `,
+            label: `穿戴 ${def.name}`,
+            description: `${qualityLabel(e.quality)} | ${TYPE_TRANSLATIONS[def.type] || def.type}`,
+            value: `equip_${e.id}`,
             emoji: def.emoji,
         });
     }
@@ -487,9 +487,9 @@ async function showInventoryWithMessage(interaction, char, message) {
             if (eq) {
                 const def = EQUIPMENT[eq.item_id];
                 unequipOptions.push({
-                    label: `卸下 ${labelName} `,
+                    label: `卸下 ${labelName}`,
                     description: def ? def.name : '未知裝備',
-                    value: `uneq_${slotKey}_${eqId} `,
+                    value: `uneq_${slotKey}_${eqId}`,
                     emoji: def ? def.emoji : '📦',
                 });
             }
@@ -500,13 +500,13 @@ async function showInventoryWithMessage(interaction, char, message) {
         const shopDef = SHOP_ITEMS.consumables.find(s => s.id === i.item_id);
         if (!shopDef || !shopDef.effect) continue;
         if (shopDef.effect.type === 'heal_hp' || shopDef.effect.type === 'heal_mp') {
-            useOptions.push({ label: `使用 ${shopDef.name} `, description: shopDef.desc, value: `use_${i.item_id} `, emoji: shopDef.emoji });
+            useOptions.push({ label: `使用 ${shopDef.name}`, description: shopDef.desc, value: `use_${i.item_id}`, emoji: shopDef.emoji });
         }
     }
     for (const i of skillBooks) {
         const book = SKILL_BOOKS[i.item_id];
         const skill = getSkillDef(book.skillId);
-        useOptions.push({ label: `學習 ${skill?.name || i.item_id} `, description: `${CLASSES[book.forClass]?.name || ''} Lv${book.levelReq} `, value: `learn_${i.item_id} `, emoji: '📕' });
+        useOptions.push({ label: `學習 ${skill?.name || i.item_id}`, description: `${CLASSES[book.forClass]?.name || ''} Lv${book.levelReq}`, value: `learn_${i.item_id}`, emoji: '📕' });
     }
 
     if (equipOptions.length > 0) {

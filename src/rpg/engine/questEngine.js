@@ -20,6 +20,7 @@ export function trackQuestProgress(guildId, userId, eventType, eventData = {}) {
     const progress = { ...qp.progress };
     let updated = false;
 
+    if (!quest.objectives || !Array.isArray(quest.objectives)) return null;
     for (const obj of quest.objectives) {
         // 判斷事件是否符合此目標
         if (obj.type !== eventType) continue;

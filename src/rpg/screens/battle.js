@@ -247,12 +247,12 @@ export async function handleBattleAction(interaction) {
     if (!battle || battle.status !== 'active') return;
 
     if (!battle.player_ids.includes(userId)) {
-        return interaction.reply({ content: '🚫 閣下並未參與此場戰鬥。', flags: ['Ephemeral'] });
+        return interaction.followUp({ content: '🚫 閣下並未參與此場戰鬥。', flags: ['Ephemeral'] }).catch(() => {});
     }
     const ps = battle.player_states[userId];
     battle.ally_summons = battle.ally_summons || [];
     if (ps.hp <= 0 && !id.startsWith('rpg_battle_flee_')) {
-        return interaction.reply({ content: '🚫 意識已模糊，無法下達任何指令。', flags: ['Ephemeral'] });
+        return interaction.followUp({ content: '🚫 意識已模糊，無法下達任何指令。', flags: ['Ephemeral'] }).catch(() => {});
     }
 
 
@@ -319,7 +319,7 @@ export async function handleBattleAction(interaction) {
                     const skill = getSkillDef(skillId);
                     if (!skill) {
                         logger.error(`[Battle] Skill not found: ${skillId}`);
-                        return interaction.reply({ content: '🚫 找不到該技能的祕法記載。', flags: ['Ephemeral'] });
+                        return safeReply(interaction,{ content: '🚫 找不到該技能的祕法記載。', flags: ['Ephemeral'] });
                     }
 
                     const atkVal = ps.matk || ps.atk;
@@ -337,7 +337,7 @@ export async function handleBattleAction(interaction) {
 
                     if (!target) {
                         logger.error(`[Battle] Skill target not found: isSummon=${isSummon}, idx=${targetIdx}, id=${targetId}`);
-                        return interaction.reply({ content: '🚫 無法感知到指定的目標。', flags: ['Ephemeral'] });
+                        return safeReply(interaction,{ content: '🚫 無法感知到指定的目標。', flags: ['Ephemeral'] });
                     }
 
                     if (skill.effect) target.buffs.push({ ...skill.effect, turns: skill.effect.turns });
@@ -376,10 +376,10 @@ export async function handleBattleAction(interaction) {
                     const target = monsters[targetIdx];
                     if (!target) {
                         logger.error(`[Battle] Enemy target not found: idx=${targetIdx}`);
-                        return interaction.reply({ content: '🚫 目標魔物已脫離感應範圍。', flags: ['Ephemeral'] });
+                        return safeReply(interaction,{ content: '🚫 目標魔物已脫離感應範圍。', flags: ['Ephemeral'] });
                     }
                     if (target.currentHp <= 0) {
-                        return interaction.reply({ content: '🚫 目標魔物已然崩解，請重新選取。', flags: ['Ephemeral'] });
+                        return safeReply(interaction,{ content: '🚫 目標魔物已然崩解，請重新選取。', flags: ['Ephemeral'] });
                     }
 
                     if (actionType === 'ATTACK') {
@@ -434,7 +434,7 @@ export async function handleBattleAction(interaction) {
                         const skill = getSkillDef(skillId);
                         if (!skill) {
                             logger.error(`[Battle] Skill not found: ${skillId}`);
-                            return interaction.reply({ content: '🚫 祕法記錄遺失。', flags: ['Ephemeral'] });
+                            return safeReply(interaction,{ content: '🚫 祕法記錄遺失。', flags: ['Ephemeral'] });
                         }
 
                         // --- 施放技能前 Hook (onSkill) ---
@@ -620,7 +620,7 @@ export async function handleBattleAction(interaction) {
                 }
 
                 if (skills.length === 0) {
-                    return interaction.reply({ content: '📜 尚未將任何招式納入出征序列。', flags: ['Ephemeral'] });
+                    return safeReply(interaction,{ content: '📜 尚未將任何招式納入出征序列。', flags: ['Ephemeral'] });
                 }
 
                 const options = skills.map(s => {
@@ -788,7 +788,7 @@ export async function handleBattleAction(interaction) {
                         const aliveSummons = battle.ally_summons.filter(s => s.hp > 0).length;
 
                         if (aliveSummons >= maxSummons) {
-                            return interaction.reply({ content: `🚫 召喚位階已達上限 (${maxSummons} 尊)。`, flags: ['Ephemeral'] });
+                            return safeReply(interaction,{ content: `🚫 召喚位階已達上限 (${maxSummons} 尊)。`, flags: ['Ephemeral'] });
                         }
 
                         ps.mp -= skill.mp;
@@ -1109,7 +1109,7 @@ export async function handleBattleAction(interaction) {
                 });
 
                 if (usable.length === 0) {
-                    return interaction.reply({ content: '🐕 你沒有可以使用的道具！', flags: ['Ephemeral'] });
+                    return safeReply(interaction,{ content: '🐕 你沒有可以使用的道具！', flags: ['Ephemeral'] });
                 }
 
                 const options = usable.map(i => {
@@ -1138,7 +1138,7 @@ export async function handleBattleAction(interaction) {
                 if (!def || !removeFromInventory(interaction.guildId, userId, itemId)) {
                     const failMsg = { content: '🐕 道具使用失敗！', flags: ['Ephemeral'] };
                     if (interaction.deferred || interaction.replied) return interaction.followUp(failMsg);
-                    return interaction.reply(failMsg);
+                    return safeReply(interaction,failMsg);
                 }
 
                 if (def.effect.type === 'heal_hp') {
@@ -1481,7 +1481,7 @@ export async function handleBattleAction(interaction) {
     } catch (e) {
         logger.error('[Battle] Action error:', e);
         if (!interaction.replied && !interaction.deferred) {
-            await interaction.reply({ content: '🐕 戰鬥發生錯誤！', flags: ['Ephemeral'] }).catch(() => { });
+            await safeReply(interaction,{ content: '🐕 戰鬥發生錯誤！', flags: ['Ephemeral'] }).catch(() => { });
         } else {
             await interaction.followUp({ content: '🐕 戰鬥發生錯誤！', flags: ['Ephemeral'] }).catch(() => { });
         }

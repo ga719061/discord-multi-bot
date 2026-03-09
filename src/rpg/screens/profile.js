@@ -142,7 +142,7 @@ export async function showProfile(interaction, char) {
         const errDetail = e.errors ? ` (${JSON.stringify(e.errors)})` : '';
         try {
             if (interaction.replied || interaction.deferred) await interaction.followUp({ content: `🚫 UI 渲染程序發生異常: ${e.message}${errDetail}`, flags: ['Ephemeral'] });
-            else await interaction.reply({ content: `🚫 UI 渲染程序發生異常: ${e.message}${errDetail}`, flags: ['Ephemeral'] });
+            else await safeReply(interaction,{ content: `🚫 UI 渲染程序發生異常: ${e.message}${errDetail}`, flags: ['Ephemeral'] });
         } catch (err) { }
     }
 }
@@ -159,7 +159,7 @@ export async function handleProfileAction(interaction, char) {
             const amount = parts[3] ? parseInt(parts[3]) : 1;
 
             if (char.free_points < amount) {
-                return interaction.reply({ content: `🐕 點數不足！(需要 ${amount} 點)`, flags: ['Ephemeral'] });
+                return safeReply(interaction,{ content: `🐕 點數不足！(需要 ${amount} 點)`, flags: ['Ephemeral'] });
             }
 
             const updates = {
@@ -258,12 +258,12 @@ export async function handleProfileAction(interaction, char) {
             const clsDef = CLASSES[char.class];
             if (clsDef?.initialSkill && !learnedIds.includes(clsDef.initialSkill)) learnedIds.push(clsDef.initialSkill);
 
-            if (learnedIds.length === 0) return interaction.reply({ content: '🐕 你還沒學會任何技能！', flags: ['Ephemeral'] });
+            if (learnedIds.length === 0) return safeReply(interaction,{ content: '🐕 你還沒學會任何技能！', flags: ['Ephemeral'] });
 
             // 如果是下拉選單提交
             if (interaction.isStringSelectMenu() && id.startsWith('rpg_active_skill_set_')) {
                 setEquippedSkills(interaction.guildId, interaction.user.id, interaction.values);
-                return interaction.reply({ content: `✅ 已成功設定 **${interaction.values.length}** 個上場技能！`, flags: ['Ephemeral'] });
+                return safeReply(interaction,{ content: `✅ 已成功設定 **${interaction.values.length}** 個上場技能！`, flags: ['Ephemeral'] });
             }
 
             const equipped = JSON.parse(char.equipped_skills || '[]');
@@ -316,6 +316,6 @@ export async function handleProfileAction(interaction, char) {
         }
     } catch (e) {
         console.error('handleProfileAction error:', e);
-        try { await interaction.reply({ content: `🐕 操作發生錯誤: ${e.message}`, flags: ['Ephemeral'] }); } catch (err) { }
+        try { await safeReply(interaction,{ content: `🐕 操作發生錯誤: ${e.message}`, flags: ['Ephemeral'] }); } catch (err) { }
     }
 }

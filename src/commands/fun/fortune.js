@@ -39,7 +39,7 @@ const yesNoAnswers = [
 ];
 
 export async function execute(interaction) {
-    const question = interaction.options.getString('問題');
+    const question = interaction.options.getString('question');
     const fortune = fortunes[Math.floor(Math.random() * fortunes.length)];
 
     const embed = new EmbedBuilder()

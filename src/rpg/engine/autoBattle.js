@@ -3,7 +3,7 @@ import { rpgEmbed, rpgButton, backButton, calcDamage, isCrit, isDodge, qualityLa
 import { fmt, COLORS } from '../../utils/style.js';
 import { getCharacter, updateCharacter, addGold, addToInventory, addEquipment, registerFirstKill, addMercenaryHistory, getEquipmentList } from '../rpgDatabase.js';
 import { logger } from '../../utils/logger.js';
-import { MONSTERS, BOSSES, EQUIPMENT, getXpForLevel, getItemDisplayName, SKILL_BOOK_DROP_POOLS, getSkillDef, AREAS, CLASSES, ITEM_NAMES, EQUIP_SELL_PRICES } from '../data/gameData.js';
+import { MONSTERS, BOSSES, EQUIPMENT, getXpForLevel, getItemDisplayName, SKILL_BOOK_DROP_POOLS, SKILL_BOOKS, getSkillDef, AREAS, CLASSES, ITEM_NAMES, EQUIP_SELL_PRICES } from '../data/gameData.js';
 import { activeMercenaries } from '../screens/mercenary.js';
 import { trackQuestProgress } from './questEngine.js';
 
@@ -414,7 +414,7 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
 
                     if (!isDodge(total)) {
                         let mdmg = Math.floor(calcDamage(mAtk, mTargetDef) * multiplier * (isCrit(m) ? 1.5 : 1));
-                        
+
                         // 承傷倍率 (傭兵分攤模擬: 每一名傭兵減少 10% 承傷)
                         mdmg = Math.floor(mdmg * (1 - (partyDefs.length * 0.1)));
 
@@ -580,7 +580,7 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                     const bookId = pool.books[Math.floor(Math.random() * pool.books.length)];
                     const bookDef = SKILL_BOOKS[bookId];
                     const quality = bookDef ? bookDef.quality : 'common';
-                    
+
                     dropsList.push({ id: bookId, isEquip: false, quality });
                     addToInventory(guildId, userId, bookId);
 

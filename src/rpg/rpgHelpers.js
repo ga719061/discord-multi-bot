@@ -388,9 +388,10 @@ export async function safeReply(interaction, options) {
         // 一般 Slash Command 或已回覆的互動
         if (!interaction.replied && !interaction.deferred) {
             if (typeof options === 'object' && !Array.isArray(options)) {
-                options.ephemeral = true;
+                options.flags = ['Ephemeral'];
+                delete options.ephemeral;
             } else if (typeof options === 'string') {
-                options = { content: options, ephemeral: true };
+                options = { content: options, flags: ['Ephemeral'] };
             }
             await interaction.reply(options);
         } else {

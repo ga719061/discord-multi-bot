@@ -47,7 +47,7 @@ export const CLASSES = {
             { level: 60, name: '幽暗執行者', color: 'GOLD' },
             { level: 99, name: '追風主宰', color: 'CYAN' }
         ],
-        weapon: 'novice_bow', initialSkill: 'precise_shot'
+        weapon: 'short_bow', initialSkill: 'precise_shot'
     },
     mage: {
         id: 'mage', name: '法師', emoji: '🔮', desc: '與四大元素簽署古老契約的智者，揮手間足以毀天滅地。',
@@ -59,7 +59,7 @@ export const CLASSES = {
             { level: 60, name: '大魔導師', color: 'GOLD' },
             { level: 99, name: '奧術主宰', color: 'PURPLE' }
         ],
-        weapon: 'novice_staff', initialSkill: 'fireball'
+        weapon: 'apprentice_staff', initialSkill: 'fireball'
     },
     paladin: {
         id: 'paladin', name: '聖騎士', emoji: '🛡️', desc: '神的代理者，誓言守護弱小並降下神聖的審判。',
@@ -71,7 +71,7 @@ export const CLASSES = {
             { level: 60, name: '聖教軍', color: 'GOLD' },
             { level: 99, name: '大天使長', color: 'GOLD' }
         ],
-        weapon: 'rusty_mace', initialSkill: 'holy_strike'
+        weapon: 'wooden_hammer', initialSkill: 'holy_strike'
     },
     magic_swordsman: {
         id: 'magic_swordsman', name: '魔劍士', emoji: '✨', desc: '劍與魔法的完美交織，在刀光劍影中釋放混亂的奧術能量。',
@@ -347,6 +347,11 @@ export const MAIN_QUESTS = [
     {
         id: 'forest_cleaning',
         chapter: '第二章',
+        name: '森林的淨化',
+        objectives: [
+            { type: 'kill_monster', monsterId: 'fungus', count: 10, desc: '採摘 10 朵受污染的蘑菇' },
+            { type: 'kill_monster', monsterId: 'pan', count: 5, desc: '安撫 5 隻發狂的潘' }
+        ],
         rewards: { gold: 600, xp: 500, gems: 10, equipment: 'spirit_staff' }
     },
     {

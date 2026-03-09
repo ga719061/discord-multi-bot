@@ -7,6 +7,7 @@ import { initDatabase, getDb, updateGuildSetting } from './utils/database.js';
 import { logger } from './utils/logger.js';
 import { initRpgTables } from './rpg/rpgDatabase.js';
 import { registerRpgRouter } from './rpg/rpgRouter.js';
+import { initVoiceXpManager } from './utils/voiceXpManager.js';
 
 dns.setDefaultResultOrder('ipv4first');
 
@@ -211,6 +212,7 @@ async function start() {
     const { initGiveawayManager } = await import('./utils/giveawayManager.js');
     initReminderManager(client);
     initGiveawayManager(client);
+    initVoiceXpManager(client);
 
     await client.login(process.env.DISCORD_TOKEN);
     logger.info('機器人已成功登入！');

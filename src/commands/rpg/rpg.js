@@ -13,7 +13,7 @@ export async function execute(interaction) {
     if (!isRpgEnabled(interaction.guildId)) {
         return interaction.reply({
             content: '🐕 汪...RPG 系統目前未開啟！請管理員使用 `/setup-rpg enable` 來啟用。',
-            ephemeral: true,
+            flags: ['Ephemeral'],
         });
     }
 

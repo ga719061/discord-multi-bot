@@ -11,20 +11,21 @@ export async function showQuest(interaction, char) {
     if (currentQuest) {
         const progress = getQuestProgress(interaction.guildId, interaction.user.id, currentQuest.id);
         
+        const questObjectives = currentQuest.objectives || [];
         mainLines = [
             fmt(COLORS.WHITE + ';' + COLORS.BOLD, `${currentQuest.chapter}: ${currentQuest.name}`),
-            ...currentQuest.objectives.map(obj => {
+            ...(Array.isArray(questObjectives) ? questObjectives.map(obj => {
                 const key = obj.monsterId ? `${obj.type}_${obj.monsterId}`
                     : obj.bossId ? `${obj.type}_${obj.bossId}`
                         : obj.areaId ? `${obj.type}_${obj.areaId}`
                             : obj.type;
                 const done = progress.progress[key] || 0;
-                const complete = done >= obj.count;
+                const complete = (done || 0) >= (obj.count || 1);
                 const statusIcon = complete ? '✅' : '⬜';
-                const descText = widePad(obj.desc, 24);
-                const countText = `(${Math.min(done, obj.count)}/${obj.count})`;
+                const descText = widePad(obj.desc || '未知任務', 24);
+                const countText = `(${Math.min(done || 0, obj.count || 1)}/${obj.count || 1})`;
                 return `${statusIcon} ${descText} ${countText}`;
-            }),
+            }) : []),
             '',
             `獎勵: ${fmt(COLORS.GOLD, `💰${currentQuest.rewards.gold}`)} ${currentQuest.rewards.gems ? fmt(COLORS.CYAN, `💎${currentQuest.rewards.gems}`) : ''} ${fmt(COLORS.GREEN, `⭐${currentQuest.rewards.xp} XP`)}`,
         ];

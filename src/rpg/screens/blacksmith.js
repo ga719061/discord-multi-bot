@@ -59,7 +59,7 @@ export async function showBlacksmithList(interaction, actionType) {
     });
 
     if (eqList.length === 0) {
-        return interaction.reply({ content: '🐕 你背包裡沒有多餘的（未裝備）裝備可以操作喔！', flags: ['Ephemeral'] });
+        return safeReply(interaction,{ content: '🐕 你背包裡沒有多餘的（未裝備）裝備可以操作喔！', flags: ['Ephemeral'] });
     }
 
     const titles = {
@@ -130,7 +130,7 @@ export async function handleDismantle(interaction, eqId) {
         essenceCount > 0 ? fmt(COLORS.PURPLE, `🌀 獲得 混沌精華 x${essenceCount}`) : '',
     ].filter(Boolean).join('\n') + '\n```';
 
-    await interaction.reply({ content: resultMsg, flags: ['Ephemeral'] });
+    await safeReply(interaction,{ content: resultMsg, flags: ['Ephemeral'] });
     await showBlacksmith(interaction);
 }
 
@@ -152,7 +152,7 @@ export async function handleReforge(interaction, eqId) {
     const materialName = materialId === 'chaos_essence' ? '🌀 混沌精華' : '✨ 魔力碎片';
     const materialCost = 10;
 
-    if (char.gold < goldCost) return interaction.reply({ content: `🐕 金幣不足！洗煉需要 ${goldCost} 金幣。`, flags: ['Ephemeral'] });
+    if (char.gold < goldCost) return safeReply(interaction,{ content: `🐕 金幣不足！洗煉需要 ${goldCost} 金幣。`, flags: ['Ephemeral'] });
     
     // 檢查材料 (這裡需要一個 checkInventory 邏輯，或者直接嘗試扣除)
     // 簡單做法：直接在 handle 裡面查
@@ -166,7 +166,7 @@ export async function handleReforge(interaction, eqId) {
 
     const embed = rpgEmbed(
         '🌀 洗煉成功！',
-        fmt(COLORS.GREEN, `你消耗了 ${fmt(COLORS.GOLD, `${goldCost} 金幣`)} 與 ${fmt(COLORS.CYAN, `${materialCost} 個 ${materialName}`)}，為 **${def.name}** 注入了新的靈魂！`)
+        '```ansi\n' + fmt(COLORS.GREEN, `你消耗了 ${fmt(COLORS.GOLD, `${goldCost} 金幣`)} 與 ${fmt(COLORS.CYAN, `${materialCost} 個 ${materialName}`)}，\n為 **${def.name}** 注入了新的靈魂！`) + '\n```'
     );
 
     await safeReply(interaction, { embeds: [embed], components: [backButton()] });
@@ -186,7 +186,7 @@ export async function handleEnhance(interaction, eqId) {
     if (!def) return;
 
     const category = getEquipCategory(def.type);
-    if (!category) return interaction.reply({ content: '🐕 此裝備無法強化！', flags: ['Ephemeral'] });
+    if (!category) return safeReply(interaction,{ content: '🐕 此裝備無法強化！', flags: ['Ephemeral'] });
 
     const scrollId = getScrollForCategory(category);
     const hasScroll = interaction.client.rpg_inventory_cache?.[userId]?.find(i => i.item_id === scrollId && i.quantity > 0) || true; 
@@ -196,11 +196,11 @@ export async function handleEnhance(interaction, eqId) {
     
     if (!invItem || invItem.quantity <= 0) {
         const scrollNames = { weapon: '⚔️ 對武器施法的卷軸', armor: '🛡️ 對防具施法的卷軸', accessory: '💍 對飾品施法的卷軸' };
-        return interaction.reply({ content: `🐕 需要 **${scrollNames[category]}** 才能強化此裝備！`, flags: ['Ephemeral'] });
+        return safeReply(interaction,{ content: `🐕 需要 **${scrollNames[category]}** 才能強化此裝備！`, flags: ['Ephemeral'] });
     }
 
     const currentEnh = eq.enhancement || 0;
-    if (currentEnh >= 9) return interaction.reply({ content: '🐕 此裝備已達最高強化等級 +9！', flags: ['Ephemeral'] });
+    if (currentEnh >= 9) return safeReply(interaction,{ content: '🐕 此裝備已達最高強化等級 +9！', flags: ['Ephemeral'] });
 
     const cfg = ENHANCEMENT_CONFIG[category];
     const failRate = cfg.failRates[currentEnh + 1] || 0;

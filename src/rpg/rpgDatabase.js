@@ -270,6 +270,8 @@ export function createCharacter(guildId, userId, data) {
             str: data.str || 10, int: data.int || 10, vit: data.vit || 10, agi: data.agi || 10, luk: data.luk || 10
         }, []);
         data = { ...data, ...fullStats };
+        if (data.hp === undefined) data.hp = data.max_hp;
+        if (data.mp === undefined) data.mp = data.max_mp;
     }
 
     db.prepare(`INSERT INTO rpg_characters(guild_id, user_id, race, class, hp, max_hp, mp, max_mp, atk, matk, def, mdef, spd, str, int, vit, agi, luk, last_active, created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)

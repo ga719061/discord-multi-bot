@@ -10,14 +10,14 @@ export async function showDaily(interaction, char) {
     if (char.last_daily_claim === today) {
         const embed = rpgEmbed(
             '🎁 每日簽到',
-            [
+            '```ansi\n' + [
                 ansiText('2;33', '勤奮的勇者啊，王國永遠為你敞開大門！'),
                 '🐕 你今天已經簽到過了！',
                 '',
                 `🔥 連續簽到: **${char.daily_streak}** 天`,
                 '',
                 '明天再來吧！汪！',
-            ].join('\n'),
+            ].join('\n') + '\n```',
         ).setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
         return safeReply(interaction, { embeds: [embed], components: [backButton()] });
     }
@@ -54,7 +54,7 @@ export async function showDaily(interaction, char) {
         // 百日與週年特別成就
         announcement = {
             title: '🌌 永恆之巔',
-            description: `${fmt(COLORS.GOLD, '傳奇誕生！')} 騎士 ${fmt(COLORS.BLUE, interaction.member.displayName)} 達成了\n前所未見的 ${fmt(COLORS.MAGENTA, '連續 ' + streak + ' 天')} 登入不中斷。\n王國因為你而更加繁榮！`,
+            description: `${fmt(COLORS.GOLD, '傳奇誕生！')} 騎士 ${fmt(COLORS.BLUE, interaction.member.displayName)} 達成了\n前所未見的 ${fmt(COLORS.MAGENTA, '連續 ' + streak + ' 天')} 登入不中斷。\n王國因為你而出更加繁榮！`,
             color: 0xFF00FF
         };
     }

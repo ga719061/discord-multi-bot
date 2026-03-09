@@ -47,7 +47,7 @@ export async function showAutoConfig(interaction, char = null) {
                 skillLines.push(fmt(color, `> ${index + 1}. ${def.emoji} [ ${def.name} ] (Lv.${lv}) (${def.mp} MP)`));
             }
         });
-        lines.push('```ansi\n' + skillLines.join('\n') + '\n```');
+        lines.push(...skillLines);
     }
 
     const embed = rpgEmbed(
@@ -104,10 +104,10 @@ export async function handleAutoConfigSelect(interaction) {
         autoSkills = [];
     } else {
         if (autoSkills.length >= 4) {
-            return interaction.reply({ content: '🐕 排列順序最多只能設定 4 個技能！請先清除重設。', flags: ['Ephemeral'] });
+            return safeReply(interaction,{ content: '🐕 排列順序最多只能設定 4 個技能！請先清除重設。', flags: ['Ephemeral'] });
         }
         if (autoSkills.includes(selection)) {
-            return interaction.reply({ content: '🐕 這個技能已經在序列裡囉！', flags: ['Ephemeral'] });
+            return safeReply(interaction,{ content: '🐕 這個技能已經在序列裡囉！', flags: ['Ephemeral'] });
         }
         autoSkills.push(selection);
     }

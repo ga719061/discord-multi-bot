@@ -179,7 +179,7 @@ export async function execute(interaction) {
         }).filter(opt => opt !== null);
 
         const selectMenu = new StringSelectMenuBuilder()
-            .setCustomId('self_role_select')
+            .setCustomId('selfrole_select')
             .setPlaceholder('🐕 挑選你的身分組...')
             .setMinValues(0)
             .setMaxValues(menuOptions.length)

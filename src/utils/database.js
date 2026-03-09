@@ -32,6 +32,7 @@ export function initDatabase() {
       xp INTEGER DEFAULT 0,
       level INTEGER DEFAULT 0,
       total_messages INTEGER DEFAULT 0,
+      total_voice_mins INTEGER DEFAULT 0,
       last_xp_time INTEGER DEFAULT 0,
       PRIMARY KEY (guild_id, user_id)
     );
@@ -118,6 +119,12 @@ export function initDatabase() {
   if (!guildColumns.includes('rpg_broadcast_channel')) {
     db.prepare("ALTER TABLE guild_settings ADD COLUMN rpg_broadcast_channel TEXT DEFAULT NULL").run();
   }
+  
+  const userLevelInfo = db.pragma('table_info(user_levels)');
+  const userLevelColumns = userLevelInfo.map(c => c.name);
+  if (!userLevelColumns.includes('total_voice_mins')) {
+    db.prepare("ALTER TABLE user_levels ADD COLUMN total_voice_mins INTEGER DEFAULT 0").run();
+  }
 
   return db;
 }
@@ -158,24 +165,27 @@ export function getUserLevel(guildId, userId) {
   return row;
 }
 
-export function addXp(guildId, userId, amount) {
+export function addXp(guildId, userId, amount, options = { source: 'message' }) {
   const db = getDb();
   const user = getUserLevel(guildId, userId);
   const newXp = user.xp + amount;
   const xpNeeded = getXpForLevel(user.level + 1);
   let leveledUp = false;
 
+  const countColumn = options.source === 'voice' ? 'total_voice_mins' : 'total_messages';
+  const increment = options.source === 'voice' ? 10 : 1; // 假設語音為每 10 分鐘檢查一次
+
   if (newXp >= xpNeeded) {
     db.prepare(`
-      UPDATE user_levels SET xp = ?, level = level + 1, total_messages = total_messages + 1, last_xp_time = ?
+      UPDATE user_levels SET xp = ?, level = level + 1, ${countColumn} = ${countColumn} + ?, last_xp_time = ?
       WHERE guild_id = ? AND user_id = ?
-    `).run(newXp - xpNeeded, Date.now(), guildId, userId);
+    `).run(newXp - xpNeeded, increment, Date.now(), guildId, userId);
     leveledUp = true;
   } else {
     db.prepare(`
-      UPDATE user_levels SET xp = ?, total_messages = total_messages + 1, last_xp_time = ?
+      UPDATE user_levels SET xp = ?, ${countColumn} = ${countColumn} + ?, last_xp_time = ?
       WHERE guild_id = ? AND user_id = ?
-    `).run(newXp, Date.now(), guildId, userId);
+    `).run(newXp, increment, Date.now(), guildId, userId);
   }
 
   return { leveledUp, newLevel: user.level + (leveledUp ? 1 : 0) };
@@ -259,7 +269,7 @@ export function updateAiSetting(guildId, key, value) {
   if (!ALLOWED_AI_KEYS.includes(key)) throw new Error(`不可許的欄位名稱: ${key}`);
   const db = getDb();
   getAiSettings(guildId);
-  db.prepare(`UPDATE ai_settings SET \${key} = ? WHERE guild_id = ?`).run(value, guildId);
+  db.prepare(`UPDATE ai_settings SET ${key} = ? WHERE guild_id = ?`).run(value, guildId);
 }
 
 export function isAiEnabled(guildId) {

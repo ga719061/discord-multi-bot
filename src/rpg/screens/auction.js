@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } from 'discord.js';
-import { rpgEmbed, rpgButton, backButton, qualityLabel, ansiText } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, backButton, qualityLabel, ansiText, widePad } from '../rpgHelpers.js';
 import { getCharacter, getInventory, getEquipmentList, addAuction, getAuctions, getAuctionById, deleteAuction, getAuctionsBySeller, getTotalAuctionsCount, removeFromInventory, removeEquipment, addGold, deductGold, addToInventory, addEquipment, addAuctionHistory, getPersonalAuctionHistory } from '../rpgDatabase.js';
 import { EQUIPMENT, SHOP_ITEMS, SKILL_BOOKS, getSkillDef, ITEM_NAMES, QUALITY_MULTIPLIER, STAT_LABELS } from '../data/gameData.js';
 import { broadcastRpgEvent } from '../rpgHelpers.js';
@@ -157,11 +157,11 @@ export async function handleAuctionBuy(interaction) {
     const buyerId = interaction.user.id;
 
     const auction = getAuctionById(auctionId);
-    if (!auction) return interaction.reply({ content: '🚫 術法共鳴失敗，王國秘法系統發生異常。', flags: ['Ephemeral'] });
-    if (auction.seller_id === buyerId) return interaction.reply({ content: '🚫 閣下不能購買自己架上的物資。', flags: ['Ephemeral'] });
+    if (!auction) return safeReply(interaction,{ content: '🚫 術法共鳴失敗，王國秘法系統發生異常。', flags: ['Ephemeral'] });
+    if (auction.seller_id === buyerId) return safeReply(interaction,{ content: '🚫 閣下不能購買自己架上的物資。', flags: ['Ephemeral'] });
 
     const buyerChar = getCharacter(guildId, buyerId);
-    if (!buyerChar || buyerChar.gold < auction.price) return interaction.reply({ content: `🐕 金幣不足！`, flags: ['Ephemeral'] });
+    if (!buyerChar || buyerChar.gold < auction.price) return safeReply(interaction,{ content: `🐕 金幣不足！`, flags: ['Ephemeral'] });
 
     deductGold(guildId, buyerId, auction.price);
     addGold(guildId, auction.seller_id, auction.price);
@@ -230,7 +230,7 @@ export async function handleAuctionSubmit(interaction) {
     const price = parseInt(interaction.fields.getTextInputValue('auction_price'), 10);
     const qty = interaction.fields.fields.has('auction_qty') ? parseInt(interaction.fields.getTextInputValue('auction_qty'), 10) : 1;
 
-    if (isNaN(price) || price <= 0 || isNaN(qty) || qty <= 0) return interaction.reply({ content: '無效輸入', flags: ['Ephemeral'] });
+    if (isNaN(price) || price <= 0 || isNaN(qty) || qty <= 0) return safeReply(interaction,{ content: '無效輸入', flags: ['Ephemeral'] });
 
     const guildId = interaction.guildId;
     const userId = interaction.user.id;
@@ -239,7 +239,7 @@ export async function handleAuctionSubmit(interaction) {
         const eqId = parseInt(itemData.replace('eq_', ''));
         const db = (await import('../rpgDatabase.js')).getDb();
         const eq = db.prepare('SELECT * FROM rpg_equipment WHERE id = ? AND user_id = ?').get(eqId, userId);
-        if (!eq) return interaction.reply({ content: '找不到裝備', flags: ['Ephemeral'] });
+        if (!eq) return safeReply(interaction,{ content: '找不到裝備', flags: ['Ephemeral'] });
         addAuction(guildId, userId, 'equipment', eq.item_id, 1, eq.quality, eq.enhancement, price);
         removeEquipment(eqId);
     } else {
@@ -248,7 +248,7 @@ export async function handleAuctionSubmit(interaction) {
         addAuction(guildId, userId, 'item', itemId, qty, 'common', 0, price);
     }
 
-    await interaction.reply({ content: '✅ 上架成功！', flags: ['Ephemeral'] });
+    await safeReply(interaction,{ content: '✅ 上架成功！', flags: ['Ephemeral'] });
 }
 
 export async function showMyAuctions(interaction) {
@@ -268,7 +268,7 @@ export async function handleAuctionCancel(interaction) {
     if (!interaction.isStringSelectMenu()) return;
     const auctionId = parseInt(interaction.values[0].replace('cancel_', ''));
     const auction = getAuctionById(auctionId);
-    if (!auction || auction.seller_id !== interaction.user.id) return interaction.reply({ content: '無權限', flags: ['Ephemeral'] });
+    if (!auction || auction.seller_id !== interaction.user.id) return safeReply(interaction,{ content: '無權限', flags: ['Ephemeral'] });
 
     if (auction.item_type === 'equipment') {
         const db = (await import('../rpgDatabase.js')).getDb();
@@ -277,7 +277,7 @@ export async function handleAuctionCancel(interaction) {
         addToInventory(interaction.guildId, interaction.user.id, auction.item_id, auction.quantity);
     }
     deleteAuction(auctionId);
-    await interaction.reply({ content: '✅ 下架成功', flags: ['Ephemeral'] });
+    await safeReply(interaction,{ content: '✅ 下架成功', flags: ['Ephemeral'] });
 }
 
 export async function showAuctionHistory(interaction) {

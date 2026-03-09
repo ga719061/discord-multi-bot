@@ -1,5 +1,5 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
-import { rpgEmbed, rpgButton, backButton, qualityLabel, ansiText } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, backButton, qualityLabel, ansiText, widePad } from '../rpgHelpers.js';
 import { fmt, COLORS } from '../../utils/style.js';
 import { getCharacter, getAvailableMercenaries, getPersonalMercenaryHistory } from '../rpgDatabase.js';
 
@@ -135,7 +135,7 @@ export async function handleHireSelect(interaction) {
 
     let hired = activeMercenaries.get(userId) || [];
     if (hired.length >= 3) {
-        return interaction.reply({ content: '🚫 閣下的隊伍已經額滿 (最多 3 人)。', flags: ['Ephemeral'] });
+        return safeReply(interaction, { content: '🚫 閣下的隊伍已經額滿 (最多 3 人)。', flags: ['Ephemeral'] });
     }
 
     if (!hired.includes(hiredId)) {

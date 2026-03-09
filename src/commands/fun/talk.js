@@ -58,7 +58,7 @@ const defaultReplies = [
 ];
 
 export async function execute(interaction) {
-    const content = interaction.options.getString('內容');
+    const content = interaction.options.getString('content') || '(空白)';
 
     // 尋找關鍵字匹配
     let reply = null;

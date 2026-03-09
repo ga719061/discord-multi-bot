@@ -307,7 +307,7 @@ export async function handleShopAction(interaction, char) {
         if (id === 'rpg_auto_sell_prefs' && interaction.isStringSelectMenu()) {
             const newPrefs = interaction.values;
             updateCharacter(interaction.guildId, interaction.user.id, { auto_sell_prefs: JSON.stringify(newPrefs) });
-            return interaction.reply({ content: `⚙️ 過濾法規已更新。\n請啟動下方的「🔥 執行一鍵販售」按鈕來肅清閣下的行囊。`, flags: ['Ephemeral'] });
+            return safeReply(interaction,{ content: `⚙️ 過濾法規已更新。\n請啟動下方的「🔥 執行一鍵販售」按鈕來肅清閣下的行囊。`, flags: ['Ephemeral'] });
         }
 
         // 執行一鍵販售 (預覽與確認)
@@ -317,7 +317,7 @@ export async function handleShopAction(interaction, char) {
             try { prefs = JSON.parse(prefsStr); } catch (e) { }
 
             if (prefs.length === 0) {
-                return interaction.reply({ content: `🚫 尚未制定「一鍵販售」之過濾法規條件。`, flags: ['Ephemeral'] });
+                return safeReply(interaction,{ content: `🚫 尚未制定「一鍵販售」之過濾法規條件。`, flags: ['Ephemeral'] });
             }
 
             const inv = getInventory(interaction.guildId, interaction.user.id);
@@ -409,7 +409,7 @@ export async function handleShopAction(interaction, char) {
             }
 
             if (previewLines.length === 0) {
-                return interaction.reply({ content: `📜 根據當前法規，閣下的行囊中並無可自動販售之物。`, flags: ['Ephemeral'] });
+                return safeReply(interaction,{ content: `📜 根據當前法規，閣下的行囊中並無可自動販售之物。`, flags: ['Ephemeral'] });
             }
 
             // 構建預覽清單
@@ -555,7 +555,7 @@ export async function handleShopAction(interaction, char) {
             }
 
             if (char.gold < item.price) {
-                return interaction.reply({ content: `🚫 金幣不足，無法達成交易。需要 ${item.price}💰，閣下僅有 ${char.gold}💰。`, flags: ['Ephemeral'] });
+                return safeReply(interaction,{ content: `🚫 金幣不足，無法達成交易。需要 ${item.price}💰，閣下僅有 ${char.gold}💰。`, flags: ['Ephemeral'] });
             }
 
             updateCharacter(interaction.guildId, interaction.user.id, { gold: char.gold - item.price });
@@ -574,7 +574,7 @@ export async function handleShopAction(interaction, char) {
             const qtyStr = interaction.fields.getTextInputValue('quantity');
             const qty = parseInt(qtyStr, 10);
             if (isNaN(qty) || qty <= 0 || qty > 1000) {
-                return interaction.reply({ content: '🚫 交易量在法規之外，請重新輸入 1~1000 之數。', flags: ['Ephemeral'] });
+                return safeReply(interaction,{ content: '🚫 交易量在法規之外，請重新輸入 1~1000 之數。', flags: ['Ephemeral'] });
             }
 
             const items = SHOP_ITEMS[tab] || [];
@@ -583,7 +583,7 @@ export async function handleShopAction(interaction, char) {
 
             const totalCost = item.price * qty;
             if (char.gold < totalCost) {
-                return interaction.reply({ content: `🚫 金幣不足，無法達成此規模之交易。需要 ${totalCost}💰（預計購入 ${qty} 單位）。`, flags: ['Ephemeral'] });
+                return safeReply(interaction,{ content: `🚫 金幣不足，無法達成此規模之交易。需要 ${totalCost}💰（預計購入 ${qty} 單位）。`, flags: ['Ephemeral'] });
             }
 
             updateCharacter(interaction.guildId, interaction.user.id, { gold: char.gold - totalCost });
@@ -609,7 +609,7 @@ export async function handleShopAction(interaction, char) {
                 }
 
                 const ok = removeFromInventory(interaction.guildId, interaction.user.id, itemId, 1);
-                if (!ok) return interaction.reply({ content: '🚫 行囊中之物不足以供交易。', flags: ['Ephemeral'] });
+                if (!ok) return safeReply(interaction,{ content: '🚫 行囊中之物不足以供交易。', flags: ['Ephemeral'] });
 
                 const { addGold: _addGold } = await import('../rpgDatabase.js');
                 _addGold(interaction.guildId, interaction.user.id, sellPrice);
@@ -625,7 +625,7 @@ export async function handleShopAction(interaction, char) {
                 if (!book) return;
 
                 const ok = removeFromInventory(interaction.guildId, interaction.user.id, itemId, 1);
-                if (!ok) return interaction.reply({ content: '🚫 物品殘量不足。', flags: ['Ephemeral'] });
+                if (!ok) return safeReply(interaction,{ content: '🚫 物品殘量不足。', flags: ['Ephemeral'] });
 
                 const price = EQUIP_SELL_PRICES[book.quality] || 50;
                 const { addGold } = await import('../rpgDatabase.js');
@@ -642,7 +642,7 @@ export async function handleShopAction(interaction, char) {
                 const db = getDb();
 
                 const eq = db.prepare('SELECT * FROM rpg_equipment WHERE id = ? AND guild_id = ? AND user_id = ?').get(eqId, interaction.guildId, interaction.user.id);
-                if (!eq) return interaction.reply({ content: '🚫 於軍械庫中找不到該項裝備。', flags: ['Ephemeral'] });
+                if (!eq) return safeReply(interaction,{ content: '🚫 於軍械庫中找不到該項裝備。', flags: ['Ephemeral'] });
                 
 
                 // 確認沒有裝備中
@@ -653,7 +653,7 @@ export async function handleShopAction(interaction, char) {
                     freshChar.acc1_id, freshChar.acc2_id, freshChar.acc3_id, freshChar.acc4_id
                 ].filter(Boolean).map(Number);
                 if (equippedIds.includes(eqId)) {
-                    return interaction.reply({ content: '🚫 穿戴中之軍備禁止於交易市場流通，請先卸下。', flags: ['Ephemeral'] });
+                    return safeReply(interaction,{ content: '🚫 穿戴中之軍備禁止於交易市場流通，請先卸下。', flags: ['Ephemeral'] });
                 }
 
                 const basePrice = EQUIP_SELL_PRICES[eq.quality] || 30;
@@ -671,7 +671,7 @@ export async function handleShopAction(interaction, char) {
         console.error('handleShopAction error:', e);
         try {
             if (interaction.replied || interaction.deferred) await interaction.followUp({ content: `🚫 術法操作發生異常: ${e.message}`, flags: ['Ephemeral'] });
-            else await interaction.reply({ content: `🚫 術法操作發生異常: ${e.message}`, flags: ['Ephemeral'] });
+            else await safeReply(interaction,{ content: `🚫 術法操作發生異常: ${e.message}`, flags: ['Ephemeral'] });
         } catch (err) { }
     }
 }
