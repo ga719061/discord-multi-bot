@@ -24,27 +24,24 @@ export async function execute(interaction) {
     const targetMember = await interaction.guild.members.fetch(target.id).catch(() => null);
     const isBooster = targetMember && targetMember.premiumSince;
 
-    // 使用 ansiBlock 重新設計數據呈現
-    const statsBlock = ansiBlock([
+    // 整合所有數據到一個 ANSI 區塊中
+    const mainBlock = ansiBlock([
         { color: COLORS.GOLD, text: `👑 目前爵位: ${rankTitle}` },
         { color: COLORS.BLUE, text: `⭐ 當前等級: Lv.${data.level}` },
-        { color: COLORS.WHITE, text: `💬 累計發言: ${data.total_messages} 次` }
-    ]);
-
-    const xpBlock = ansiBlock([
-        { color: COLORS.GRAY, text: `進度: ${data.xp} / ${xpNeeded} XP` },
+        { color: COLORS.WHITE, text: `💬 累計發言: ${data.total_messages} 次` },
+        '', // 分隔線
+        { color: COLORS.GRAY, text: `進度: ${data.xp} / ${xpNeeded} XP (${Math.round((data.xp / xpNeeded) * 100)}%)` },
+        { color: COLORS.CYAN, text: bar },
         { color: isBooster ? COLORS.MAGENTA : COLORS.GRAY, text: isBooster ? '🚀 皇家贊助者 (1.5x 加成中)' : '📜 常規子民倍率' }
     ]);
 
     const embed = new EmbedBuilder()
         .setColor(isBooster ? 0xF47FFF : 0xFFD700)
-        .setAuthor({ name: `👑 ${target.username} 的皇家功勳紀錄`, iconURL: target.displayAvatarURL() })
+        .setAuthor({ name: `👑 ${targetMember?.displayName || target.username} 的皇家功勳紀錄`, iconURL: target.displayAvatarURL() })
         .setThumbnail(target.displayAvatarURL({ size: 128 }))
         .setDescription(
             `汪！本王翻閱了領地史冊，以下是你的功勳資料：\n\n` +
-            statsBlock + '\n' +
-            xpBlock + '\n' +
-            `${bar} **${Math.round((data.xp / xpNeeded) * 100)}%**`
+            mainBlock
         )
         .setFooter({ text: '🐕 繼續在王國內活躍，本王會賜予你更高的頭銜喔！汪！' })
         .setTimestamp();

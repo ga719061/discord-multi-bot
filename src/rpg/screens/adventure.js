@@ -20,7 +20,7 @@ export async function showAdventure(interaction, char) {
             '',
             `${hpBar(char.hp, total.max_hp)}`,
             '',
-            '💡 於酒館稍作休息，或待能量自然匯聚。',
+            '💡 於旅館稍作休息，或待能量自然匯聚。',
         ].join('\n')).setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
         return safeReply(interaction, { embeds: [embed], components: [backButton()] });
     }

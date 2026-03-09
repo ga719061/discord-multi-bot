@@ -403,14 +403,30 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                 if (encounterMonsters.length === 0) { battleOngoing = false; break; }
 
                 for (const m of encounterMonsters) {
-                    if (playerInvulnerableTurns > 0) {
-                        // 無敵中，不扣血
-                        continue;
-                    }
+                    if (playerInvulnerableTurns > 0) continue;
+
+                    // 判斷怪物攻擊類型
+                    const mSkill = m.skills && m.skills.length > 0 ? m.skills[Math.floor(Math.random() * m.skills.length)] : null;
+                    const isMagical = mSkill ? mSkill.type === 'magical' : (m.matk > (m.atk || 0));
+                    const mAtk = isMagical ? (m.matk || m.atk) : m.atk;
+                    const mTargetDef = isMagical ? total.mdef : total.def;
+                    const multiplier = mSkill ? (mSkill.multiplier || 1.0) : 1.0;
+
                     if (!isDodge(total)) {
-                        let mdmg = Math.floor(calcDamage(m.atk, total.def) * (isCrit(m) ? 1.5 : 1));
+                        let mdmg = Math.floor(calcDamage(mAtk, mTargetDef) * multiplier * (isCrit(m) ? 1.5 : 1));
+                        
+                        // 承傷倍率 (傭兵分攤模擬: 每一名傭兵減少 10% 承傷)
                         mdmg = Math.floor(mdmg * (1 - (partyDefs.length * 0.1)));
 
+                        const damageCtx = { originalDamage: mdmg, actorIsPlayer: false };
+                        executeSetHooks('onDamaged', ps, m, damageCtx);
+
+                        // 處理套裝免傷 (如 Stone Skin)
+                        if (damageCtx.mitigatedDamage) {
+                            mdmg = Math.max(0, mdmg - damageCtx.mitigatedDamage);
+                        }
+
+                        // 處理護盾
                         if (playerShield > 0) {
                             if (playerShield >= mdmg) {
                                 playerShield -= mdmg;
@@ -421,11 +437,8 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                             }
                         }
 
-                        executeSetHooks('onHit', m, ps, { actorIsPlayer: false });
-                        executeSetHooks('onDamaged', ps, m, { originalDamage: mdmg });
-
-                        playerHp -= Math.max(0, mdmg);
-                        playerHp = ps.hp; // 寫回
+                        playerHp = Math.max(0, playerHp - mdmg);
+                        ps.hp = playerHp; // 同步回狀態物件
                     }
                     if (playerHp <= 0) break;
                 }
@@ -565,8 +578,23 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                 const pool = SKILL_BOOK_DROP_POOLS[areaId];
                 if (pool && Math.random() * 100 < pool.chance * (1 + (originalMonsters.length - 1) * 0.5)) {
                     const bookId = pool.books[Math.floor(Math.random() * pool.books.length)];
-                    dropsList.push({ id: bookId, isEquip: false, quality: 'common' });
+                    const bookDef = SKILL_BOOKS[bookId];
+                    const quality = bookDef ? bookDef.quality : 'common';
+                    
+                    dropsList.push({ id: bookId, isEquip: false, quality });
                     addToInventory(guildId, userId, bookId);
+
+                    if (['epic', 'mythic', 'legendary'].includes(quality)) {
+                        let qColor = quality === 'epic' ? 0x9b59b6 : quality === 'mythic' ? 0xe74c3c : 0xe67e22;
+                        let qName = quality === 'epic' ? '🟣 史詩' : quality === 'mythic' ? '🔴 神話' : '🟠 傳說';
+                        let colorCode = quality === 'epic' ? COLORS.MAGENTA : COLORS.RED;
+
+                        await broadcastRpgEvent(interaction.client, guildId, {
+                            title: '罕見秘笈現世！',
+                            description: `古老的共鳴！冒險者 ${fmt(COLORS.BLUE, char.name || interaction.user.username)} (自動探索)\n獲得了 ${fmt(colorCode, qName)} 等級的技能書：\n「${fmt(COLORS.CYAN, getItemDisplayName(bookId))}」！`,
+                            color: qColor
+                        });
+                    }
                 }
 
                 totalXp += roundXp;

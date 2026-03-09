@@ -9,7 +9,7 @@ export async function showTavern(interaction, char, dialogue = null, activeNpc =
         fmt(COLORS.WHITE, '「願閣下在此獲得片刻安寧。請問有什麼可以為你服務的？」'),
         '',
         fmt(COLORS.YELLOW + ';' + COLORS.BOLD, '【停留於此的神祕客】'),
-        `${fmt(COLORS.WHITE, `👨‍🍳 ${TAVERN_NPC['bartender'].name}`)} — 吧檯之後的酒館主人。`,
+        `${fmt(COLORS.WHITE, `👨‍🍳 ${TAVERN_NPC['bartender'].name}`)} — 櫃檯之後的旅館主人。`,
         `${fmt(COLORS.WHITE, `🧔 ${TAVERN_NPC['veteran'].name}`)} — 知曉無數舊事的老騎士。`,
         `${fmt(COLORS.WHITE, `👤 ${TAVERN_NPC['traveler'].name}`)} — 身上帶著星空與虛空的氣息。`
     ].join('\n') + '\n```';
@@ -39,7 +39,7 @@ export async function showTavern(interaction, char, dialogue = null, activeNpc =
     }
 
     const embed = rpgEmbed(
-        '🏰 王國酒館 — 亞丁分店',
+        '🏨 王國旅館 — 吉吉總店',
         mainDescription,
         0xDC7633 // Orange/Brown tavern color
     ).setFooter({ text: `💰 持有金幣: ${char.gold.toLocaleString()} | uid:${interaction.user.id}` });
@@ -73,7 +73,7 @@ export async function showTavern(interaction, char, dialogue = null, activeNpc =
 
     // 返回按鈕列
     rows.push(new ActionRowBuilder().addComponents(
-        rpgButton('rpg_menu', '離開酒館返回首頁', 'Secondary', '🔙')
+        rpgButton('rpg_menu', '離開旅館返回首頁', 'Secondary', '🔙')
     ));
 
     const updateOptions = { embeds: [embed], components: rows };

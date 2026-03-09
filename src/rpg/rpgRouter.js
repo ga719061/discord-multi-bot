@@ -205,7 +205,7 @@ export function registerRpgRouter(client) {
                          return await handleAutoConfigSelect(interaction);
                     }
 
-                    // 世界觀 (王國酒館)
+                    // 世界觀 (王國旅館)
                     if (id === 'rpg_lore') {
                          return await showTavern(interaction, char);
                     }

@@ -22,21 +22,24 @@ export async function execute(interaction) {
         .setThumbnail(interaction.guild.iconURL())
         .setTimestamp();
 
+    // 批量抓取成員以獲取暱稱
+    const userIds = top.map(u => u.user_id);
+    const members = await interaction.guild.members.fetch({ user: userIds }).catch(() => new Map());
+
     const list = top.map((u, i) => {
         const medals = ['🥇', '🥈', '🥉'];
         const medal = medals[i] || `**${i + 1}.**`;
         const title = getRankTitle(u.level);
         const color = i === 0 ? COLORS.GOLD : i < 3 ? COLORS.WHITE : COLORS.GRAY;
         
-        // 為前三名建立精美的 ANSI 區塊
-        if (i < 3) {
-            return `${medal} <@${u.user_id}>\n` + ansiBlock([
-                { color: color, text: `└─ 等級 ${u.level} | ${title}` }
-            ]);
-        }
-        
-        return `${medal} <@${u.user_id}> \`Lv.${u.level} ${title}\``;
-    }).join('\n\n');
+        const member = members.get(u.user_id);
+        const displayName = member?.displayName || `User#${u.user_id.slice(-4)}`;
+
+        // 統一所有名次的樣式
+        return `${medal} **${displayName}**\n` + ansiBlock([
+            { color: color, text: `└─ 等級 ${u.level} | ${title}` }
+        ]);
+    }).join('\n');
 
     embed.addFields({ name: '📜 功勳排行', value: list });
     embed.setFooter({ text: '🐕 排位越高，代表你對王國的忠誠度越高喔！汪！' });

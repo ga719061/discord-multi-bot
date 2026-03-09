@@ -1,10 +1,27 @@
 import { EmbedBuilder, AuditLogEvent } from 'discord.js';
 import { sendLog, getAuditLogExecutor, resolveMentions } from '../../utils/logUtils.js';
+import { getGuildSettings } from '../../utils/database.js';
 import { fmt, COLORS } from '../../utils/style.js';
 
 export function register(client) {
     client.on('messageDelete', async (message) => {
         if (!message.guild || message.author?.bot) return;
+
+        // 如果訊息是 Partial，我們可能抓不到內容與附件
+        if (message.partial) {
+            const partialEmbed = new EmbedBuilder()
+                .setColor(0x555555)
+                .setTitle('🐕🗑️ 訊息被吃掉了，但本王沒看清...')
+                .setDescription(
+                    `**頻道:** ${message.channel}\n` +
+                    `**注意:** 這則訊息在機器人啟動前就存在，或未被快取，本王無法讀取其內容與圖片。`
+                )
+                .setFooter({ text: `ID: ${message.id}` })
+                .setTimestamp();
+            
+            sendLog(message.guild, partialEmbed, 'message');
+            return;
+        }
 
         // 嘗試偵測刪除者 (如果是管理員刪除，Audit Log 會有紀錄)
         const executor = await getAuditLogExecutor(message.guild, AuditLogEvent.MessageDelete, message.author.id);
@@ -27,8 +44,11 @@ export function register(client) {
             }
         } else if (message.stickers?.size > 0) {
             displayContent = `（貼圖: ${message.stickers.first().name}）`;
+        } else if (message.attachments.size > 0) {
+            const count = message.attachments.size;
+            displayContent = `（本王抓到了 ${count} 個附件，正在嘗試還原圖片...）`;
         } else {
-            displayContent = '（只有圖片或附件）';
+            displayContent = '（查無內容）';
         }
 
         const embed = new EmbedBuilder()
@@ -43,11 +63,36 @@ export function register(client) {
             .setFooter({ text: `ID: ${message.id}` })
             .setTimestamp();
 
+        const embeds = [embed];
+
         if (message.attachments.size > 0) {
-            embed.setImage(message.attachments.first().url);
+            const attachments = Array.from(message.attachments.values());
+            // 第一張圖放主 Embed
+            const first = attachments[0];
+            if (first.contentType?.startsWith('image/')) {
+                embed.setImage(first.proxyURL || first.url);
+            }
+
+            // 其他圖片如果是多張，可以加副 Embed (Discord 最多支援 10 個 Embeds 顯示連圖)
+            for (let i = 1; i < attachments.length; i++) {
+                const att = attachments[i];
+                if (att.contentType?.startsWith('image/')) {
+                    embeds.push(new EmbedBuilder().setURL(embed.data.url || 'https://discord.com').setImage(att.proxyURL || att.url));
+                }
+            }
         }
 
-        sendLog(message.guild, embed, 'message');
+        const settings = getGuildSettings(message.guild.id);
+        if (settings?.log_channel) {
+            try {
+                const channel = await message.guild.channels.fetch(settings.log_channel).catch(() => null);
+                if (channel) {
+                    await channel.send({ embeds }).catch(() => {});
+                }
+            } catch (e) {
+                // 靜默失敗或記錄日誌
+            }
+        }
     });
 
     client.on('messageUpdate', async (oldMessage, newMessage) => {

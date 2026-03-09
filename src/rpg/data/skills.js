@@ -137,45 +137,37 @@ export const SKILL_BOOKS = {
 };
 
 export const SKILL_BOOK_DROP_POOLS = {
-    outskirts: {
+    talking_island: {
         books: ['book_power_slash', 'book_precise_shot', 'book_fireball', 'book_holy_strike', 'book_magic_blade'],
         chance: 20
     },
-    dark_forest: {
+    elven_forest: {
         books: ['book_iron_skin', 'book_agility_boost', 'book_mana_surge', 'book_divine_heal', 'book_flame_enchant', 'book_sweep', 'book_trap_set', 'book_summon_contract', 'book_consecration', 'book_void_crack'],
         chance: 18
     },
-    dragon_ridge: {
-        books: ['book_vanguard_charge', 'book_toxic_arrow', 'book_frost_nova', 'book_guardian_vow', 'book_frost_slash', 'book_chain_lightning'],
+    gludio_dungeon_low: {
+        books: ['book_whirlwind', 'book_rapid_fire', 'book_frost_nova', 'book_guardian_vow', 'book_frost_slash', 'book_chain_lightning', 'book_vanguard_charge', 'book_toxic_arrow', 'book_meteor_cluster', 'book_divine_barrier'],
+        chance: 15
+    },
+    dragon_valley: {
+        books: ['book_elemental_burst', 'book_armor_break', 'book_shadow_step', 'book_arcane_shield', 'book_retribution'],
         chance: 12
     },
-    dark_swamp: {
-        books: ['book_whirlwind', 'book_rapid_fire', 'book_meteor_cluster', 'book_divine_barrier', 'book_elemental_burst'],
+    talking_island_dungeon: {
+        books: ['book_thunder_strike', 'book_unyielding', 'book_weakness_scan', 'book_condemnation', 'book_elemental_overload', 'book_tyrant_slash', 'book_heart_pierce', 'book_void_collapse', 'book_life_guard'],
         chance: 10
     },
-    lava_waste: {
-        books: ['book_armor_break', 'book_shadow_step', 'book_arcane_shield', 'book_retribution', 'book_thunder_strike', 'book_unyielding', 'book_weakness_scan', 'book_condemnation', 'book_elemental_overload'],
-        chance: 7
-    },
-    void_rift: {
-        books: ['book_tyrant_slash', 'book_heart_pierce', 'book_void_collapse', 'book_life_guard', 'book_aether_flare', 'book_war_god_roar', 'book_spirit_eye', 'book_space_rhythm', 'book_absolute_guard', 'book_elem_enchant'],
-        chance: 6
-    },
-    crystal_cave: {
-        books: ['book_earth_shatter', 'book_arrow_storm', 'book_starfall', 'book_divine_field', 'book_mana_storm'],
+    gludio_dungeon_deep: {
+        books: ['book_aether_flare', 'book_war_god_roar', 'book_spirit_eye', 'book_space_rhythm', 'book_absolute_guard', 'book_elem_enchant'],
         chance: 8
     },
-    celestial_isles: {
-        books: ['book_war_god_roar', 'book_spirit_eye', 'book_space_rhythm', 'book_absolute_guard', 'book_elem_enchant'],
-        chance: 13
-    },
-    ancient_sanctuary: {
+    fire_dragon_cave: {
         books: ['book_earth_shatter', 'book_arrow_storm', 'book_starfall', 'book_divine_field', 'book_mana_storm'],
-        chance: 11
+        chance: 10
     },
-    abyssal_core: {
+    antharas_lair: {
         books: ['book_world_slash', 'book_pierce_realm', 'book_dimension_annihilation', 'book_divine_dawn', 'book_chaos_unison'],
-        chance: 8
+        chance: 12
     }
 };
 
