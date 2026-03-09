@@ -46,9 +46,8 @@ export function ansiText(colorId, text) {
 export function widePad(text, targetLen, align = 'start') {
     const getVisualLen = (str) => {
         let len = 0;
-        for (let i = 0; i < str.length; i++) {
-            const code = str.charCodeAt(i);
-            // 簡化的寬字元判斷：中文字與大部分 Emoji (粗略估計)
+        for (const char of str) {
+            const code = char.codePointAt(0);
             if (code >= 0x4E00 && code <= 0x9FFF) len += 2; // CJK
             else if (code > 255) len += 2; // Emoji etc.
             else len += 1;
@@ -115,7 +114,7 @@ export function isDodge(entity, bonus = 0) {
 export function getJobAdvancement(char) {
     const cls = CLASSES[char.class];
     if (!cls || !cls.advancements) return null;
-    let current = cls.advancements[0];
+    let current = null;
     for (const adv of cls.advancements) {
         if (char.level >= adv.level) current = adv;
     }
@@ -207,6 +206,10 @@ export function calculateTotalStats(char, equipList = []) {
 
         for (const [s, val] of Object.entries(actual)) {
             const target = (s === 'hp' || s === 'max_hp') ? 'max_hp' : (s === 'mp' || s === 'max_mp') ? 'max_mp' : s;
+            if (s === 'hp' || s === 'mp') {
+                // 如果已經加過 max_ 版，就不再加基礎版
+                if (actual[`max_${s}`] !== undefined) continue;
+            }
             pipeline[target] = (pipeline[target] || 0) + val;
         }
     }

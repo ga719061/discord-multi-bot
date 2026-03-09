@@ -45,17 +45,17 @@ export async function showProfile(interaction, char) {
                 mpBarBare(char.mp, total.max_mp)
             ].join('\n') + '\n```',
             '```ansi\n' + [
-                `${widePad('⚔️ 攻擊:', 10)} ${String(total.atk).padEnd(6)} ${widePad('🔮 魔攻:', 10)} ${total.matk}`,
-                `${widePad('🛡️ 防禦:', 10)} ${String(total.def).padEnd(6)} ${widePad('🏰 魔防:', 10)} ${total.mdef}`,
-                `${widePad('💥 暴擊:', 10)} ${String(total.crit + '%').padEnd(6)} ${widePad('🔥 暴傷:', 10)} ${total.crit_dmg}%`,
-                `${widePad('💨 速度:', 10)} ${String(total.spd).padEnd(6)} ${widePad('🎯 點數:', 10)} ${char.free_points || 0}`
+                `${widePad('⚔️ 攻擊:', 8)} ${String(total.atk).padEnd(4)} ${widePad('🔮 魔攻:', 8)} ${total.matk}`,
+                `${widePad('🛡️ 防禦:', 8)} ${String(total.def).padEnd(4)} ${widePad('🏰 魔防:', 8)} ${total.mdef}`,
+                `${widePad('💥 暴擊:', 8)} ${String(total.crit + '%').padEnd(4)} ${widePad('🔥 暴傷:', 8)} ${total.crit_dmg}%`,
+                `${widePad('💨 速度:', 8)} ${String(total.spd).padEnd(4)} ${widePad('🎯 點數:', 8)} ${char.free_points || 0}`
             ].join('\n') + '\n```'
         ].join('\n');
 
         const attrInfo = '```ansi\n' + [
-            `${widePad('💪 力量:', 10)} ${String(char.str || 10).padEnd(6)} ${widePad('🧠 智力:', 10)} ${char.int || 10}`,
-            `${widePad('🦴 體質:', 10)} ${String(char.vit || 10).padEnd(6)} ${widePad('⚡ 敏捷:', 10)} ${char.agi || 10}`,
-            `${widePad('🍀 幸運:', 10)} ${char.luk || 10}`
+            `${widePad('💪 力量:', 8)} ${String(char.str || 10).padEnd(4)} ${widePad('🧠 智力:', 8)} ${char.int || 10}`,
+            `${widePad('🦴 體質:', 8)} ${String(char.vit || 10).padEnd(4)} ${widePad('⚡ 敏捷:', 8)} ${char.agi || 10}`,
+            `${widePad('🍀 幸運:', 8)} ${char.luk || 10}`
         ].join('\n') + '\n```';
 
         const careerInfo = [
