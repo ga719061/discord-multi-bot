@@ -1,6 +1,6 @@
 // ===== 世界觀畫面 =====
 import { ActionRowBuilder } from 'discord.js';
-import { rpgEmbed, rpgButton } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, safeReply } from '../rpgHelpers.js';
 import { fmt, COLORS } from '../../utils/style.js';
 
 const LORE_PAGES = [
@@ -115,7 +115,7 @@ export async function showLore(interaction, page = 0) {
         rpgButton('rpg_menu', '返回主選單', undefined, '🔙'),
     );
 
-    await interaction.update({ embeds: [embed], components: [row] });
+    await safeReply(interaction, { embeds: [embed], components: [row] });
 }
 
 export async function handleLoreAction(interaction) {

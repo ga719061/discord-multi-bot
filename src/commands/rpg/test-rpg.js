@@ -2,7 +2,7 @@ import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { getCharacter, updateCharacter, addGold, addToInventory, addEquipment, getEquipmentList } from '../../rpg/rpgDatabase.js';
 import { getXpForLevel, CLASSES } from '../../rpg/data/gameData.js';
 import { getDb, getAiSettings } from '../../utils/database.js';
-import { calculateTotalStats } from '../../rpg/rpgHelpers.js';
+import { calculateTotalStats, safeReply } from '../../rpg/rpgHelpers.js';
 
 export const data = new SlashCommandBuilder()
     .setName('test-rpg')
@@ -109,7 +109,7 @@ export async function execute(interaction) {
     const adminIds = settings.admin_ids || [];
 
     if (!adminIds.includes(interaction.user.id)) {
-        return interaction.reply({
+        return safeReply(interaction, {
             content: '❌ **權限不足！** 此作弊指令已鎖定。',
             flags: ['Ephemeral']
         });
@@ -122,12 +122,12 @@ export async function execute(interaction) {
         db.prepare('DELETE FROM rpg_equipment WHERE guild_id = ? AND user_id = ?').run(guildId, userId);
         db.prepare('DELETE FROM rpg_quest_progress WHERE guild_id = ? AND user_id = ?').run(guildId, userId);
         db.prepare('DELETE FROM rpg_learned_skills WHERE guild_id = ? AND user_id = ?').run(guildId, userId);
-        return interaction.reply({ content: `✅ 已刪除玩家 <@${userId}> 的所有 RPG 資料。`, flags: ['Ephemeral'] });
+        return safeReply(interaction, { content: `✅ 已刪除玩家 <@${userId}> 的所有 RPG 資料。`, flags: ['Ephemeral'] });
     }
 
     const char = getCharacter(guildId, userId);
     if (!char) {
-        return interaction.reply({ content: `❌ <@${userId}> 尚未建立 RPG 角色！`, flags: ['Ephemeral'] });
+        return safeReply(interaction, { content: `❌ <@${userId}> 尚未建立 RPG 角色！`, flags: ['Ephemeral'] });
     }
 
     if (sub === 'add-xp') {
@@ -167,33 +167,33 @@ export async function execute(interaction) {
             mp: total.max_mp
         });
 
-        return interaction.reply({ content: `✅ 給予 <@${userId}> **${amount} XP**\n目前等級：**Lv.${newLevel}** (未分配點數: ${newFreePoints})`, flags: ['Ephemeral'] });
+        return safeReply(interaction, { content: `✅ 給予 <@${userId}> **${amount} XP**\n目前等級：**Lv.${newLevel}** (未分配點數: ${newFreePoints})`, flags: ['Ephemeral'] });
     }
 
     if (sub === 'add-gold') {
         const amount = interaction.options.getInteger('amount');
         addGold(guildId, userId, amount);
-        return interaction.reply({ content: `✅ 給予 <@${userId}> **${amount} 金幣**`, flags: ['Ephemeral'] });
+        return safeReply(interaction, { content: `✅ 給予 <@${userId}> **${amount} 金幣**`, flags: ['Ephemeral'] });
     }
 
     if (sub === 'add-item') {
         const itemId = interaction.options.getString('item_id');
         const amount = interaction.options.getInteger('amount') || 1;
         addToInventory(guildId, userId, itemId, amount);
-        return interaction.reply({ content: `✅ 給予 <@${userId}> 道具 **${itemId}** x${amount}`, flags: ['Ephemeral'] });
+        return safeReply(interaction, { content: `✅ 給予 <@${userId}> 道具 **${itemId}** x${amount}`, flags: ['Ephemeral'] });
     }
 
     if (sub === 'add-equip') {
         const itemId = interaction.options.getString('item_id');
         const quality = interaction.options.getString('quality') || 'common';
         addEquipment(guildId, userId, itemId, quality, char.level);
-        return interaction.reply({ content: `✅ 給予 <@${userId}> 裝備 **${itemId}** (品質: ${quality}，詞條適配等級: ${char.level})`, flags: ['Ephemeral'] });
+        return safeReply(interaction, { content: `✅ 給予 <@${userId}> 裝備 **${itemId}** (品質: ${quality}，詞條適配等級: ${char.level})`, flags: ['Ephemeral'] });
     }
 
     if (sub === 'heal') {
         const eqList = getEquipmentList(guildId, userId);
         const total = calculateTotalStats(char, eqList);
         updateCharacter(guildId, userId, { hp: total.max_hp, mp: total.max_mp });
-        return interaction.reply({ content: `✅ 已將 <@${userId}> 的 HP 與 MP 恢復至真實全滿 (${total.max_hp}/${total.max_mp})！`, flags: ['Ephemeral'] });
+        return safeReply(interaction, { content: `✅ 已將 <@${userId}> 的 HP 與 MP 恢復至真實全滿 (${total.max_hp}/${total.max_mp})！`, flags: ['Ephemeral'] });
     }
 }

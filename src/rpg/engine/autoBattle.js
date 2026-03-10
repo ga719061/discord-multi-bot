@@ -1,5 +1,5 @@
 import { ActionRowBuilder } from 'discord.js';
-import { rpgEmbed, rpgButton, backButton, calcDamage, isCrit, isDodge, qualityLabel, broadcastRpgEvent, calculateTotalStats, getJobTitle, formatItemName, executeSetHooks } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, backButton, calcDamage, isCrit, isDodge, qualityLabel, broadcastRpgEvent, calculateTotalStats, getJobTitle, formatItemName, executeSetHooks, safeReply } from '../rpgHelpers.js';
 import { fmt, COLORS } from '../../utils/style.js';
 import { getCharacter, updateCharacter, addGold, addToInventory, addEquipment, registerFirstKill, addMercenaryHistory, getEquipmentList } from '../rpgDatabase.js';
 import { logger } from '../../utils/logger.js';
@@ -16,7 +16,7 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
         }
 
         if (char.hp <= 0) {
-            return interaction.followUp({ content: '🐕 你的生命值已經歸零，無法進行自動探索！請先吃藥回復生命值。', flags: ['Ephemeral'] }).catch(() => { });
+            return safeReply(interaction, { content: '🐕 你的生命值已經歸零，無法進行自動探索！請先吃藥回復生命值應。', flags: ['Ephemeral'] }).catch(() => { });
         }
 
         const userId = interaction.user.id;
@@ -489,7 +489,8 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                     await broadcastRpgEvent(interaction.client, guildId, {
                         title: '壯烈犧牲',
                         description: `冒險者 ${fmt(COLORS.BLUE, vName)} 在自動探索時不幸戰死...\n${fmt(COLORS.RED, '擊殺者: ' + encounterMonsters[0].name)}\n${fmt(COLORS.RED, '當前連敗數: ' + newStreak)}\n${fmt(COLORS.GRAY, '生涯死亡數: ' + newDeaths)}`,
-                        color: 0x880000
+                        color: 0x880000,
+                        type: 'death'
                     });
                     break;
                 }
@@ -520,7 +521,8 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                             await broadcastRpgEvent(interaction.client, guildId, {
                                 title: '⚔️ 章節突破！',
                                 description: `重大進展！冒險者 ${fmt(COLORS.BLUE, vName)} 成功完成了任務：\n「${fmt(COLORS.CYAN, qr.quest.name)}」！\n王國的大門已為你進一步敞開！`,
-                                color: 0x1ABC9C
+                                color: 0x1ABC9C,
+                                type: 'quest_complete'
                             });
                         }
                     } else if (m.id) {
@@ -530,7 +532,8 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                             await broadcastRpgEvent(interaction.client, guildId, {
                                 title: '⚔️ 任務完成！',
                                 description: `冒險者 ${fmt(COLORS.BLUE, vName)} 成功完成了任務：\n「${fmt(COLORS.CYAN, qr.quest.name)}」！`,
-                                color: 0x1ABC9C
+                                color: 0x1ABC9C,
+                                type: 'quest_complete'
                             });
                         }
                     }
@@ -556,7 +559,8 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                                     await broadcastRpgEvent(interaction.client, guildId, {
                                         title: '極品裝備現世！',
                                         description: `運氣爆棚！冒險者 ${fmt(COLORS.BLUE, receiver.name)} (自動探索)\n獲得了 ${fmt(colorCode, qName)} 品質的「${fmt(COLORS.WHITE, getItemDisplayName(drop.id))}」！`,
-                                        color: qColor
+                                        color: qColor,
+                                        type: 'rare_drop'
                                     });
                                 }
                             }
@@ -569,7 +573,8 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                             await broadcastRpgEvent(interaction.client, guildId, {
                                 title: '🏆 傳奇誕生：世界首殺！',
                                 description: `${fmt(COLORS.GOLD, '史無前例！')} 「${fmt(COLORS.WHITE, m.name)}」 在自動探索中被擊敗了！\n恭喜 ${fmt(COLORS.BLUE, vName)} 締造了這項成就！\n他的英姿將被銘刻在王國歷代記英雄榜上！`,
-                                color: 0xFFD700
+                                color: 0xFFD700,
+                                type: 'first_kill'
                             });
                         }
                     }
@@ -592,7 +597,8 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                         await broadcastRpgEvent(interaction.client, guildId, {
                             title: '罕見秘笈現世！',
                             description: `古老的共鳴！冒險者 ${fmt(COLORS.BLUE, char.name || interaction.user.username)} (自動探索)\n獲得了 ${fmt(colorCode, qName)} 等級的技能書：\n「${fmt(COLORS.CYAN, getItemDisplayName(bookId))}」！`,
-                            color: qColor
+                            color: qColor,
+                            type: 'rare_drop'
                         });
                     }
                 }
@@ -642,7 +648,8 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                 await broadcastRpgEvent(interaction.client, guildId, {
                     title: '位階突破！',
                     description: `太驚人了！冒險者 ${fmt(COLORS.BLUE, vName)} 在自動探索中\n晉升為 ${fmt(COLORS.GOLD, newTitle)}！\n達到了 ${fmt(COLORS.GREEN, 'Lv.' + level)} 的全方位巔峰境界！`,
-                    color: level >= 60 ? 0xFFAA00 : 0x00FF00
+                    color: level >= 60 ? 0xFFAA00 : 0x00FF00,
+                    type: 'milestone'
                 });
             }
         }
@@ -722,25 +729,12 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
 
         const row = backButton();
 
-        try {
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.update({ embeds: [embed], components: [row] });
-            } else {
-                await interaction.editReply({ embeds: [embed], components: [row] }).catch(() => { });
-            }
-        } catch (e) {
-            logger.error('runAutoFarm update error:', e);
-        }
+        await safeReply(interaction, { embeds: [embed], components: [row] }).catch(() => { });
     } catch (e) {
         logger.error('runAutoFarm fatal error:', e);
         const errEmbed = rpgEmbed('🤖 自動遠征發生異常', `🚫 遠征中斷，術法能量流失...\n錯誤訊息: ${e.message}`, 0xE74C3C);
         try {
-            if (!interaction.replied && !interaction.deferred) {
-                const reply = { content: '🚫 術法共鳴失敗，王國秘法系統發生異常。', flags: ['Ephemeral'] };
-                await interaction.reply(reply);
-            } else {
-                await interaction.editReply({ embeds: [errEmbed] });
-            }
+        await safeReply(interaction, { embeds: [errEmbed] }).catch(() => { });
         } catch (innerErr) {
             logger.error('Failed to report autoFarm error:', innerErr);
         }

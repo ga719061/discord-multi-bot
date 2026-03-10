@@ -38,7 +38,8 @@ export async function showDaily(interaction, char) {
         announcement = {
             title: '🏆 傳奇之光',
             description: `不可思議！騎士 ${fmt(COLORS.BLUE, interaction.member.displayName)} 已經\n${fmt(COLORS.GOLD, '連續 30 天')} 不間斷地向吉吉國王致意。\n真是王國的楷模。`,
-            color: 0x00FFFF
+            color: 0x00FFFF,
+            type: 'milestone'
         };
     } else if (streak % 7 === 0) {
         goldReward = 500; gemReward = 1;
@@ -46,7 +47,8 @@ export async function showDaily(interaction, char) {
         announcement = {
             title: '🌟 王國榮耀',
             description: `值得嘉許！騎士 ${fmt(COLORS.BLUE, interaction.member.displayName)} 達成了\n${fmt(COLORS.GREEN, '連續登入 7 天')} 的成就。`,
-            color: 0x00FF00
+            color: 0x00FF00,
+            type: 'milestone'
         };
     }
 
@@ -55,7 +57,8 @@ export async function showDaily(interaction, char) {
         announcement = {
             title: '🌌 永恆之巔',
             description: `${fmt(COLORS.GOLD, '傳奇誕生！')} 騎士 ${fmt(COLORS.BLUE, interaction.member.displayName)} 達成了\n前所未見的 ${fmt(COLORS.MAGENTA, '連續 ' + streak + ' 天')} 登入不中斷。\n王國因為你而出更加繁榮！`,
-            color: 0xFF00FF
+            color: 0xFF00FF,
+            type: 'milestone'
         };
     }
 

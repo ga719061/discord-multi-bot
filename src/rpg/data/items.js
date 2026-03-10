@@ -150,10 +150,28 @@ export const EQUIPMENT = {
     chain_mail: { name: '鎖子甲', emoji: '⛓️', type: 'body', quality: 'common', stats: { def: 12, mdef: 3, spd: -1 } },
     mage_robe: { name: '法師長袍', emoji: '🧥', type: 'body', quality: 'common', stats: { def: 3, mdef: 10, mp: 15 } },
     iron_plate: { name: '鐵板甲', emoji: '🛡️', type: 'body', quality: 'common', stats: { def: 16, mdef: 4, spd: -2 } },
-
-    // 飾品與其他
+    
+    // ===== 飾品與腰帶 (Accessories & Belts) =====
+    // 戒指
     copper_ring: { name: '銅戒指', emoji: '💍', type: 'accessory', quality: 'common', stats: { atk: 2, def: 2 } },
+    spirit_ring: { name: '抗魔戒指', emoji: '💍', type: 'accessory', quality: 'fine', stats: { mdef: 25 } },
+
+    // 項鍊
+    necklace_str: { name: '力量項鍊', emoji: '📿', type: 'accessory', quality: 'rare', stats: { atk: 15 } },
+    necklace_dex: { name: '敏捷項鍊', emoji: '📿', type: 'accessory', quality: 'rare', stats: { spd: 12 } },
+    necklace_int: { name: '智力項鍊', emoji: '📿', type: 'accessory', quality: 'rare', stats: { matk: 15 } },
     health_charm: { name: '生命符咒', emoji: '📿', type: 'accessory', quality: 'common', stats: { hp: 25 } },
+
+    // 耳環
+    earring_protection: { name: '守護耳環', emoji: '💎', type: 'accessory', quality: 'fine', stats: { def: 10 } },
+    earring_wisdom: { name: '睿智耳環', emoji: '💎', type: 'accessory', quality: 'fine', stats: { mp: 50 } },
+
+    // 腰帶
+    leather_belt: { name: '皮革腰帶', emoji: 'ベルト', type: 'accessory', quality: 'common', stats: { def: 3 } },
+    ogre_belt: { name: '食人魔腰帶', emoji: 'ベルト', type: 'accessory', quality: 'rare', stats: { hp: 150, atk: 8 } },
+    belt_of_mind: { name: '靈魂腰帶', emoji: 'ベルト', type: 'accessory', quality: 'rare', stats: { mp: 100, matk: 8 } },
+
+    // 其他
     speed_boots: { name: '疾風靴', emoji: '👢', type: 'feet', quality: 'common', stats: { spd: 5 } },
 };
 

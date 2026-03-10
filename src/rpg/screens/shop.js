@@ -436,7 +436,7 @@ export async function handleShopAction(interaction, char) {
                 rpgButton('rpg_shop_tab_sell', '取消', 2, '🔙')
             );
 
-            return interaction.update({ embeds: [embed], components: [row] });
+            return safeReply(interaction, { embeds: [embed], components: [row] });
         }
 
         if (id === 'rpg_shop_autosell_execute') {
@@ -529,7 +529,7 @@ export async function handleShopAction(interaction, char) {
                 rpgButton('rpg_shop_tab_sell', '回商店', 'Secondary', '🏪')
             );
 
-            return interaction.update({ embeds: [embed], components: [row] });
+            return safeReply(interaction, { embeds: [embed], components: [row] });
         }
 
         // 購買
@@ -670,7 +670,7 @@ export async function handleShopAction(interaction, char) {
     } catch (e) {
         console.error('handleShopAction error:', e);
         try {
-            if (interaction.replied || interaction.deferred) await interaction.followUp({ content: `🚫 術法操作發生異常: ${e.message}`, flags: ['Ephemeral'] });
+            if (interaction.replied || interaction.deferred) await safeReply(interaction, { content: `🚫 術法操作發生異常: ${e.message}`, flags: ['Ephemeral'] });
             else await safeReply(interaction,{ content: `🚫 術法操作發生異常: ${e.message}`, flags: ['Ephemeral'] });
         } catch (err) { }
     }

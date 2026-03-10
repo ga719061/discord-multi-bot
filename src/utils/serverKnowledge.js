@@ -23,32 +23,34 @@ export function getServerKnowledge(guildId, isAdmin = false) {
 【吉吉王國 皇家大典 - 核心系統指南】
 
 I. 社交與日常 (互動指令)
-- 撫摸/擁抱: 關鍵字「摸摸國王」、「抱抱國王」。國王具有隨機情緒反應。
-- 運勢/占卜: 獲取今日吉凶預測。
-- 金句/每日一汪: 每日智慧語錄。
+- 撫摸/擁抱: 關鍵字「摸摸國王」、「抱抱國王」。國王具有隨機情緒反應 (/hug, /pat)。
+- 運勢/占卜: /fortune。獲取今日吉凶與國王的建議。
+- 餵食國王: /feed。
 - 聊天: 直接 @吉吉王國 或提及其名。
 
-II. 等級與爵位系統 (XP 機制)
-- 每分鐘聊天可獲 15-25 XP。皇家贊助者 1.5 倍。
-- 核心爵位:`;
-    
-    [0, 6, 16, 31, 51, 76, 100].forEach(lv => {
-        knowledge += `\n  - Lv.${lv}+: ${getRankTitle(lv)}`;
-    });
+II. AI 核心與設定 (/ai-setup, /ai-login)
+- 模型切換: 支援 Gemini 2.5 Flash, Flash-Lite, 3.0/3.1 Preview。
+- 聯網檢索: 可開啟 Google 搜索能力，獲取即時資訊。
+- 對話記憶: 控制 AI 是否記得先前的對話脈絡。
+- 派對模式: 管理員可指定頻道開啟限時免點名模式。
+- 白名單: 僅有受寵子民或在派對頻道中能與 AI 自由對話。
 
-    knowledge += `
-- 指令: /rank, /leaderboard。
+III. 等級與爵位系統 (非 RPG XP 機制)
+- 聊天 XP: 每分鐘活躍發言可獲 15-25 XP（皇家贊助者 1.5 倍）。
+- 語音掛機 XP: 每分鐘在語音頻道可獲 XP（禁止 AFK 頻道或靜音）。
+- 爵位: 從「平民」到「大公」、「親王」，每 25 級左右晉升。指令: /rank, /leaderboard。
 
-III. 王國事務助手
-- 議會投票: /poll (具備動態進度條樣式)。
-- 皇家採購 (Steam): /steam search/sales。
-- 自助身分組: /selfrole, /reactionrole。目前可用: ${selfroleList}
-- 皇家時鐘: /remind set/list (支援相對時間如 10m 與絕對時間)。
+IV. 王國事務與社群
+- 國是會議 (投票): /poll (最多 5 個選項)。
+- 皇家大抽獎: /giveaway (點擊 🎉 參加)。
+- 皇家採購 (Steam): /steam search (搜尋遊戲價格/評價), /steam sales (查看特價)。
+- 皇家時鐘: /remind set (設定提醒)。
 
-IV. 國王特權 (管理用)
+V. 管理與自動化 (管理員專用)
 - 皇家聖旨 (@everyone): /announce。
-- 王國抽獎: /giveaway。
-- 史官日誌: /setup-welcome, /setup-log。
+- 自助身分組: /selfrole (下拉選單領取)。
+- 歡迎與日誌: /setup-welcome, /setup-log。
+
 
 V. RPG 核心冒險系統 (核心數據)
 1. 冒險區域與怪物：`;
@@ -61,7 +63,13 @@ V. RPG 核心冒險系統 (核心數據)
         }
     }
 
-    knowledge += `\n\n2. 種族與屬性：`;
+    knowledge += `\n\n2. 種族與屬性：
+- 力量 (STR): +0.5 ATK, +1 HP (所有職業通用，物理系加成更高)。
+- 智力 (INT): +0.5 MATK, +2 MP (所有職業通用，法系加成更高)。
+- 體質 (VIT): +4 HP, +0.3 DEF (所有職業通用，坦克系加成更高)。
+- 敏捷 (AGI): +0.2 SPD (所有職業通用，遊俠加成更高)。
+- 幸運 (LUK): +0.02% 暴擊, +0.1% 暴傷 (所有職業通用)。
+- 種族初始加成：`;
     for (const r of Object.values(RACES)) {
         const bonusStr = Object.entries(r.bonus).map(([k, v]) => `${STAT_LABELS[k] || k}${v >= 0 ? '+' : ''}${v}`).join(', ');
         knowledge += `\n- ${r.emoji}${r.name}: ${bonusStr}`;
@@ -78,9 +86,14 @@ V. RPG 核心冒險系統 (核心數據)
 - NPC: 旅館老闆老狄恩 (Dean)、退役騎士亞伯 (Abel)、流浪學者賽恩 (Sion)。
 - 傳聞系統: 包含史萊姆之戒、巴風特威脅、甚至是禁忌的「三合一史詩鑑定」等。
 
-5. 戰鬥系統細節：
-- 裝備強化: 安全等級 +${ENHANCEMENT_CONFIG.weapon.safeZone}。超過後有損毀機率。
-- 隨機詞條: `;
+5. 戰鬥與成長系統：
+- 裝備強化: 可至「鐵匠鋪」強化至 +9。超過安定值有機率損毀。
+- 裝備拆解: 分解裝備獲得「魔力碎片」與「混沌精華」。
+- 屬性洗煉: 消耗素材重新抽取裝備詞條。
+- 拍賣場: 使用 /rpg auction 買賣裝備、道具、技能書。
+- 傭兵小隊: 最多招募 3 名隊友助戰。僱用他人可獲得分紅回饋。
+- 隨機詞條範例: 
+`;
     Object.values(AFFIX_REGISTRY).slice(0, 10).forEach(a => {
         knowledge += `${a.name}(${a.type}), `;
     });

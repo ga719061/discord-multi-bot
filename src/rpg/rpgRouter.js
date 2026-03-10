@@ -1,6 +1,6 @@
 // ===== RPG 按鈕/選單路由分發器 =====
 import { isRpgEnabled, getCharacter } from './rpgDatabase.js';
-import { isOwner, notOwnerReply } from './rpgHelpers.js';
+import { isOwner, notOwnerReply, safeReply } from './rpgHelpers.js';
 import { showHub } from './screens/hub.js';
 import { handleCreate } from './screens/create.js';
 import { showProfile, handleProfileAction } from './screens/profile.js';
@@ -16,6 +16,7 @@ import { showRanking } from './screens/ranking.js';
 import { showTavern, handleTavernAction } from './screens/tavern.js';
 import { showAuctionHub, showAuctionBrowse, handleAuctionBuy, showAuctionListSelection, handleAuctionListPrompt, handleAuctionSubmit, showMyAuctions, handleAuctionCancel, showAuctionHistory } from './screens/auction.js';
 import { showBlacksmith, showBlacksmithList, handleDismantle, handleReforge, handleEnhance } from './screens/blacksmith.js';
+import { renderExpedition, handleExpeditionInteractions } from './screens/expedition.js';
 import { logger } from '../utils/logger.js';
 
 // Per-user 操作鎖：防止快速連點造成的 race condition（裝備複製、消耗品重複使用等）
@@ -32,7 +33,7 @@ export function registerRpgRouter(client) {
           try {
                // 檢查 RPG 是否啟用
                if (!isRpgEnabled(interaction.guildId)) {
-                    return interaction.reply({ content: '🐕 RPG 系統目前已關閉！', flags: ['Ephemeral'] });
+                    return safeReply(interaction, { content: '🐕 RPG 系統目前已關閉！', flags: ['Ephemeral'] });
                }
 
                // 取得訊息的原始使用者 (存在 embed footer 或 interaction.message)
@@ -55,7 +56,8 @@ export function registerRpgRouter(client) {
                      'rpg_area_',
                      'rpg_bs_select_',
                      'rpg_bs_dismantle_',
-                     'rpg_bs_reforge_'
+                     'rpg_bs_reforge_',
+                     'rpg_exp_'
                ];
                const isShared = sharedPrefixes.some(p => id.startsWith(p));
 
@@ -213,6 +215,14 @@ export function registerRpgRouter(client) {
                           return await handleTavernAction(interaction, char);
                      }
 
+                     // 遠征系統
+                     if (id === 'rpg_expedition') {
+                          return await renderExpedition(interaction, interaction.user.id);
+                     }
+                     if (id.startsWith('rpg_exp_')) {
+                          return await handleExpeditionInteractions(interaction);
+                     }
+
                      // 鐵匠鋪
                      if (id === 'rpg_blacksmith') {
                           return await showBlacksmith(interaction);
@@ -247,8 +257,7 @@ export function registerRpgRouter(client) {
                logger.error(`RPG 路由錯誤 (${id}):`, error);
                const reply = { content: '🐕 汪嗚...本王的冒險系統出了點問題！請稍後再試。', flags: ['Ephemeral'] };
                try {
-                    if (interaction.replied || interaction.deferred) await interaction.followUp(reply);
-                    else await interaction.reply(reply);
+                    await safeReply(interaction, reply);
                } catch (e) {
                     logger.error('RPG 回覆錯誤:', e.message);
                }

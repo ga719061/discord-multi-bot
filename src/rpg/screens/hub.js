@@ -1,6 +1,6 @@
-import { getCharacter, getEquipmentList } from '../rpgDatabase.js';
+import { getCharacter, getEquipmentList, getExpedition } from '../rpgDatabase.js';
 import { rpgEmbed, charSummary, hpBar, mpBar, xpBar, hpBarBare, mpBarBare, mainMenuRows, ansiText, calculateTotalStats, getStatusFields, safeReply } from '../rpgHelpers.js';
-import { getXpForLevel, MAIN_QUESTS } from '../data/gameData.js';
+import { getXpForLevel, MAIN_QUESTS, AREAS } from '../data/gameData.js';
 
 export async function showHub(interaction, char, method = 'update') {
     if (method === 'update' && !interaction.deferred && !interaction.replied) {
@@ -14,6 +14,16 @@ export async function showHub(interaction, char, method = 'update') {
     const currentQuest = MAIN_QUESTS.find(q => q.id === char.quest_id) || MAIN_QUESTS[0];
     const questText = currentQuest ? currentQuest.name : '冒險的開端';
 
+    // 檢查遠征狀態
+    const exp = getExpedition(interaction.guildId, interaction.user.id);
+    let expText = '';
+    if (exp) {
+        const area = AREAS.find(a => a.id === exp.area_id);
+        const elapsed = Date.now() - exp.start_time;
+        const progress = Math.min(100, Math.floor((elapsed / exp.planned_duration) * 100));
+        expText = `\n🛰️ **遠征中**: ${area?.emoji || ''} ${area?.name || '未知'} (${progress}%)`;
+    }
+
     const embed = rpgEmbed(
         '🐕👑 吉吉王國騎士團總部',
         [
@@ -25,7 +35,7 @@ export async function showHub(interaction, char, method = 'update') {
                 mpBarBare(char.mp, total.max_mp)
             ].join('\n') + '\n```',
             '',
-            `📜 **當前主線**: ${questText}`,
+            `📜 **當前主線**: ${questText}${expText}`,
         ].join('\n'),
     )
         .addFields(getStatusFields(char, total, { showResources: true, showCombat: true, xpNeeded }))

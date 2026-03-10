@@ -87,6 +87,7 @@ export async function execute(interaction) {
                     '> 📢 `/announce` — 發布精美的王國聖旨公告',
                     '> 📝 `/setup-log` — 安置領地史官與配置監控開關',
                     '> 📈 `/setup-leveling` — 設定皇家等級公告開關',
+                    '> ⚔️ `/setup-rpg` — 管理 RPG 系統開關與廣播設定',
                     '> 🤖 `/ai-setup` — 管理 AI 模型、搜尋與上下文設定',
                     '> 🏷️ `/reactionrole` — 建立點擊按鈕的自助身分組',
                     '> 🏷️ `/selfrole` — 建立下拉式選單的自助身分組',

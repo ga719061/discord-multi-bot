@@ -1,5 +1,5 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
-import { rpgEmbed, rpgButton, backButton, qualityLabel, ansiText, widePad } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, backButton, qualityLabel, ansiText, widePad, safeReply } from '../rpgHelpers.js';
 import { fmt, COLORS } from '../../utils/style.js';
 import { getCharacter, getAvailableMercenaries, getPersonalMercenaryHistory } from '../rpgDatabase.js';
 
@@ -63,13 +63,7 @@ export async function showMercenaryHub(interaction, char = null) {
 
     const backRow = backButton();
 
-    try {
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.update({ embeds: [embed], components: [row, backRow] });
-        } else {
-            await interaction.editReply({ embeds: [embed], components: [row, backRow] });
-        }
-    } catch (e) { }
+    await safeReply(interaction, { embeds: [embed], components: [row, backRow] });
 }
 
 /**
@@ -92,7 +86,7 @@ export async function showHireMenu(interaction) {
     const candidates = available.filter(c => !hired.includes(c.user_id));
 
     if (candidates.length === 0) {
-        return interaction.editReply({ content: '🚫 目前沒有合適且開放助戰的傭兵可以招募。', components: [] });
+        return safeReply(interaction, { content: '🚫 目前沒有合適且開放助戰的傭兵可以招募。', components: [] });
     }
 
     const options = await Promise.all(candidates.map(async (c) => {
@@ -120,7 +114,7 @@ export async function showHireMenu(interaction) {
         0x3498DB
     );
 
-    return interaction.editReply({
+    return safeReply(interaction, {
         embeds: [embed],
         components: [row, navRow]
     });
@@ -160,7 +154,7 @@ export async function showMercenaryHistory(interaction) {
     if (history.length === 0) {
         const emptyEmbed = rpgEmbed('📜 我的助戰紀錄', '閣下目前沒有任何出勤的助戰紀錄。開啟助戰功能讓別人僱用你賺取獎勵吧。').setFooter({ text: `uid:${userId}` });
         const row = new ActionRowBuilder().addComponents(rpgButton('rpg_merc_hub', '返回傭兵駐地', 2, '🔙'));
-        return interaction.editReply({ embeds: [emptyEmbed], components: [row] });
+        return safeReply(interaction, { embeds: [emptyEmbed], components: [row] });
     }
 
     const lines = [];
@@ -189,7 +183,7 @@ export async function showMercenaryHistory(interaction) {
 
     const navRow = new ActionRowBuilder().addComponents(rpgButton('rpg_merc_hub', '返回傭兵駐地', 2, '🔙'));
 
-    await interaction.editReply({ embeds: [embed], components: [navRow] });
+    await safeReply(interaction, { embeds: [embed], components: [navRow] });
 }
 
 /**

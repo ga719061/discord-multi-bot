@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } from 'discord.js';
-import { RACES, CLASSES, SKILLS, AREAS, QUALITY_MULTIPLIER, EQUIPMENT, SHOP_ITEMS, getXpForLevel, AFFIX_REGISTRY, SET_REGISTRY, SKILL_BOOKS } from './data/gameData.js';
+import { RACES, CLASSES, SKILLS, AREAS, QUALITY_MULTIPLIER, EQUIPMENT, SHOP_ITEMS, getXpForLevel, AFFIX_REGISTRY, SET_REGISTRY, SKILL_BOOKS, GLOBAL_STAT_CONVERSION } from './data/gameData.js';
 import { getGuildSettings } from '../utils/database.js';
 import * as StyleUtils from '../utils/style.js';
 const { fmt, COLORS, ansiBar } = StyleUtils;
@@ -166,6 +166,17 @@ export function calculateTotalStats(char, equipList = []) {
     };
 
     // 2. 屬性轉換 (STR, INT, VIT, AGI, LUK)
+    
+    // 2a. 全域基礎轉換 (GLOBAL)
+    for (const [attr, bonus] of Object.entries(GLOBAL_STAT_CONVERSION)) {
+        const attrVal = char[attr] || 0;
+        for (const [stat, val] of Object.entries(bonus)) {
+            const targetStat = (stat === 'hp' || stat === 'max_hp') ? 'max_hp' : (stat === 'mp' || stat === 'max_mp') ? 'max_mp' : stat;
+            pipeline[targetStat] = (pipeline[targetStat] || 0) + (attrVal * val);
+        }
+    }
+
+    // 2b. 職業專屬轉換 (CLASS SPECIFIC)
     const conversion = cls.statConversion || {};
     for (const [attr, bonus] of Object.entries(conversion)) {
         const attrVal = char[attr] || 0;
@@ -372,11 +383,28 @@ export function rpgEmbed(title, description, color = 0xF1C40F) {
     return embed;
 }
 
+/**
+ * 產生一致風格的王國警告/通知 Embed
+ * @param {string} content 訊息內容
+ */
+export function rpgAlert(content) {
+    return new EmbedBuilder()
+        .setColor(0xF1C40F) // 王國金
+        .setTitle('📜 【王國告示】')
+        .setDescription(`> ${content}`)
+        .setFooter({ text: '🐕👑 吉吉王國騎士團總部' });
+}
+
 // ---------- 統一安全的互動回應 ----------
 export async function safeReply(interaction, options) {
     try {
-        // 如果是按鈕或選單，優先使用 update (更新原訊息)
-        if (interaction.isButton() || interaction.isStringSelectMenu()) {
+        const alertIcons = ['🚫', '🐕', '⚠️', '🚨', '⚙️', '🔥'];
+        const isAlert = (text) => typeof text === 'string' && alertIcons.some(icon => text.includes(icon));
+        const hasAlert = isAlert(options) || (options && typeof options === 'object' && isAlert(options.content));
+
+        // 如果是按鈕或選單，且「不是」警告訊息，則優先使用 update (更新原訊息)
+        // 警告訊息不建議使用 update，否則會把原有的 UI (如主選單) 蓋掉
+        if ((interaction.isButton() || interaction.isStringSelectMenu()) && !hasAlert) {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.update(options);
             } else {
@@ -385,16 +413,36 @@ export async function safeReply(interaction, options) {
             return;
         }
 
-        // 一般 Slash Command 或已回覆的互動
+        // 一般 Slash Command 或已回覆的互動，或是警告訊息
         if (!interaction.replied && !interaction.deferred) {
             if (typeof options === 'object' && !Array.isArray(options)) {
+                // 自動轉換包含警告圖示的內容為 Embed
+                if (isAlert(options.content)) {
+                    options.embeds = [rpgAlert(options.content)];
+                    delete options.content;
+                }
                 options.flags = ['Ephemeral'];
                 delete options.ephemeral;
             } else if (typeof options === 'string') {
-                options = { content: options, flags: ['Ephemeral'] };
+                // 自動將字串轉化為顯眼的 Alert Embed
+                options = { embeds: [rpgAlert(options)], flags: ['Ephemeral'] };
             }
             await interaction.reply(options);
         } else {
+            // 已回覆的情境 (通常是 deferUpdate 後)，也偵測是否需要轉換為 Embed
+            if (typeof options === 'object') {
+                if (isAlert(options.content)) {
+                    options.embeds = [rpgAlert(options.content)];
+                    delete options.content;
+                }
+                // 導航補強：如果這是因為警告而發送的 editReply，且沒有附帶按鈕，則補上「返回主選單」
+                // 避免使用者被卡在一個沒有按鈕的警告畫面
+                if (hasAlert && (!options.components || options.components.length === 0)) {
+                    options.components = [backButton()];
+                }
+            } else if (typeof options === 'string' && isAlert(options)) {
+                options = { embeds: [rpgAlert(options)], components: [backButton()] };
+            }
             await interaction.editReply(options);
         }
     } catch (e) {
@@ -435,7 +483,8 @@ export function mainMenuRows(disabled = false) {
         new ActionRowBuilder().addComponents(
             rpgButton('rpg_lore', '旅館', ButtonStyle.Secondary, '🏨', disabled),
             rpgButton('rpg_auction', '拍賣', ButtonStyle.Secondary, '⚖️', disabled),
-            rpgButton('rpg_merc', '傭兵', ButtonStyle.Secondary, '🛡️', disabled)
+            rpgButton('rpg_merc', '傭兵', ButtonStyle.Secondary, '🛡️', disabled),
+            rpgButton('rpg_expedition', '遠征', ButtonStyle.Success, '🗺️', disabled)
         ),
     ];
 }
@@ -492,7 +541,7 @@ export function isOwner(interaction, ownerId) {
 }
 
 export function notOwnerReply(interaction) {
-    return interaction.reply({ content: '🚫 此面板不屬於閣下。請使用 `/rpg` 啟動屬於你的遠征。', flags: ['Ephemeral'] });
+    return safeReply(interaction, { content: '🚫 此面板不屬於閣下。請使用 `/rpg` 啟動屬於你的遠征。', flags: ['Ephemeral'] });
 }
 
 // ---------- 強化系統設定 ----------
@@ -637,12 +686,19 @@ export function generateRandomAffixes(itemId, quality, charLevel = 1) {
  * 發送全局 RPG 事件廣播
  * @param {object} client - Discord Client 物件 (可用 interaction.client 取得)
  * @param {string} guildId - 伺服器 ID
- * @param {object} embedData - 廣播內容 { title, description, color, thumbnail }
+ * @param {object} embedData - 廣播內容 { title, description, color, thumbnail, type }
  */
 export async function broadcastRpgEvent(client, guildId, embedData) {
     try {
         const settings = getGuildSettings(guildId);
         if (!settings.rpg_broadcast_channel) return;
+
+        // 檢查廣播開關
+        const type = embedData.type || 'system';
+        if (type !== 'system') {
+            const toggles = JSON.parse(settings.rpg_broadcast_toggles || '{}');
+            if (toggles[type] === 0) return;
+        }
 
         const guild = await client.guilds.fetch(guildId).catch(() => null);
         if (!guild) return;

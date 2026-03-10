@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { setRpgEnabled, isRpgEnabled } from '../../rpg/rpgDatabase.js';
-import { updateGuildSetting } from '../../utils/database.js';
-import { broadcastRpgEvent } from '../../rpg/rpgHelpers.js';
+import { updateGuildSetting, getGuildSettings } from '../../utils/database.js';
+import { broadcastRpgEvent, safeReply } from '../../rpg/rpgHelpers.js';
 import { fmt, COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
@@ -31,9 +31,31 @@ export const data = new SlashCommandBuilder()
                 opt.setName('channel')
                     .setNameLocalizations({ 'zh-TW': '頻道' })
                     .setDescription('要發送廣播的頻道 (留空則關閉廣播)')
-                    .setDescriptionLocalizations({ 'zh-TW': '要發送廣播的頻道 (留空則關閉廣播)' })
                     .setRequired(false)
             )
+    )
+    .addSubcommand(sub =>
+        sub.setName('set-broadcast-toggle')
+            .setNameLocalizations({ 'zh-TW': '設定廣播開關' })
+            .setDescription('⚙️ 設定哪些類型的事件要廣播')
+            .addStringOption(opt =>
+                opt.setName('type')
+                    .setNameLocalizations({ 'zh-TW': '類型' })
+                    .setDescription('廣播類型')
+                    .setRequired(true)
+                    .addChoices(
+                        { name: '里程碑突破 (milestone)', value: 'milestone' },
+                        { name: '稀有掉落 (rare_drop)', value: 'rare_drop' },
+                        { name: '世界首殺 (first_kill)', value: 'first_kill' },
+                        { name: '任務完成 (quest_complete)', value: 'quest_complete' },
+                        { name: '戰死通報 (death)', value: 'death' },
+                        { name: '強化廣播 (enhancement)', value: 'enhancement' }
+                    ))
+            .addBooleanOption(opt =>
+                opt.setName('enabled')
+                    .setNameLocalizations({ 'zh-TW': '是否啟用' })
+                    .setDescription('是否啟用此類廣播')
+                    .setRequired(true))
     );
 
 export async function execute(interaction) {
@@ -42,15 +64,15 @@ export async function execute(interaction) {
 
     if (sub === 'enable') {
         setRpgEnabled(guildId, true);
-        await interaction.reply({ content: '🐕👑 汪！吉吉王國 RPG 系統已**啟用**！\n子民們現在可以使用 `/rpg` 開始冒險了！', flags: ['Ephemeral'] });
+        await safeReply(interaction, { content: '🐕👑 汪！吉吉王國 RPG 系統已**啟用**！\n子民們現在可以使用 `/rpg` 開始冒險了！', flags: ['Ephemeral'] });
     } else if (sub === 'disable') {
         setRpgEnabled(guildId, false);
-        await interaction.reply({ content: '🐕 汪...RPG 系統已**停用**。\n角色資料會保留，隨時可以重新啟用！', flags: ['Ephemeral'] });
+        await safeReply(interaction, { content: '🐕 汪...RPG 系統已**停用**。\n角色資料會保留，隨時可以重新啟用！', flags: ['Ephemeral'] });
     } else if (sub === 'set-broadcast') {
         const channel = interaction.options.getChannel('channel');
         if (channel) {
             updateGuildSetting(guildId, 'rpg_broadcast_channel', channel.id);
-            await interaction.reply({
+            await safeReply(interaction, {
                 content: `📢 已將「王國歷代記」 RPG 廣播頻道綁定至 <#${channel.id}>！\n本王已經發送了慶賀公告，請前往查看！汪！`,
                 flags: ['Ephemeral']
             });
@@ -81,10 +103,33 @@ export async function execute(interaction) {
             });
         } else {
             updateGuildSetting(guildId, 'rpg_broadcast_channel', null);
-            await interaction.reply({
+            await safeReply(interaction, {
                 content: `🔇 已**關閉** RPG 廣播功能。國王將不會再全服通報各位冒險者的豐功偉業。`,
                 flags: ['Ephemeral']
             });
         }
+    } else if (sub === 'set-broadcast-toggle') {
+        const type = interaction.options.getString('type');
+        const enabled = interaction.options.getBoolean('enabled');
+
+        const settings = getGuildSettings(guildId);
+        const toggles = JSON.parse(settings.rpg_broadcast_toggles || '{"milestone":1,"rare_drop":1,"first_kill":1,"quest_complete":1,"death":1,"enhancement":1}');
+
+        toggles[type] = enabled ? 1 : 0;
+        updateGuildSetting(guildId, 'rpg_broadcast_toggles', JSON.stringify(toggles));
+
+        const labels = {
+            milestone: '里程碑突破',
+            rare_drop: '稀有掉落',
+            first_kill: '世界首殺',
+            quest_complete: '任務完成',
+            death: '戰死通報',
+            enhancement: '強化廣播'
+        };
+
+        await safeReply(interaction, {
+            content: `✅ 已將 **${labels[type]}** 廣播設定為：${enabled ? '🟢 啟用' : '🔴 關閉'}。`,
+            flags: ['Ephemeral']
+        });
     }
 }

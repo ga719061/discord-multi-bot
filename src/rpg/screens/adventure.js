@@ -1,6 +1,6 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { AREAS, MONSTERS, BOSSES, SUMMON_RECIPES, getItemDisplayName, ITEM_NAMES } from '../data/gameData.js';
-import { getCharacter, createBattle, updateCharacter, getLearnedSkills, getEquipmentList, getInventory } from '../rpgDatabase.js';
+import { getCharacter, createBattle, updateCharacter, getLearnedSkills, getEquipmentList, getInventory, getExpedition } from '../rpgDatabase.js';
 import { rpgEmbed, rpgButton, areaSelectRows, hpBar, mpBar, hpBarBare, mpBarBare, backButton, charSummary, ansiText, safeReply, getStatusFields, calculateTotalStats } from '../rpgHelpers.js';
 import { renderBattle } from './battle.js';
 import { activeMercenaries } from './mercenary.js';
@@ -13,6 +13,11 @@ export async function showAdventure(interaction, char) {
     if (!char) char = getCharacter(interaction.guildId, interaction.user.id);
     const eqList = getEquipmentList(interaction.guildId, interaction.user.id);
     const total = calculateTotalStats(char, eqList);
+
+    const exp = getExpedition(interaction.guildId, interaction.user.id);
+    if (exp) {
+        return safeReply(interaction, { content: '🚫 騎士正在遠征中，無法同時進行冒險！請先結算遠征成果。', flags: ['Ephemeral'] });
+    }
 
     if (char.hp <= 0) {
         const embed = rpgEmbed('🛡️ 騎士已倒下...', [
@@ -63,6 +68,11 @@ export async function showAutoFarmMenu(interaction, char) {
     const userId = interaction.user.id;
     const guildId = interaction.guildId;
     if (!char) char = getCharacter(guildId, userId);
+
+    const exp = getExpedition(guildId, userId);
+    if (exp) {
+        return safeReply(interaction, { content: '🚫 騎士正在遠征中，無法啟動自動探索！', flags: ['Ephemeral'] });
+    }
 
     const availableAreas = AREAS.filter(a => char.level >= a.levelReq);
 
@@ -233,7 +243,7 @@ export async function handleSummonSelect(interaction, char) {
     for (const ing of recipe.ingredients) {
         const owned = inv.find(i => i.item_id === ing.id)?.quantity || 0;
         if (owned < ing.count) {
-            return interaction.followUp({ content: `🚫 召喚失敗：你所持有的 ${getItemDisplayName(ing.id)} 數量不足以引發共鳴。`, flags: ['Ephemeral'] });
+            return safeReply(interaction, { content: `🚫 召喚失敗：你所持有的 ${getItemDisplayName(ing.id)} 數量不足以引發共鳴。`, flags: ['Ephemeral'] });
         }
     }
 

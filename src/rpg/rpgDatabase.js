@@ -103,7 +103,16 @@ export function initRpgTables() {
       reward_xp INTEGER NOT NULL,
       fought_at INTEGER NOT NULL
     );
-  `);
+    CREATE TABLE IF NOT EXISTS rpg_expeditions (
+      guild_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      area_id TEXT NOT NULL,
+      start_time INTEGER NOT NULL,
+      planned_duration INTEGER NOT NULL,
+      status TEXT DEFAULT 'active',
+      PRIMARY KEY (guild_id, user_id)
+    );
+    `);
     // 確保 guild_settings 有 rpg_enabled 欄位
     const info = db.pragma('table_info(guild_settings)');
     if (!info.map(c => c.name).includes('rpg_enabled')) {
@@ -571,7 +580,106 @@ export function setAutoSkills(guildId, userId, skillIds) {
     db.prepare('UPDATE rpg_characters SET auto_skills = ? WHERE guild_id = ? AND user_id = ?').run(JSON.stringify(skillIds), guildId, userId);
 }
 
-export function setEquippedSkills(guildId, userId, skillIds) {
+export function setEquippedSkills(guild_id, userId, skillIds) {
     const db = getDb();
-    db.prepare('UPDATE rpg_characters SET equipped_skills = ? WHERE guild_id = ? AND user_id = ?').run(JSON.stringify(skillIds), guildId, userId);
+    db.prepare('UPDATE rpg_characters SET equipped_skills = ? WHERE guild_id = ? AND user_id = ?').run(JSON.stringify(skillIds), guild_id, userId);
+}
+
+// ---------- 遠征系統 (Expedition) ----------
+
+export function startExpedition(guildId, userId, areaId, durationMs) {
+    const db = getDb();
+    const now = Date.now();
+    // 預防重複 (雖然 PRIMARY KEY 會擋，但這裡可以做更優雅的處理)
+    db.prepare('DELETE FROM rpg_expeditions WHERE guild_id = ? AND user_id = ?').run(guildId, userId);
+    db.prepare('INSERT INTO rpg_expeditions (guild_id, user_id, area_id, start_time, planned_duration) VALUES (?, ?, ?, ?, ?)')
+        .run(guildId, userId, areaId, now, durationMs);
+}
+
+export function getExpedition(guildId, userId) {
+    const db = getDb();
+    return db.prepare('SELECT * FROM rpg_expeditions WHERE guild_id = ? AND user_id = ?').get(guildId, userId);
+}
+
+export function deleteExpedition(guildId, userId) {
+    const db = getDb();
+    db.prepare('DELETE FROM rpg_expeditions WHERE guild_id = ? AND user_id = ?').run(guildId, userId);
+}
+
+/**
+ * 領取遠征獎勵
+ * @returns {object|null} 獎勵內容或 null (若尚未滿一小時)
+ */
+export function claimExpedition(guildId, userId) {
+    const db = getDb();
+    const exp = getExpedition(guildId, userId);
+    if (!exp) return null;
+
+    const now = Date.now();
+    const elapsedMs = now - exp.start_time;
+    const hours = Math.floor(elapsedMs / 3600000);
+    const plannedHours = Math.floor(exp.planned_duration / 3600000);
+    
+    // 結算小時數：取實際經過與預計時長的最小值
+    const finalHours = Math.min(hours, plannedHours);
+    if (finalHours <= 0) return null;
+
+    const { MONSTERS } = db.prepare('SELECT 1').get() ? require('./data/gameData.js') : {}; // 這裡用動態載入避免循環引用，但在一般架構下 direct import 即可
+    // 實際上在頂部已經 import 了，但為了保險起見使用此處的 MONSTERS
+    const areaMonsters = MONSTERS[exp.area_id] || [];
+    if (areaMonsters.length === 0) return null;
+
+    // 計算平均收益
+    const avgXp = areaMonsters.reduce((sum, m) => sum + m.xp, 0) / areaMonsters.length;
+    const avgGold = areaMonsters.reduce((sum, m) => sum + (m.gold || 0), 0) / areaMonsters.length;
+
+    // 效率加成：每 1 小時 +2% (1.02, 1.04...)
+    const efficiency = 1 + (finalHours * 0.02);
+    
+    const totalXp = Math.floor(avgXp * 60 * finalHours * efficiency);
+    const totalGold = Math.floor(avgGold * 60 * finalHours * efficiency);
+
+    // 掉落物處理
+    const drops = [];
+    const itemRewards = {}; // { itemId: qty }
+    
+    for (let h = 0; h < finalHours; h++) {
+        // 每小時擊殺 60 隻，進行隨機抽樣
+        for (let k = 0; k < 60; k++) {
+            const randomMonster = areaMonsters[Math.floor(Math.random() * areaMonsters.length)];
+            if (randomMonster.drops) {
+                for (const d of randomMonster.drops) {
+                    if (Math.random() * 100 < d.chance) {
+                        // 遠征不獲得裝備，僅獲得材料與藥水 (簡化處理以防背包爆掉)
+                        if (!d.isEquip) {
+                            itemRewards[d.id] = (itemRewards[d.id] || 0) + 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 更新角色數值
+    addGold(guildId, userId, totalGold);
+    // XP 更新需要考慮升級邏輯，這裡調用 updateCharacter
+    const char = getCharacter(guildId, userId);
+    const newXp = char.xp + totalXp;
+    updateCharacter(guildId, userId, { xp: newXp });
+
+    // 發放道具
+    for (const [itemId, qty] of Object.entries(itemRewards)) {
+        addToInventory(guildId, userId, itemId, qty);
+        drops.push({ id: itemId, qty });
+    }
+
+    // 刪除遠征紀錄 (已完成結算)
+    deleteExpedition(guildId, userId);
+
+    return {
+        hours: finalHours,
+        xp: totalXp,
+        gold: totalGold,
+        drops: drops
+    };
 }

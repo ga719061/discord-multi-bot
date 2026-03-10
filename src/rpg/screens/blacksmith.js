@@ -124,14 +124,20 @@ export async function handleDismantle(interaction, eqId) {
     if (shardCount > 0) addToInventory(guildId, userId, 'magic_shard', shardCount);
     if (essenceCount > 0) addToInventory(guildId, userId, 'chaos_essence', essenceCount);
 
-    const resultMsg = '```ansi\n' + [
-        fmt(COLORS.GREEN, `✅ 成功拆解了 ${def.emoji} ${def.name}！`),
-        shardCount > 0 ? fmt(COLORS.CYAN, `✨ 獲得 魔力碎片 x${shardCount}`) : '',
-        essenceCount > 0 ? fmt(COLORS.PURPLE, `🌀 獲得 混沌精華 x${essenceCount}`) : '',
-    ].filter(Boolean).join('\n') + '\n```';
+    const embed = rpgEmbed(
+        '♻️ 拆解成功',
+        '```ansi\n' + [
+            fmt(COLORS.GREEN, `你將 ${def.name} 投入了熔爐...`),
+            '',
+            shardCount > 0 ? fmt(COLORS.CYAN, `✨ 獲得 魔力碎片 x${shardCount}`) : '',
+            essenceCount > 0 ? fmt(COLORS.PURPLE, `🌀 獲得 混沌精華 x${essenceCount}`) : '',
+            '',
+            fmt(COLORS.GRAY, '裝備已化為原始能量，存入你的背包。')
+        ].filter(Boolean).join('\n') + '\n```',
+        0x2ECC71
+    );
 
-    await safeReply(interaction,{ content: resultMsg, flags: ['Ephemeral'] });
-    await showBlacksmith(interaction);
+    await safeReply(interaction, { embeds: [embed], components: [backButton()] });
 }
 
 /**
@@ -154,9 +160,12 @@ export async function handleReforge(interaction, eqId) {
 
     if (char.gold < goldCost) return safeReply(interaction,{ content: `🐕 金幣不足！洗煉需要 ${goldCost} 金幣。`, flags: ['Ephemeral'] });
     
-    // 檢查材料 (這裡需要一個 checkInventory 邏輯，或者直接嘗試扣除)
-    // 簡單做法：直接在 handle 裡面查
-    // ... (實作略，假定已有 removeFromInventory)
+    // 檢查材料
+    const inv = getInventory(guildId, userId);
+    const material = inv.find(i => i.item_id === materialId && i.quantity >= materialCost);
+    if (!material) {
+        return safeReply(interaction, { content: `🐕 材料不足！需要 ${materialCost} 個 ${materialName}。`, flags: ['Ephemeral'] });
+    }
     
     // 實際洗煉邏輯：移除舊詞條，生成新詞條
     const newAffixes = generateRandomAffixes(eq.item_id, eq.quality, char.level);
@@ -164,9 +173,25 @@ export async function handleReforge(interaction, eqId) {
     deductGold(guildId, userId, goldCost);
     removeFromInventory(guildId, userId, materialId, materialCost);
 
+    const { AFFIX_REGISTRY } = await import('../data/gameData.js');
+    const affixLines = newAffixes.map(aff => {
+        const reg = AFFIX_REGISTRY[aff.id];
+        if (!reg) return '';
+        const statsStr = Object.entries(reg.stats).map(([k, v]) => `${k.toUpperCase()} +${Math.floor(v * aff.roll)}`).join(', ');
+        return `• ${fmt(COLORS.CYAN, reg.name)}: ${fmt(COLORS.WHITE, statsStr)}`;
+    }).filter(Boolean);
+
     const embed = rpgEmbed(
         '🌀 洗煉成功！',
-        '```ansi\n' + fmt(COLORS.GREEN, `你消耗了 ${fmt(COLORS.GOLD, `${goldCost} 金幣`)} 與 ${fmt(COLORS.CYAN, `${materialCost} 個 ${materialName}`)}，\n為 **${def.name}** 注入了新的靈魂！`) + '\n```'
+        '```ansi\n' + [
+            fmt(COLORS.GREEN, `你消耗了 ${goldCost} 金幣 與 ${materialCost} 個 ${materialName}，`),
+            fmt(COLORS.WHITE, `成功為 **${def.name}** 重塑了靈魂屬性：`),
+            '',
+            ...affixLines,
+            '',
+            fmt(COLORS.GRAY, '若對新屬性不滿意，可再次進行洗煉。')
+        ].join('\n') + '\n```',
+        0x9B59B6
     );
 
     await safeReply(interaction, { embeds: [embed], components: [backButton()] });
@@ -228,7 +253,8 @@ export async function handleEnhance(interaction, eqId) {
                     '',
                     `${fmt(COLORS.GOLD, '「這份勇氣與運氣，將被王國歌頌！」')}`
                 ].join('\n'),
-                color: 0xFFAA00
+                color: 0xFFAA00,
+                type: 'enhancement'
             });
         }
 
@@ -262,7 +288,8 @@ export async function handleEnhance(interaction, eqId) {
                     '',
                     `${fmt(COLORS.GRAY, '「路過的冒險者紛紛流下了同情的淚水...」')}`
                 ].join('\n'),
-                color: 0x880000
+                color: 0x880000,
+                type: 'enhancement'
             });
         }
     } else {
@@ -280,7 +307,8 @@ export async function handleEnhance(interaction, eqId) {
                     '',
                     `${fmt(COLORS.GRAY, '「至少裝備還在，下次一定會成功的！汪！」')}`
                 ].join('\n'),
-                color: 0x7F8C8D
+                color: 0x7F8C8D,
+                type: 'enhancement'
             });
         }
     }

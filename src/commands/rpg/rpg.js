@@ -3,6 +3,7 @@ import { isRpgEnabled } from '../../rpg/rpgDatabase.js';
 import { showHub } from '../../rpg/screens/hub.js';
 import { showCreate } from '../../rpg/screens/create.js';
 import { getCharacter } from '../../rpg/rpgDatabase.js';
+import { safeReply } from '../../rpg/rpgHelpers.js';
 
 export const data = new SlashCommandBuilder()
     .setName('rpg')
@@ -11,7 +12,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
     if (!isRpgEnabled(interaction.guildId)) {
-        return interaction.reply({
+        return safeReply(interaction, {
             content: '🐕 汪...RPG 系統目前未開啟！請管理員使用 `/setup-rpg enable` 來啟用。',
             flags: ['Ephemeral'],
         });

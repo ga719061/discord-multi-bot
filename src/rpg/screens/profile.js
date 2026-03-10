@@ -141,7 +141,7 @@ export async function showProfile(interaction, char) {
         console.error('showProfile error:', e);
         const errDetail = e.errors ? ` (${JSON.stringify(e.errors)})` : '';
         try {
-            if (interaction.replied || interaction.deferred) await interaction.followUp({ content: `🚫 UI 渲染程序發生異常: ${e.message}${errDetail}`, flags: ['Ephemeral'] });
+            if (interaction.replied || interaction.deferred) await safeReply(interaction, { content: `🚫 UI 渲染程序發生異常: ${e.message}${errDetail}`, flags: ['Ephemeral'] });
             else await safeReply(interaction,{ content: `🚫 UI 渲染程序發生異常: ${e.message}${errDetail}`, flags: ['Ephemeral'] });
         } catch (err) { }
     }

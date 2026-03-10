@@ -11,7 +11,7 @@ export async function showRanking(interaction) {
     if (leaderboard.length === 0) {
         const embed = rpgEmbed('🏆 騎士排行榜', '還沒有人成為騎士呢！\n快使用 `/rpg` 開始你的遠征吧！');
         embed.setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
-        return interaction.editReply({ embeds: [embed], components: [backButton()] });
+        return safeReply(interaction, { embeds: [embed], components: [backButton()] });
     }
 
     const medals = ['🥇', '🥈', '🥉'];
@@ -44,5 +44,5 @@ export async function showRanking(interaction) {
     );
     embed.setFooter({ text: `🐕👑 吉吉王國騎士團 | uid:${interaction.user.id}` });
 
-    await interaction.editReply({ embeds: [embed], components: [backButton()] });
+    await safeReply(interaction, { embeds: [embed], components: [backButton()] });
 }

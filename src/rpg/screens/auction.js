@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } from 'discord.js';
-import { rpgEmbed, rpgButton, backButton, qualityLabel, ansiText, widePad } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, backButton, qualityLabel, ansiText, widePad, safeReply } from '../rpgHelpers.js';
 import { getCharacter, getInventory, getEquipmentList, addAuction, getAuctions, getAuctionById, deleteAuction, getAuctionsBySeller, getTotalAuctionsCount, removeFromInventory, removeEquipment, addGold, deductGold, addToInventory, addEquipment, addAuctionHistory, getPersonalAuctionHistory } from '../rpgDatabase.js';
 import { EQUIPMENT, SHOP_ITEMS, SKILL_BOOKS, getSkillDef, ITEM_NAMES, QUALITY_MULTIPLIER, STAT_LABELS } from '../data/gameData.js';
 import { broadcastRpgEvent } from '../rpgHelpers.js';
@@ -39,13 +39,7 @@ export async function showAuctionHub(interaction) {
 
     const backRow = backButton();
 
-    try {
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.update({ embeds: [embed], components: [row, row2, backRow] });
-        } else {
-            await interaction.editReply({ embeds: [embed], components: [row, row2, backRow] });
-        }
-    } catch (e) { }
+    await safeReply(interaction, { embeds: [embed], components: [row, row2, backRow] });
 }
 
 // ---------- 取得物品顯示名稱與 Emoji ----------
@@ -96,7 +90,7 @@ export async function showAuctionBrowse(interaction, page = 0, message = null) {
     if (totalAuctions === 0) {
         const emptyEmbed = rpgEmbed('🔍 瀏覽拍賣場', '目前拍賣場沒有任何商品！').setFooter({ text: `uid:${interaction.user.id}` });
         const row = new ActionRowBuilder().addComponents(rpgButton('rpg_auction_hub', '返回', 'Secondary', '🔙'));
-        return interaction.editReply({ embeds: [emptyEmbed], components: [row] });
+        return safeReply(interaction, { embeds: [emptyEmbed], components: [row] });
     }
 
     const sellerNames = {};
@@ -147,7 +141,7 @@ export async function showAuctionBrowse(interaction, page = 0, message = null) {
     );
     rows.push(nav);
 
-    await interaction.editReply({ embeds: [embed], components: rows });
+    await safeReply(interaction, { embeds: [embed], components: rows });
 }
 
 export async function handleAuctionBuy(interaction) {
@@ -206,10 +200,10 @@ export async function showAuctionListSelection(interaction) {
         options.push({ label: `${def.name} [${qualityLabel(e.quality)}]`, value: `eq_${e.id}`, emoji: def.emoji });
     }
 
-    if (options.length === 0) return interaction.editReply({ embeds: [rpgEmbed('📤 上架', '你的背包是空的！')], components: [backButton()] });
+    if (options.length === 0) return safeReply(interaction, { embeds: [rpgEmbed('📤 上架', '你的背包是空的！')], components: [backButton()] });
 
     const menu = new StringSelectMenuBuilder().setCustomId('rpg_auction_list_prompt').setPlaceholder('選擇物品...').addOptions(options.slice(0, 25));
-    await interaction.editReply({ embeds: [rpgEmbed('📤 上架商品', '請選擇物品：')], components: [new ActionRowBuilder().addComponents(menu), backButton()] });
+    await safeReply(interaction, { embeds: [rpgEmbed('📤 上架商品', '請選擇物品：')], components: [new ActionRowBuilder().addComponents(menu), backButton()] });
 }
 
 export async function handleAuctionListPrompt(interaction) {
@@ -255,13 +249,13 @@ export async function showMyAuctions(interaction) {
     const userId = interaction.user.id;
     const guildId = interaction.guildId;
     const myAuctions = getAuctionsBySeller(guildId, userId);
-    if (myAuctions.length === 0) return interaction.editReply({ embeds: [rpgEmbed('📋 我的拍賣', '沒有上架商品。')], components: [backButton()] });
+    if (myAuctions.length === 0) return safeReply(interaction, { embeds: [rpgEmbed('📋 我的拍賣', '沒有上架商品。')], components: [backButton()] });
 
     const lines = myAuctions.map(a => `${a.id}: ${a.item_id} x${a.quantity} - ${a.price}G`);
     const menu = new StringSelectMenuBuilder().setCustomId('rpg_auction_cancel_select').setPlaceholder('下架...').addOptions(
         myAuctions.map(a => ({ label: `下架 ID:${a.id}`, value: `cancel_${a.id}` }))
     );
-    await interaction.editReply({ embeds: [rpgEmbed('📋 我的拍賣', lines.join('\n'))], components: [new ActionRowBuilder().addComponents(menu), backButton()] });
+    await safeReply(interaction, { embeds: [rpgEmbed('📋 我的拍賣', lines.join('\n'))], components: [new ActionRowBuilder().addComponents(menu), backButton()] });
 }
 
 export async function handleAuctionCancel(interaction) {
@@ -283,5 +277,5 @@ export async function handleAuctionCancel(interaction) {
 export async function showAuctionHistory(interaction) {
     const history = getPersonalAuctionHistory(interaction.guildId, interaction.user.id, 10);
     const lines = history.map(h => `${h.seller_id === interaction.user.id ? '📤 賣出' : '📥 買入'} ${h.item_id} x${h.quantity} (${h.price}G)`);
-    await interaction.editReply({ embeds: [rpgEmbed('📜 交易紀錄', lines.join('\n') || '無紀錄')], components: [backButton()] });
+    await safeReply(interaction, { embeds: [rpgEmbed('📜 交易紀錄', lines.join('\n') || '無紀錄')], components: [backButton()] });
 }

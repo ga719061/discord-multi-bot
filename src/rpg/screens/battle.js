@@ -1,6 +1,6 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { getBattle, updateBattle, deleteBattle, getCharacter, updateCharacter, addGold, addToInventory, addEquipment, getLearnedSkills, registerFirstKill, addMercenaryHistory } from '../rpgDatabase.js';
-import { rpgEmbed, rpgButton, hpBar, mpBar, hpBarBare, mpBarBare, battleActionRows, backButton, getUnlockedSkills, qualityLabel, broadcastRpgEvent, calcDamage, isCrit, isDodge, applyBuffsAndStates, processTurnEndStates, hasState, consumeShield, getJobTitle, formatItemName, executeSetHooks, formatBattleLog } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, hpBar, mpBar, hpBarBare, mpBarBare, battleActionRows, backButton, getUnlockedSkills, qualityLabel, broadcastRpgEvent, calcDamage, isCrit, isDodge, applyBuffsAndStates, processTurnEndStates, hasState, consumeShield, getJobTitle, formatItemName, executeSetHooks, formatBattleLog, safeReply } from '../rpgHelpers.js';
 import { fmt, COLORS } from '../../utils/style.js';
 import { logger } from '../../utils/logger.js';
 import { SKILLS, EQUIPMENT, SHOP_ITEMS, getXpForLevel, getItemDisplayName, SKILL_BOOK_DROP_POOLS, SKILL_BOOKS, getSkillDef, AREAS, QUALITY_MULTIPLIER, CLASSES } from '../data/gameData.js';
@@ -149,12 +149,7 @@ export async function renderBattle(interaction, battleId, actionLog = '') {
     }
 
     try {
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.update(payload);
-        } else {
-            // 嘗試更新
-            await interaction.editReply(payload).catch(() => { });
-        }
+        await safeReply(interaction, payload).catch(() => { });
     } catch (e) {
         // Fallback for expired interactions or external calls
         try {
@@ -221,10 +216,7 @@ function renderTargetSelection(interaction, battleId, actionType, skillId = null
     );
 
     const payload = { components: [row, backRow] };
-    if (interaction.deferred || interaction.replied) {
-        return interaction.editReply(payload);
-    }
-    return interaction.update(payload);
+    return safeReply(interaction, payload);
 }
 
 // ---------- 處理戰鬥行動 ----------
@@ -247,12 +239,12 @@ export async function handleBattleAction(interaction) {
     if (!battle || battle.status !== 'active') return;
 
     if (!battle.player_ids.includes(userId)) {
-        return interaction.followUp({ content: '🚫 閣下並未參與此場戰鬥。', flags: ['Ephemeral'] }).catch(() => {});
+        return safeReply(interaction, { content: '🚫 閣下並未參與此場戰鬥。', flags: ['Ephemeral'] }).catch(() => {});
     }
     const ps = battle.player_states[userId];
     battle.ally_summons = battle.ally_summons || [];
     if (ps.hp <= 0 && !id.startsWith('rpg_battle_flee_')) {
-        return interaction.followUp({ content: '🚫 意識已模糊，無法下達任何指令。', flags: ['Ephemeral'] }).catch(() => {});
+        return safeReply(interaction, { content: '🚫 意識已模糊，無法下達任何指令。', flags: ['Ephemeral'] }).catch(() => {});
     }
 
 
@@ -645,10 +637,7 @@ export async function handleBattleAction(interaction) {
                 );
 
                 const payload = { components: [row, backRow] };
-                if (interaction.deferred || interaction.replied) {
-                    return interaction.editReply(payload);
-                }
-                return interaction.update(payload);
+                return safeReply(interaction, payload);
             }
 
             // ===== 技能選擇後處理 (下拉) =====
@@ -1122,10 +1111,7 @@ export async function handleBattleAction(interaction) {
                 );
                 const backRow = new ActionRowBuilder().addComponents(rpgButton(`rpg_battle_back_${battleId}`, '返回', undefined, '🔙'));
                 const payload = { components: [row, backRow] };
-                if (interaction.deferred || interaction.replied) {
-                    return interaction.editReply(payload);
-                }
-                return interaction.update(payload);
+                return safeReply(interaction, payload);
             }
 
             // ===== 道具使用 (下拉) =====
@@ -1137,8 +1123,7 @@ export async function handleBattleAction(interaction) {
                 const { removeFromInventory } = await import('../rpgDatabase.js');
                 if (!def || !removeFromInventory(interaction.guildId, userId, itemId)) {
                     const failMsg = { content: '🐕 道具使用失敗！', flags: ['Ephemeral'] };
-                    if (interaction.deferred || interaction.replied) return interaction.followUp(failMsg);
-                    return safeReply(interaction,failMsg);
+                    return safeReply(interaction, failMsg);
                 }
 
                 if (def.effect.type === 'heal_hp') {
@@ -1161,10 +1146,7 @@ export async function handleBattleAction(interaction) {
                     }
                     const embed = rpgEmbed('🏃 逃跑成功！', `<@${userId}> 使用煙霧彈先行撤退了！`);
                     const payload = { embeds: [embed], components: [backButton()] };
-                    if (interaction.deferred || interaction.replied) {
-                        return interaction.editReply(payload);
-                    }
-                    return interaction.update(payload);
+                    return safeReply(interaction, payload);
                 }
             }
 
@@ -1183,10 +1165,7 @@ export async function handleBattleAction(interaction) {
                         updateBattle(battleId, { player_ids: battle.player_ids, player_states: battle.player_states, monster_data: monsters, ally_summons: battle.ally_summons || [] });
                     }
                     const payload = { embeds: [rpgEmbed('🏃 逃跑成功！', `<@${userId}> 成功撤離了戰地。`)], components: [backButton()] };
-                    if (interaction.deferred || interaction.replied) {
-                        return interaction.editReply(payload);
-                    }
-                    return interaction.update(payload);
+                    return safeReply(interaction, payload);
                 }
                 log = `<@${userId}> 逃跑失敗！`;
             }
@@ -1462,11 +1441,7 @@ export async function handleBattleAction(interaction) {
                 '🚫 行囊中已無藥物，請前往貿易所整備。',
             ].join('\n'));
             const payload = { embeds: [embed], components: [backButton()] };
-            if (!interaction.replied && !interaction.deferred) {
-                return interaction.update(payload);
-            } else {
-                return interaction.editReply(payload);
-            }
+            return safeReply(interaction, payload);
         }
 
         // 更新戰鬥狀態
@@ -1480,11 +1455,7 @@ export async function handleBattleAction(interaction) {
         await renderBattle(interaction, battleId, log);
     } catch (e) {
         logger.error('[Battle] Action error:', e);
-        if (!interaction.replied && !interaction.deferred) {
-            await safeReply(interaction,{ content: '🐕 戰鬥發生錯誤！', flags: ['Ephemeral'] }).catch(() => { });
-        } else {
-            await interaction.followUp({ content: '🐕 戰鬥發生錯誤！', flags: ['Ephemeral'] }).catch(() => { });
-        }
+            await safeReply(interaction, { content: '🐕 戰鬥發生錯誤！', flags: ['Ephemeral'] }).catch(() => { });
     }
 }
 
@@ -1557,6 +1528,11 @@ async function applyMonsterSkill(m, skill, targetInfo, battle, calcDamage, isDod
                 target.debuffs.push({ ...skill.debuff, turns: skill.debuff.turns });
                 turnLog += ` 使其 ${skill.debuff.stat.toUpperCase()} 降低了！`;
             }
+            if ((skill.stunChance && Math.random() * 100 < skill.stunChance) || (skill.stun && Math.random() * 100 < 15)) {
+                target.debuffs = target.debuffs || [];
+                target.debuffs.push({ stunned: true, turns: 1 });
+                turnLog += ` ⚠️ 使其陷入了眩暈！`;
+            }
         }
         if (skill.type === 'shield') {
             m.shield = (m.shield || 0) + Math.floor(m.atk * skill.shieldMultiplier);
@@ -1587,14 +1563,16 @@ async function applyMonsterSkill(m, skill, targetInfo, battle, calcDamage, isDod
                 await broadcastRpgEvent(interaction.client, interaction.guildId, {
                     title: '壯烈犧牲',
                     description: `冒險者 ${fmt(COLORS.BLUE, vName)} 在對抗 ${fmt(COLORS.WHITE, m.name)} 時不幸戰死...\n${fmt(COLORS.RED, '當前連敗數: ' + newStreak)}\n${fmt(COLORS.GRAY, '生涯死亡數: ' + newDeaths)}`,
-                    color: 0x880000
+                    color: 0x880000,
+                    type: 'death'
                 });
 
                 if (newStreak === 3) {
                     await broadcastRpgEvent(interaction.client, interaction.guildId, {
                         title: '連敗之恥！',
                         description: `冒險者 ${fmt(COLORS.BLUE, vName)} 已經連續慘死 3 次了！\n${fmt(COLORS.GOLD, '請大家捐獻一點藥水給他吧！')}`,
-                        color: 0x555555
+                        color: 0x555555,
+                        type: 'death'
                     });
                 } else if (newStreak === 5) {
                     await broadcastRpgEvent(interaction.client, interaction.guildId, {
@@ -1665,7 +1643,8 @@ async function handleVictory(interaction, battle, battleId, log) {
             await broadcastRpgEvent(interaction.client, guildId, {
                 title: '極品裝備現世！',
                 description: `運氣爆棚！冒險者 ${fmt(COLORS.BLUE, pName)} 從怪物身上\n獲得了 ${fmt(colorCode, qName)} 品質的「${fmt(COLORS.WHITE, getItemDisplayName(itemId))}」！`,
-                color: qColor
+                color: qColor,
+                type: 'rare_drop'
             });
         }
 
@@ -1753,7 +1732,8 @@ async function handleVictory(interaction, battle, battleId, log) {
                     await broadcastRpgEvent(interaction.client, guildId, {
                         title: '位階突破！',
                         description: `太驚人了！冒險者 ${fmt(COLORS.BLUE, lName)} 晉升為 ${fmt(COLORS.GOLD, newTitle)}！\n達到了 ${fmt(COLORS.GREEN, 'Lv.' + level)} 的全新境界！\n快去看看學會了什麼強大的新技能吧！`,
-                        color: level >= 60 ? 0xFFAA00 : 0x00FF00
+                        color: level >= 60 ? 0xFFAA00 : 0x00FF00,
+                        type: 'milestone'
                     });
                 }
             }
@@ -1791,7 +1771,8 @@ async function handleVictory(interaction, battle, battleId, log) {
                         await broadcastRpgEvent(interaction.client, guildId, {
                             title: '🏆 傳奇誕生：世界首殺！',
                             description: `${fmt(COLORS.GOLD, '史無前例！')} ${fmt(COLORS.WHITE, m.name)} 被擊敗了！\n恭喜 ${fmt(COLORS.BLUE, playerNames)} 締造了這項成就！\n他們的英姿將被銘刻在王國歷代記英雄榜上！`,
-                            color: 0xFFD700
+                            color: 0xFFD700,
+                            type: 'first_kill'
                         });
                     }
                 }
@@ -1817,7 +1798,8 @@ async function handleVictory(interaction, battle, battleId, log) {
                         await broadcastRpgEvent(interaction.client, guildId, {
                             title: '⚔️ 章節突破！',
                             description: `重大進展！冒險者 ${fmt(COLORS.BLUE, lName)} 成功完成了任務：\n「${fmt(COLORS.CYAN, result.quest.name)}」！\n王國的大門已為你進一步敞開！`,
-                            color: 0x1ABC9C
+                            color: 0x1ABC9C,
+                            type: 'quest_complete'
                         });
                     }
                 }
@@ -1849,11 +1831,7 @@ async function handleVictory(interaction, battle, battleId, log) {
     const payload = { embeds: [embed], components: [row] };
 
     try {
-        if (!interaction.replied && !interaction.deferred) {
-            await interaction.update(payload);
-        } else {
-            await interaction.editReply(payload);
-        }
+        await safeReply(interaction, payload).catch(() => { });
     } catch (e) { }
 
     // 清除該戰鬥記錄與緩存
