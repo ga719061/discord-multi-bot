@@ -1,6 +1,7 @@
 // ===== RPG 專用資料庫操作函數 =====
 import { getDb as _getDb, getGuildSettings } from '../utils/database.js';
 import { generateRandomAffixes, calculateTotalStats } from './rpgHelpers.js';
+import { MONSTERS } from './data/gameData.js';
 export const getDb = _getDb;
 
 // ---------- 初始化 RPG 表 ----------
@@ -624,8 +625,6 @@ export function claimExpedition(guildId, userId) {
     const finalHours = Math.min(hours, plannedHours);
     if (finalHours <= 0) return null;
 
-    const { MONSTERS } = db.prepare('SELECT 1').get() ? require('./data/gameData.js') : {}; // 這裡用動態載入避免循環引用，但在一般架構下 direct import 即可
-    // 實際上在頂部已經 import 了，但為了保險起見使用此處的 MONSTERS
     const areaMonsters = MONSTERS[exp.area_id] || [];
     if (areaMonsters.length === 0) return null;
 

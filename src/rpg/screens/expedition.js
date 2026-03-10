@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { getCharacter, getExpedition, startExpedition, claimExpedition, deleteExpedition } from '../rpgDatabase.js';
 import { rpgEmbed, rpgButton, backButton, safeReply, isOwner, notOwnerReply } from '../rpgHelpers.js';
-import { AREAS } from '../data/gameData.js';
+import { AREAS, getItemDisplayName } from '../data/gameData.js';
 import { fmt, COLORS, ansiBar, ansiBlock } from '../../utils/style.js';
 
 export async function renderExpedition(interaction, userId) {
@@ -173,7 +173,7 @@ export async function handleExpeditionInteractions(interaction) {
             return safeReply(interaction, { content: '🐕 遠征時間不足 1 小時，無法領取收益！提前停止將損失進度。', flags: ['Ephemeral'] });
         }
 
-        const dropMsg = reward.drops.length > 0 ? reward.drops.map(d => `${d.id} x${d.qty}`).join(', ') : '無額外掉落';
+        const dropMsg = reward.drops.length > 0 ? reward.drops.map(d => `${getItemDisplayName(d.id)} x${d.qty}`).join(', ') : '無額外掉落';
         const embed = rpgEmbed(
             '🎊 遠征大成功！',
             `本次遠征共持續了 **${reward.hours}** 小時。\n\n` +
