@@ -173,12 +173,13 @@ export async function handleExpeditionInteractions(interaction) {
             return safeReply(interaction, { content: '🐕 遠征時間不足 1 小時，無法領取收益！提前停止將損失進度。', flags: ['Ephemeral'] });
         }
 
-        const dropMsg = reward.drops.length > 0 ? reward.drops.map(d => `${getItemDisplayName(d.id)} x${d.qty}`).join(', ') : '無額外掉落';
+        const dropMsg = reward.drops.length > 0 ? reward.drops.map(d => `${getItemDisplayName(d.id)} x${d.qty}`).join('\n') : '無額外掉落';
+        const levelUpMsg = reward.levelsGained > 0 ? `\n🎉 **升級！** Lv.${reward.newLevel - reward.levelsGained} → Lv.${reward.newLevel} (+${reward.levelsGained * 5} 自由點數)` : '';
         const embed = rpgEmbed(
             '🎊 遠征大成功！',
             `本次遠征共持續了 **${reward.hours}** 小時。\n\n` +
             `💰 獲得金幣：**${reward.gold}**\n` +
-            `✨ 獲得經驗：**${reward.xp}**\n` +
+            `✨ 獲得經驗：**${reward.xp}**${levelUpMsg}\n` +
             `📦 獲得道具：\n${dropMsg}`
         );
 

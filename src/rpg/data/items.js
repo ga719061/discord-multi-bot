@@ -49,6 +49,9 @@ export const EQUIPMENT = {
     // ===== 荒野與中層區域 (T2: 🔵稀有) =====
     bark_body: { name: '樹皮護甲', emoji: '🧥', type: 'body', quality: 'fine', stats: { def: 25, mdef: 15 }, set_id: 'bark_set' },
     bark_shield: { name: '樹皮大盾', emoji: '🛡️', type: 'shield', quality: 'fine', stats: { def: 20, mdef: 10 }, set_id: 'bark_set' },
+    bark_helm: { name: '樹皮頭盔', emoji: '⛑️', type: 'head', quality: 'fine', stats: { def: 10, hp: 40 }, set_id: 'bark_set' },
+    bark_hands: { name: '樹皮護手', emoji: '🧤', type: 'hands', quality: 'fine', stats: { def: 8, atk: 5 }, set_id: 'bark_set' },
+    bark_feet: { name: '樹皮戰靴', emoji: '👢', type: 'feet', quality: 'fine', stats: { def: 8, spd: 5 }, set_id: 'bark_set' },
     forest_weapon_2h: { name: '精靈森林之弓', emoji: '🏹', type: 'weapon_2h', quality: 'fine', stats: { atk: 45, spd: 8 }, set_id: 'forest_set' },
     forest_body: { name: '精靈森林長袍', emoji: '🧥', type: 'body', quality: 'fine', stats: { def: 15, mdef: 35 }, set_id: 'forest_set' },
     spider_silk_body: { name: '蛛絲長袍', emoji: '🧥', type: 'body', quality: 'fine', stats: { def: 20, mdef: 40 }, set_id: 'spider_silk' },
@@ -62,7 +65,7 @@ export const EQUIPMENT = {
     stone_shield: { name: '巨岩大盾', emoji: '🛡️', type: 'shield', quality: 'rare', stats: { def: 55, mdef: 30 }, set_id: 'stone_set' },
     
     spirit_staff: { name: '精靈之杖', emoji: '🔮', type: 'weapon_2h', quality: 'fine', stats: { matk: 45, mp: 60 } },
-    wisdom_boots: { name: '智力長靴', emoji: '獲得', type: 'feet', quality: 'fine', stats: { mdef: 15, spd: 10, mp: 30 } },
+    wisdom_boots: { name: '智力長靴', emoji: '👢', type: 'feet', quality: 'fine', stats: { mdef: 15, spd: 10, mp: 30 } },
     caspa_cap: { name: '卡司柏帽子', emoji: '🎩', type: 'head', quality: 'fine', stats: { matk: 25, mp: 80 } },
     
     dragon_head: { name: '龍鱗頭盔', emoji: '⛑️', type: 'head', quality: 'rare', stats: { def: 35, hp: 120 }, set_id: 'dragon_set' },
@@ -233,6 +236,7 @@ export const ITEM_NAMES = {
     werewolf_paw: { name: '狼人的腳爪', emoji: '🐾', sellPrice: 10 },
     stolen_pouch: { name: '戰敗者的包裹', emoji: '💰', sellPrice: 12 },
     spirit_wood: { name: '精靈木', emoji: '🌳', sellPrice: 16 },
+    spirit_pouch: { name: '平民的物資袋', emoji: '📦', sellPrice: 25 },
     arachne_web: { name: '芮克妮的網', emoji: '🕸️', sellPrice: 20 },
     fungus_spore: { name: '蘑菇孢子', emoji: '🍄', sellPrice: 15 },
     ancient_bone: { name: '冥界骨骸', emoji: '🦴', sellPrice: 42 },

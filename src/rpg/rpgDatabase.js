@@ -1,7 +1,7 @@
 // ===== RPG 專用資料庫操作函數 =====
 import { getDb as _getDb, getGuildSettings } from '../utils/database.js';
 import { generateRandomAffixes, calculateTotalStats } from './rpgHelpers.js';
-import { MONSTERS } from './data/gameData.js';
+import { MONSTERS, getXpForLevel, CLASSES } from './data/gameData.js';
 export const getDb = _getDb;
 
 // ---------- 初始化 RPG 表 ----------
@@ -642,6 +642,7 @@ export function claimExpedition(guildId, userId) {
     const drops = [];
     const itemRewards = {}; // { itemId: qty }
     
+    const char = getCharacter(guildId, userId);
     for (let h = 0; h < finalHours; h++) {
         // 每小時擊殺 60 隻，進行隨機抽樣
         for (let k = 0; k < 60; k++) {
@@ -649,8 +650,19 @@ export function claimExpedition(guildId, userId) {
             if (randomMonster.drops) {
                 for (const d of randomMonster.drops) {
                     if (Math.random() * 100 < d.chance) {
-                        // 遠征不獲得裝備，僅獲得材料與藥水 (簡化處理以防背包爆掉)
-                        if (!d.isEquip) {
+                        if (d.isEquip) {
+                            // 遠征裝備掉落：直接生成並加入資料庫
+                            const qualityRoll = Math.random() * 100;
+                            let quality = 'common';
+                            if (qualityRoll < 1) quality = 'legendary';
+                            else if (qualityRoll < 5) quality = 'mythic';
+                            else if (qualityRoll < 15) quality = 'epic';
+                            else if (qualityRoll < 35) quality = 'rare';
+                            else if (qualityRoll < 65) quality = 'fine';
+
+                            const eqId = addEquipment(guildId, userId, d.id, quality, char.level);
+                            drops.push({ id: d.id, qty: 1, isEquip: true, eqId: eqId });
+                        } else {
                             itemRewards[d.id] = (itemRewards[d.id] || 0) + 1;
                         }
                     }
@@ -661,10 +673,33 @@ export function claimExpedition(guildId, userId) {
 
     // 更新角色數值
     addGold(guildId, userId, totalGold);
-    // XP 更新需要考慮升級邏輯，這裡調用 updateCharacter
-    const char = getCharacter(guildId, userId);
-    const newXp = char.xp + totalXp;
-    updateCharacter(guildId, userId, { xp: newXp });
+
+    // XP 更新 + 自動升級迴圈
+    let finalXp = char.xp + totalXp;
+    let level = char.level;
+    let freePoints = char.free_points || 0;
+    let needed = getXpForLevel(level + 1);
+    const growthUpdates = {};
+    let levelsGained = 0;
+
+    while (finalXp >= needed && level < 99) {
+        finalXp -= needed;
+        level++;
+        freePoints += 5;
+        levelsGained++;
+        needed = getXpForLevel(level + 1);
+
+        const cls = CLASSES[char.class];
+        if (cls) {
+            for (const [stat, val] of Object.entries(cls.growth)) {
+                if (stat === 'hp') { growthUpdates.max_hp = (growthUpdates.max_hp ?? char.max_hp) + val; }
+                else if (stat === 'mp') { growthUpdates.max_mp = (growthUpdates.max_mp ?? char.max_mp) + val; }
+                else { growthUpdates[stat] = (growthUpdates[stat] ?? char[stat]) + val; }
+            }
+        }
+    }
+
+    updateCharacter(guildId, userId, { xp: finalXp, level, free_points: freePoints, ...growthUpdates });
 
     // 發放道具
     for (const [itemId, qty] of Object.entries(itemRewards)) {
@@ -679,6 +714,8 @@ export function claimExpedition(guildId, userId) {
         hours: finalHours,
         xp: totalXp,
         gold: totalGold,
-        drops: drops
+        drops: drops,
+        levelsGained,
+        newLevel: level,
     };
 }
