@@ -1143,7 +1143,7 @@ export function getStatusFields(char, total, options = { showResources: true, sh
             value: [
                 `**攻擊:** ${total.atk} | **魔攻:** ${total.matk}`,
                 `**防禦:** ${total.def} | **魔防:** ${total.mdef}`,
-                `**暴擊:** ${total.crit}% | **暴傷:** ${total.crit_dmg}%`
+                `**暴擊:** ${Number(total.crit.toFixed(2))}% | **暴傷:** ${total.crit_dmg}%`
             ].join('\n'),
             inline: true
         });

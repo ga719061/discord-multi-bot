@@ -47,7 +47,7 @@ export async function showProfile(interaction, char) {
             '```ansi\n' + [
                 `${widePad('⚔️ 攻擊:', 8)} ${String(total.atk).padEnd(4)} ${widePad('🔮 魔攻:', 8)} ${total.matk}`,
                 `${widePad('🛡️ 防禦:', 8)} ${String(total.def).padEnd(4)} ${widePad('🏰 魔防:', 8)} ${total.mdef}`,
-                `${widePad('💥 暴擊:', 8)} ${String(total.crit + '%').padEnd(4)} ${widePad('🔥 暴傷:', 8)} ${total.crit_dmg}%`,
+                `${widePad('💥 暴擊:', 8)} ${String(Number(total.crit.toFixed(2)) + '%').padEnd(4)} ${widePad('🔥 暴傷:', 8)} ${total.crit_dmg}%`,
                 `${widePad('💨 速度:', 8)} ${String(total.spd).padEnd(4)} ${widePad('🎯 點數:', 8)} ${char.free_points || 0}`
             ].join('\n') + '\n```'
         ].join('\n');
