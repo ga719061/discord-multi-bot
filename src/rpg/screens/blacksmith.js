@@ -116,6 +116,7 @@ export async function handleDismantle(interaction, eqId) {
         case 'fine': shardCount = Math.floor(Math.random() * 7) + 12; break; // 12-18
         case 'rare': shardCount = Math.floor(Math.random() * 11) + 25; break; // 25-35
         case 'epic': essenceCount = Math.floor(Math.random() * 2) + 2; break; // 2-3
+        case 'mythic': essenceCount = Math.floor(Math.random() * 4) + 5; break; // 5-8
         case 'legendary': essenceCount = Math.floor(Math.random() * 5) + 8; break; // 8-12
     }
 
@@ -214,8 +215,6 @@ export async function handleEnhance(interaction, eqId) {
     if (!category) return safeReply(interaction,{ content: '🐕 此裝備無法強化！', flags: ['Ephemeral'] });
 
     const scrollId = getScrollForCategory(category);
-    const hasScroll = interaction.client.rpg_inventory_cache?.[userId]?.find(i => i.item_id === scrollId && i.quantity > 0) || true; 
-    // 注意：這裡應該直接透過 DB 檢查更保險，但為了維持邏輯一致性，我們先補全 DB 檢查
     const db = getDb();
     const invItem = db.prepare('SELECT quantity FROM rpg_inventory WHERE guild_id = ? AND user_id = ? AND item_id = ? AND stashed = 0').get(guildId, userId, scrollId);
     

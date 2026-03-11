@@ -15,7 +15,7 @@ export function handleBossDeathIntercept(monsters) {
                     m.buffs = m.buffs || [];
                     m.buffs.push({ ...reviveSkill.buff });
                 }
-                extraLog += `\n💀👑 **${m.name}** 被擊倒了... 但隨即在一陣綠色焰火中重組！恢復了 ${reviveSkill.hpPercent}% HP 並強化了能力！`;
+                extraLog += `\n${reviveSkill.announce || `💀👑 **${m.name}** 被擊倒了... 但隨即在一陣綠色焰火中重組！恢復了 ${reviveSkill.hpPercent}% HP 並強化了能力！`}`;
             }
 
             // 多階段 (Phases) 轉換機制
@@ -23,7 +23,7 @@ export function handleBossDeathIntercept(monsters) {
             if (phaseSkill && (m.phase || 1) < (phaseSkill.maxPhases || 3)) {
                 m.phase = (m.phase || 1) + 1;
                 m.currentHp = m.hp; // 滿血進入下一階段
-                extraLog += `\n🌀 **${m.name}** 形態轉換！進入了第 ${m.phase} 階段！散發出更恐怖的壓迫感！`;
+                extraLog += `\n${phaseSkill.announce || `🌀 **${m.name}** 形態轉換！進入了第 ${m.phase} 階段！散發出更恐怖的壓迫感！`}`;
             }
         }
     }
@@ -93,13 +93,29 @@ export async function handleBossAttack(boss, battle, potentialTargets, calcDamag
         // 執行技能或普攻
         if (selectedSkill) {
             if (selectedSkill.cooldown) bState.cooldowns[selectedSkill.name] = selectedSkill.cooldown;
-            turnLog += `\n${boss.emoji} **${boss.name}** 施展了 [${selectedSkill.name}]！！`;
+            if (selectedSkill.announce) {
+                turnLog += `\n${selectedSkill.announce}`;
+            } else {
+                turnLog += `\n${boss.emoji} **${boss.name}** 施展了 [${selectedSkill.name}]！！`;
+            }
 
             if (selectedSkill.type === 'buff') {
                 boss.buffs = boss.buffs || [];
                 if (selectedSkill.buffs) boss.buffs.push(...selectedSkill.buffs.map(b => ({ ...b })));
                 else if (selectedSkill.stat) boss.buffs.push({ stat: selectedSkill.stat, percent: selectedSkill.percent, turns: selectedSkill.turns || 3 });
                 turnLog += ` 其能力獲得了提昇！`;
+            } else if (selectedSkill.type === 'debuff') {
+                // 全體 debuff 技能
+                const debuffTargets = selectedSkill.target === 'all' ? aliveTargets : [aliveTargets[Math.floor(Math.random() * aliveTargets.length)]];
+                for (const tInfo of debuffTargets) {
+                    const t = tInfo.type === 'player' ? battle.player_states[tInfo.id] : battle.ally_summons[tInfo.index];
+                    if (t) {
+                        t.debuffs = t.debuffs || [];
+                        if (selectedSkill.states) t.debuffs.push(...selectedSkill.states.map(s => ({ name: selectedSkill.name, ...s })));
+                        else if (selectedSkill.debuff) t.debuffs.push({ name: selectedSkill.name, ...selectedSkill.debuff });
+                    }
+                }
+                turnLog += ` 所有目標受到了負面影響！`;
             } else if (selectedSkill.type === 'shield') {
                 const shieldVal = Math.floor(boss.atk * (selectedSkill.shieldMultiplier || 2));
                 boss.shield = (boss.shield || 0) + shieldVal;

@@ -170,9 +170,9 @@ export const EQUIPMENT = {
     earring_wisdom: { name: '睿智耳環', emoji: '💎', type: 'accessory', quality: 'fine', stats: { mp: 50 } },
 
     // 腰帶
-    leather_belt: { name: '皮革腰帶', emoji: 'ベルト', type: 'accessory', quality: 'common', stats: { def: 3 } },
-    ogre_belt: { name: '食人魔腰帶', emoji: 'ベルト', type: 'accessory', quality: 'rare', stats: { hp: 150, atk: 8 } },
-    belt_of_mind: { name: '靈魂腰帶', emoji: 'ベルト', type: 'accessory', quality: 'rare', stats: { mp: 100, matk: 8 } },
+    leather_belt: { name: '皮革腰帶', emoji: '🎗️', type: 'accessory', quality: 'common', stats: { def: 3 } },
+    ogre_belt: { name: '食人魔腰帶', emoji: '🎗️', type: 'accessory', quality: 'rare', stats: { hp: 150, atk: 8 } },
+    belt_of_mind: { name: '靈魂腰帶', emoji: '🎗️', type: 'accessory', quality: 'rare', stats: { mp: 100, matk: 8 } },
 
     // 其他
     speed_boots: { name: '疾風靴', emoji: '👢', type: 'feet', quality: 'common', stats: { spd: 5 } },
@@ -250,6 +250,10 @@ export const ITEM_NAMES = {
     scroll_weapon: { name: '對武器施法的卷軸', emoji: '📜', sellPrice: 500 },
     scroll_armor: { name: '對防具施法的卷軸', emoji: '📜', sellPrice: 300 },
     scroll_accessory: { name: '對飾品施法的卷軸', emoji: '📜', sellPrice: 200 },
+
+    // ===== 鐵匠鋪素材 =====
+    magic_shard: { name: '魔力碎片', emoji: '✨', sellPrice: 15 },
+    chaos_essence: { name: '混沌精華', emoji: '🌀', sellPrice: 120 },
 
     // ===== 消耗品與其他 =====
     hp_potion_s: { name: '紅色藥水', emoji: '🧪', sellPrice: 15 },

@@ -3,6 +3,7 @@
 // ---------- 技能與道具 (外部模組) ----------
 import { SKILLS as _SKILLS, SKILL_BOOKS as _SKILL_BOOKS, SKILL_BOOK_DROP_POOLS as _POOLS, getSkillDef as _getSkillDef } from './skills.js';
 import { EQUIPMENT as _EQUIPMENT, SHOP_ITEMS as _SHOP, ITEM_NAMES as _NAMES, getItemDisplayName as _getName, QUALITY_MULTIPLIER as _QM, EQUIP_SELL_PRICES as _ESP } from './items.js';
+import { BOSSES as _BOSSES } from './bosses.js';
 
 export const SKILLS = _SKILLS;
 export const SKILL_BOOKS = _SKILL_BOOKS;
@@ -14,6 +15,7 @@ export const ITEM_NAMES = _NAMES;
 export const getItemDisplayName = _getName;
 export const QUALITY_MULTIPLIER = _QM;
 export const EQUIP_SELL_PRICES = _ESP;
+export const BOSSES = _BOSSES;
 
 export const STAT_LABELS = {
     hp: '生命', mp: '魔力', atk: '攻擊', matk: '魔攻', def: '防禦', mdef: '魔防', spd: '速度',
@@ -244,49 +246,6 @@ export const MONSTERS = {
     ]
 };
 
-// ---------- BOSSES ----------
-export const BOSSES = {
-    talking_island: {
-        id: 'orc_king', name: '妖魔王', emoji: '👑👺', hp: 1200, atk: 120, def: 45, mdef: 40, spd: 20, xp: 500, gold: 1000,
-        skills: [{ name: '王之怒吼', type: 'buff', stat: 'atk', percent: 30, turns: 3, chance: 15 }, { name: '重斬', type: 'physical', multiplier: 1.8, chance: 20 }],
-        drops: [{ id: 'orc_king_heart', chance: 100 }, { id: 'orcish_sword', chance: 5, isEquip: true }, { id: 'orcish_greatsword', chance: 3, isEquip: true }, { id: 'orcish_amulet', chance: 20, isEquip: true }, { id: 'earring_protection', chance: 15, isEquip: true }, { id: 'orcish_king_blade', chance: 1, isEquip: true }, { id: 'orcish_crown', chance: 15, isEquip: true }]
-    },
-    elven_forest: {
-        id: 'corrupt_spirit', name: '汙濁精靈長', emoji: '🧚‍♂️💀', hp: 5000, atk: 450, matk: 550, def: 180, mdef: 300, spd: 40, xp: 2500, gold: 3000,
-        skills: [{ name: '精靈射擊', type: 'physical', multiplier: 1.5, count: 2, chance: 25 }, { name: '生命汲取', type: 'magical', multiplier: 1.8, lifesteal: 50, chance: 20 }],
-        drops: [{ id: 'spirit_wood', chance: 100 }, { id: 'spirit_staff', chance: 20, isEquip: true }, { id: 'forest_weapon_2h', chance: 15, isEquip: true }]
-    },
-    gludio_dungeon_low: {
-        id: 'caspa_family', name: '卡司柏家族', emoji: '🕵️🕵️🕵️🕵️', hp: 15000, atk: 800, matk: 1100, def: 500, mdef: 800, spd: 45, xp: 8000, gold: 12000,
-        skills: [{ name: '集體火球術', type: 'magical', multiplier: 1.5, chance: 25 }, { name: '魔法屏障', type: 'buff', stat: 'mdef', percent: 50, turns: 5, chance: 15 }],
-        drops: [{ id: 'caspa_cap_shard', chance: 100 }, { id: 'caspa_cap', chance: 25, isEquip: true }, { id: 'bone_lord_staff', chance: 15, isEquip: true }, { id: 'wisdom_boots', chance: 20, isEquip: true }]
-    },
-    dragon_valley: {
-        id: 'black_elder', name: '黑長者', emoji: '🧙‍♂️⚡', hp: 55000, atk: 1800, matk: 2200, def: 2200, mdef: 4000, spd: 60, xp: 40000, gold: 60000,
-        skills: [{ name: '極道落雷', type: 'magical', multiplier: 2.8, chance: 30 }],
-        drops: [{ id: 'black_elder_bead', chance: 100 }, { id: 'dragon_eye_amulet', chance: 15, isEquip: true }, { id: 'dragon_scale_armor', chance: 10, isEquip: true }, { id: 'scroll_weapon', chance: 30 }]
-    },
-    talking_island_dungeon: {
-        id: 'baphomet', name: '巴風特', emoji: '🐐😈', hp: 200000, atk: 4500, matk: 5500, def: 8000, mdef: 12000, spd: 80, xp: 150000, gold: 200000,
-        skills: [{ name: '地裂術', type: 'magical', multiplier: 2.5, chance: 30 }, { name: '石化詛咒', type: 'debuff', stat: 'spd', percent: -90, turns: 2, chance: 20 }],
-        drops: [{ id: 'baphomet_soul', chance: 100 }, { id: 'baphomet_amulet', chance: 20, isEquip: true }, { id: 'baphomet_staff', chance: 10, isEquip: true }, { id: 'baphomet_armor', chance: 10, isEquip: true }]
-    },
-    gludio_dungeon_deep: {
-        id: 'death_knight', name: '死亡騎士', emoji: '🔥💀⚔️', hp: 650000, atk: 7500, def: 25000, mdef: 22000, spd: 100, xp: 800000, gold: 1200000,
-        skills: [{ name: '獄火焚身', type: 'magical', multiplier: 3.5, dot: { percent: 12, turns: 5 }, chance: 30 }, { name: '無視防禦重擊', type: 'physical', multiplier: 4.5, ignore_def: 50, chance: 20 }],
-        drops: [{ id: 'dk_heart', chance: 100 }, { id: 'chaos_ring', chance: 10, isEquip: true }, { id: 'dk_flame_blade', chance: 5, isEquip: true }, { id: 'dk_helmet', chance: 8, isEquip: true }, { id: 'dk_armor', chance: 10, isEquip: true }, { id: 'dk_gloves', chance: 8, isEquip: true }, { id: 'dk_boots', chance: 8, isEquip: true }]
-    },
-    fire_dragon_cave: {
-        id: 'ifrit', name: '伊弗利特', emoji: '🌋🔥', hp: 1500000, atk: 9500, def: 80000, mdef: 90000, spd: 120, xp: 3000000, gold: 5000000,
-        skills: [{ name: '火焰噴射', type: 'magical', multiplier: 3.0, chance: 25 }],
-        drops: [{ id: 'lava_heart', chance: 100 }, { id: 'emperor_crown', chance: 1, isEquip: true }, { id: 'lava_dragon_core', chance: 15, isEquip: true }, { id: 'volcanic_greatsword', chance: 2, isEquip: true }]
-    },
-    antharas_lair: {
-        id: 'antharas', name: '地龍 安塔瑞斯', emoji: '🐉', hp: 8000000, atk: 12500, def: 300000, mdef: 400000, spd: 160, xp: 20000000, gold: 50000000,
-        skills: [{ name: '毒霧噴息', type: 'magical', multiplier: 4.5, dot: { percent: 15, turns: 5 }, chance: 30 }, { name: '地裂巨震', type: 'physical', multiplier: 5.5, stun: true, chance: 25 }],
-        drops: [{ id: 'earth_dragon_scale', chance: 100 }, { id: 'dragonslayer', chance: 5, isEquip: true }, { id: 'antharas_plate', chance: 10, isEquip: true }, { id: 'invisi_cloak', chance: 5, isEquip: true }, { id: 'jiji_crown', chance: 1, isEquip: true }, { id: 'jiji_chaos_crown', chance: 0.1, isEquip: true }]
-    }
-};
 
 // ---------- 召喚配方 (Summon Recipes) ----------
 export const SUMMON_RECIPES = {

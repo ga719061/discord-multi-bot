@@ -233,8 +233,14 @@ export function registerRpgRouter(client) {
                      if (id.startsWith('rpg_bs_reforge_list_')) {
                           return await showBlacksmithList(interaction, 'reforge');
                      }
+                     if (id.startsWith('rpg_bs_enhance_list_')) {
+                          return await showBlacksmithList(interaction, 'enhance');
+                     }
                      if (id.startsWith('rpg_bs_select_')) {
-                          const parts = id.split('_');
+                          // customId = rpg_bs_select_{userId}, 實際選擇值在 values[0]
+                          const val = interaction.values?.[0] || id;
+                          const parts = val.split('_');
+                          // val = rpg_bs_select_{actionType}_{eqId}
                           const type = parts[3];
                           const eqId = parseInt(parts[4]);
                           if (type === 'dismantle') return await handleDismantle(interaction, eqId);
