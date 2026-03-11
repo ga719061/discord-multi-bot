@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder } from 'discord.js';
-import { RACES, CLASSES, SKILLS, AREAS, QUALITY_MULTIPLIER, EQUIPMENT, SHOP_ITEMS, getXpForLevel, AFFIX_REGISTRY, SET_REGISTRY, SKILL_BOOKS, GLOBAL_STAT_CONVERSION } from './data/gameData.js';
+import { RACES, CLASSES, SKILLS, AREAS, QUALITY_MULTIPLIER, EQUIPMENT, SHOP_ITEMS, getXpForLevel, AFFIX_REGISTRY, SET_REGISTRY, SKILL_BOOKS, GLOBAL_STAT_CONVERSION, AREA_QUALITY_WEIGHTS } from './data/gameData.js';
 import { getGuildSettings } from '../utils/database.js';
 import * as StyleUtils from '../utils/style.js';
 const { fmt, COLORS, ansiBar } = StyleUtils;
@@ -578,6 +578,23 @@ export function getScrollForCategory(category) {
     return { weapon: 'scroll_weapon', armor: 'scroll_armor', accessory: 'scroll_accessory' }[category] || null;
 }
 
+/**
+ * 根據區域 ID 隨機抽取品質
+ * @param {string} areaId - 區域 ID (e.g. 'talking_island')
+ * @returns {string} 品質字串 (e.g. 'common', 'rare')
+ */
+export function rollQualityForArea(areaId) {
+    const w = AREA_QUALITY_WEIGHTS[areaId];
+    if (!w) return 'common'; // fallback
+    const roll = Math.random() * 100;
+    if (roll < w.legendary) return 'legendary';
+    if (roll < w.mythic)    return 'mythic';
+    if (roll < w.epic)      return 'epic';
+    if (roll < w.rare)      return 'rare';
+    if (roll < w.fine)      return 'fine';
+    return 'common';
+}
+
 export function getActualStats(itemId, quality, enhancement = 0, bonusData = {}) {
     const def = EQUIPMENT[itemId];
     if (!def) return {};
@@ -651,7 +668,7 @@ export function generateRandomAffixes(itemId, quality, charLevel = 1) {
     if (affPool.length === 0) return {};
 
     // 品質決定詞條數量
-    const countMap = { common: 0, fine: 1, rare: 2, epic: 3, legendary: 4 };
+    const countMap = { common: 0, fine: 1, rare: 2, epic: 3, mythic: 4, legendary: 4 };
     const count = countMap[quality] || 0;
     if (count === 0) return {};
 

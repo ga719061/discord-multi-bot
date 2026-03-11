@@ -1,6 +1,6 @@
 // ===== RPG 專用資料庫操作函數 =====
 import { getDb as _getDb, getGuildSettings } from '../utils/database.js';
-import { generateRandomAffixes, calculateTotalStats } from './rpgHelpers.js';
+import { generateRandomAffixes, calculateTotalStats, rollQualityForArea } from './rpgHelpers.js';
 import { MONSTERS, getXpForLevel, CLASSES } from './data/gameData.js';
 export const getDb = _getDb;
 
@@ -651,14 +651,8 @@ export function claimExpedition(guildId, userId) {
                 for (const d of randomMonster.drops) {
                     if (Math.random() * 100 < d.chance) {
                         if (d.isEquip) {
-                            // 遠征裝備掉落：直接生成並加入資料庫
-                            const qualityRoll = Math.random() * 100;
-                            let quality = 'common';
-                            if (qualityRoll < 1) quality = 'legendary';
-                            else if (qualityRoll < 5) quality = 'mythic';
-                            else if (qualityRoll < 15) quality = 'epic';
-                            else if (qualityRoll < 35) quality = 'rare';
-                            else if (qualityRoll < 65) quality = 'fine';
+                            // 遠征裝備掉落：根據區域品質權重決定品質
+                            const quality = rollQualityForArea(exp.area_id);
 
                             const eqId = addEquipment(guildId, userId, d.id, quality, char.level);
                             drops.push({ id: d.id, qty: 1, isEquip: true, eqId: eqId });

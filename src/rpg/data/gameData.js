@@ -203,46 +203,221 @@ export const AREAS = [
     { id: 'antharas_lair', name: '安塔瑞斯棲息地', emoji: '🐉', levelReq: 95, desc: '傳說中地龍的長眠之地，迎接最終的挑戰。' },
 ];
 
+// ---------- 區域品質權重 (用於遠征掉落) ----------
+// 每個區域對應的品質權重，數值為累積百分比閾值
+export const AREA_QUALITY_WEIGHTS = {
+    // T1 區域 (Lv 1-25): 主要掉落 Common / Fine
+    talking_island:    { legendary: 0.2, mythic: 0.5, epic: 3,  rare: 15, fine: 55 },
+    elven_forest:      { legendary: 0.5, mythic: 1,   epic: 5,  rare: 20, fine: 60 },
+    // T2 區域 (Lv 26-50): 主要掉落 Fine / Rare
+    gludio_dungeon_low:{ legendary: 1,   mythic: 3,   epic: 10, rare: 40, fine: 75 },
+    dragon_valley:     { legendary: 1.5, mythic: 4,   epic: 15, rare: 50, fine: 80 },
+    // T3 區域 (Lv 51-75): 主要掉落 Rare / Epic
+    talking_island_dungeon: { legendary: 2, mythic: 6, epic: 25, rare: 65, fine: 90 },
+    gludio_dungeon_deep:    { legendary: 3, mythic: 8, epic: 35, rare: 75, fine: 95 },
+    // T4 區域 (Lv 76-99): 主要掉落 Epic / Mythic / Legendary
+    fire_dragon_cave:  { legendary: 5,  mythic: 15, epic: 50, rare: 85, fine: 98 },
+    antharas_lair:     { legendary: 8,  mythic: 20, epic: 60, rare: 90, fine: 99 },
+};
+
 export const MONSTERS = {
+    // ==================== T1: 說話之島 (Lv 1-25) ====================
     talking_island: [
-        { id: 'slime', name: '史萊姆', emoji: '🟢', hp: 80, atk: 15, def: 5, mdef: 5, spd: 3, xp: 20, gold: 15, skills: [{ name: '溶解食人', type: 'magical', multiplier: 1.2, dot: { type: 'dissolve', percent: 5, turns: 2 }, chance: 20 }], drops: [{ id: 'slime_gel', chance: 50 }, { id: 'slime_ring', chance: 1, isEquip: true }, { id: 'health_charm', chance: 1, isEquip: true }, { id: 'slime_hat', chance: 1, isEquip: true }, { id: 'slime_body', chance: 0.5, isEquip: true }, { id: 'slime_gloves', chance: 1, isEquip: true }, { id: 'slime_legs', chance: 1, isEquip: true }, { id: 'slime_feet', chance: 1.5, isEquip: true }, { id: 'slime_shield', chance: 0.8, isEquip: true }] },
-        { id: 'orc', name: '妖魔', emoji: '👺', hp: 120, atk: 25, def: 10, mdef: 10, spd: 5, xp: 35, gold: 20, skills: [{ name: '狂暴打擊', type: 'physical', multiplier: 1.3, chance: 15 }], drops: [{ id: 'stolen_pouch', chance: 30 }, { id: 'orcish_mail', chance: 0.5, isEquip: true }, { id: 'orcish_helm', chance: 1, isEquip: true }, { id: 'orcish_hands', chance: 1, isEquip: true }, { id: 'orcish_feet', chance: 1, isEquip: true }] },
-        { id: 'werewolf', name: '狼人', emoji: '🐺', hp: 180, atk: 40, def: 15, mdef: 15, spd: 15, xp: 55, gold: 40, skills: [{ name: '滿月嚎叫', type: 'buff', stat: 'atk', percent: 30, turns: 3, chance: 15 }], drops: [{ id: 'werewolf_paw', chance: 40 }, { id: 'boar_king_helm', chance: 1, isEquip: true }, { id: 'leather_belt', chance: 2, isEquip: true }, { id: 'boar_hide_body', chance: 0.5, isEquip: true }, { id: 'boar_hide_feet', chance: 1, isEquip: true }, { id: 'bandit_hands', chance: 1, isEquip: true }, { id: 'brave_potion', chance: 1.5 }] }
+        { id: 'slime', name: '史萊姆', emoji: '🟢', hp: 80, atk: 15, def: 5, mdef: 5, spd: 3, xp: 20, gold: 15, skills: [{ name: '溶解食人', type: 'magical', multiplier: 1.2, dot: { type: 'dissolve', percent: 5, turns: 2 }, chance: 20 }], drops: [
+            { id: 'slime_gel', chance: 55 },
+            { id: 'slime_hat', chance: 4, isEquip: true },
+            { id: 'slime_gloves', chance: 3.5, isEquip: true },
+            { id: 'slime_legs', chance: 3.5, isEquip: true },
+            { id: 'slime_feet', chance: 4, isEquip: true },
+            { id: 'slime_body', chance: 2, isEquip: true },
+            { id: 'slime_shield', chance: 2.5, isEquip: true },
+            { id: 'slime_ring', chance: 1.5, isEquip: true },
+            { id: 'health_charm', chance: 1.5, isEquip: true },
+        ] },
+        { id: 'orc', name: '妖魔', emoji: '👺', hp: 120, atk: 25, def: 10, mdef: 10, spd: 5, xp: 35, gold: 20, skills: [{ name: '狂暴打擊', type: 'physical', multiplier: 1.3, chance: 15 }], drops: [
+            { id: 'stolen_pouch', chance: 45 },
+            { id: 'orcish_helm', chance: 3.5, isEquip: true },
+            { id: 'orcish_hands', chance: 3.5, isEquip: true },
+            { id: 'orcish_feet', chance: 3.5, isEquip: true },
+            { id: 'orcish_mail', chance: 2, isEquip: true },
+        ] },
+        { id: 'werewolf', name: '狼人', emoji: '🐺', hp: 180, atk: 40, def: 15, mdef: 15, spd: 15, xp: 55, gold: 40, skills: [{ name: '滿月嚎叫', type: 'buff', stat: 'atk', percent: 30, turns: 3, chance: 15 }], drops: [
+            { id: 'werewolf_paw', chance: 50 },
+            { id: 'brave_potion', chance: 8 },
+            { id: 'boar_king_helm', chance: 2.5, isEquip: true },
+            { id: 'leather_belt', chance: 4, isEquip: true },
+            { id: 'bandit_hands', chance: 3, isEquip: true },
+            { id: 'boar_hide_feet', chance: 3, isEquip: true },
+            { id: 'boar_hide_body', chance: 1.5, isEquip: true },
+        ] }
     ],
+    // ==================== T1: 妖精之森 (Lv 15-30) ====================
     elven_forest: [
-        { id: 'fungus', name: '蘑菇', emoji: '🍄', hp: 450, atk: 70, def: 35, mdef: 50, spd: 5, xp: 120, gold: 80, skills: [{ name: '混亂孢子', type: 'debuff', stat: 'spd', percent: -40, turns: 2, chance: 20 }], drops: [{ id: 'fungus_spore', chance: 40 }, { id: 'bark_body', chance: 1, isEquip: true }, { id: 'bark_shield', chance: 1, isEquip: true }] },
-        { id: 'arachne', name: '芮克妮', emoji: '🕸️', hp: 800, atk: 130, def: 60, mdef: 80, spd: 35, xp: 250, gold: 200, skills: [{ name: '劇毒噴吐', type: 'magical', multiplier: 1.2, dot: { type: 'poison', percent: 5, turns: 3 }, chance: 20 }], drops: [{ id: 'arachne_web', chance: 30 }, { id: 'spirit_ring', chance: 2, isEquip: true }, { id: 'spider_silk_body', chance: 0.5, isEquip: true }, { id: 'spider_silk_hands', chance: 1, isEquip: true }, { id: 'bark_body', chance: 0.8, isEquip: true }, { id: 'bark_shield', chance: 0.5, isEquip: true }, { id: 'scroll_armor', chance: 0.3 }] },
-        { id: 'ent', name: '妖精之樹', emoji: '🌳', hp: 1200, atk: 120, def: 100, mdef: 150, spd: 10, xp: 350, gold: 250, skills: [{ name: '根鬚纏繞', type: 'debuff', stat: 'spd', percent: -50, turns: 3, chance: 15 }], drops: [{ id: 'spirit_pouch', chance: 40 }, { id: 'spirit_ring', chance: 1, isEquip: true }, { id: 'bark_helm', chance: 1, isEquip: true }, { id: 'bark_hands', chance: 1, isEquip: true }, { id: 'bark_feet', chance: 1, isEquip: true }] }
+        { id: 'fungus', name: '蘑菇', emoji: '🍄', hp: 450, atk: 70, def: 35, mdef: 50, spd: 5, xp: 120, gold: 80, skills: [{ name: '混亂孢子', type: 'debuff', stat: 'spd', percent: -40, turns: 2, chance: 20 }], drops: [
+            { id: 'fungus_spore', chance: 50 },
+            { id: 'bark_body', chance: 2.5, isEquip: true },
+            { id: 'bark_shield', chance: 3, isEquip: true },
+        ] },
+        { id: 'arachne', name: '芮克妮', emoji: '🕸️', hp: 800, atk: 130, def: 60, mdef: 80, spd: 35, xp: 250, gold: 200, skills: [{ name: '劇毒噴吐', type: 'magical', multiplier: 1.2, dot: { type: 'poison', percent: 5, turns: 3 }, chance: 20 }], drops: [
+            { id: 'arachne_web', chance: 40 },
+            { id: 'spider_silk_hands', chance: 3, isEquip: true },
+            { id: 'spirit_ring', chance: 2, isEquip: true },
+            { id: 'spider_silk_body', chance: 1.5, isEquip: true },
+            { id: 'bark_body', chance: 1.5, isEquip: true },
+            { id: 'bark_shield', chance: 1.5, isEquip: true },
+            { id: 'scroll_armor', chance: 0.5 },
+        ] },
+        { id: 'ent', name: '妖精之樹', emoji: '🌳', hp: 1200, atk: 120, def: 100, mdef: 150, spd: 10, xp: 350, gold: 250, skills: [{ name: '根鬚纏繞', type: 'debuff', stat: 'spd', percent: -50, turns: 3, chance: 15 }], drops: [
+            { id: 'spirit_pouch', chance: 50 },
+            { id: 'bark_helm', chance: 3, isEquip: true },
+            { id: 'bark_hands', chance: 3, isEquip: true },
+            { id: 'bark_feet', chance: 3, isEquip: true },
+            { id: 'spirit_ring', chance: 1.5, isEquip: true },
+        ] }
     ],
+    // ==================== T2: 古魯丁地監 淺層 (Lv 30-45) ====================
     gludio_dungeon_low: [
-        { id: 'skeleton', name: '骷髏', emoji: '💀', hp: 1500, atk: 220, def: 120, mdef: 100, spd: 15, xp: 600, gold: 400, skills: [{ name: '裂骨重擊', type: 'physical', multiplier: 1.5, stunChance: 15, chance: 15 }], drops: [{ id: 'ancient_bone', chance: 45 }, { id: 'bone_head', chance: 1, isEquip: true }, { id: 'bone_hands', chance: 1, isEquip: true }, { id: 'bone_legs', chance: 1, isEquip: true }, { id: 'bone_feet', chance: 1, isEquip: true }, { id: 'bone_shield', chance: 0.5, isEquip: true }, { id: 'stone_helm', chance: 0.5, isEquip: true }, { id: 'stone_shield', chance: 0.3, isEquip: true }, { id: 'scroll_armor', chance: 0.5 }] },
-        { id: 'ghoul', name: '食屍鬼', emoji: '🧟', hp: 2000, atk: 280, def: 150, mdef: 120, spd: 10, xp: 800, gold: 500, skills: [{ name: '腐爛抓擊', type: 'physical', multiplier: 1.4, dot: { type: 'rot', percent: 8, turns: 2 }, chance: 20 }], drops: [{ id: 'ancient_bone', chance: 50 }, { id: 'earring_wisdom', chance: 2, isEquip: true }, { id: 'stone_plate', chance: 0.3, isEquip: true }, { id: 'stone_body', chance: 0.5, isEquip: true }, { id: 'stone_sword', chance: 0.5, isEquip: true }, { id: 'bone_body', chance: 0.5, isEquip: true }, { id: 'scroll_weapon', chance: 0.3 }] },
-        { id: 'sparta', name: '斯巴托', emoji: '⚔️💀', hp: 2500, atk: 350, def: 200, mdef: 150, spd: 25, xp: 1000, gold: 800, skills: [{ name: '致命突刺', type: 'physical', multiplier: 1.7, chance: 20 }], drops: [{ id: 'ancient_bone', chance: 60 }, { id: 'bone_mask', chance: 0.8, isEquip: true }, { id: 'bone_shield', chance: 0.5, isEquip: true }, { id: 'scroll_armor', chance: 0.8 }] }
+        { id: 'skeleton', name: '骷髏', emoji: '💀', hp: 1500, atk: 220, def: 120, mdef: 100, spd: 15, xp: 600, gold: 400, skills: [{ name: '裂骨重擊', type: 'physical', multiplier: 1.5, stunChance: 15, chance: 15 }], drops: [
+            { id: 'ancient_bone', chance: 55 },
+            { id: 'bone_head', chance: 3, isEquip: true },
+            { id: 'bone_hands', chance: 3, isEquip: true },
+            { id: 'bone_legs', chance: 3, isEquip: true },
+            { id: 'bone_feet', chance: 3, isEquip: true },
+            { id: 'bone_shield', chance: 1.5, isEquip: true },
+            { id: 'stone_helm', chance: 1, isEquip: true },
+            { id: 'stone_shield', chance: 0.8, isEquip: true },
+            { id: 'scroll_armor', chance: 1 },
+        ] },
+        { id: 'ghoul', name: '食屍鬼', emoji: '🧟', hp: 2000, atk: 280, def: 150, mdef: 120, spd: 10, xp: 800, gold: 500, skills: [{ name: '腐爛抓擊', type: 'physical', multiplier: 1.4, dot: { type: 'rot', percent: 8, turns: 2 }, chance: 20 }], drops: [
+            { id: 'ancient_bone', chance: 60 },
+            { id: 'earring_wisdom', chance: 2, isEquip: true },
+            { id: 'bone_body', chance: 1.5, isEquip: true },
+            { id: 'stone_body', chance: 1, isEquip: true },
+            { id: 'stone_plate', chance: 0.8, isEquip: true },
+            { id: 'stone_sword', chance: 0.8, isEquip: true },
+            { id: 'scroll_weapon', chance: 0.8 },
+        ] },
+        { id: 'sparta', name: '斯巴托', emoji: '⚔️💀', hp: 2500, atk: 350, def: 200, mdef: 150, spd: 25, xp: 1000, gold: 800, skills: [{ name: '致命突刺', type: 'physical', multiplier: 1.7, chance: 20 }], drops: [
+            { id: 'ancient_bone', chance: 60 },
+            { id: 'bone_mask', chance: 1.5, isEquip: true },
+            { id: 'bone_shield', chance: 1.5, isEquip: true },
+            { id: 'scroll_armor', chance: 1.5 },
+        ] }
     ],
+    // ==================== T2: 龍之谷 (Lv 45-60) ====================
     dragon_valley: [
-        { id: 'skeleton_knight_dv', name: '骷髏騎士', emoji: '🛡️💀', hp: 4500, atk: 450, def: 350, mdef: 300, spd: 25, xp: 1500, gold: 1000, skills: [{ name: '烈焰斬', type: 'physical', multiplier: 1.6, chance: 15 }], drops: [{ id: 'ancient_bone', chance: 40 }, { id: 'ogre_belt', chance: 1.5, isEquip: true }, { id: 'dragon_head', chance: 0.5, isEquip: true }, { id: 'dragon_hands', chance: 0.8, isEquip: true }, { id: 'dragon_scale_greaves', chance: 0.8, isEquip: true }, { id: 'dragon_scale_boots', chance: 1, isEquip: true }, { id: 'scroll_weapon', chance: 1 }] },
-        { id: 'wyvern_dv', name: '幼龍', emoji: '🐲', hp: 6000, atk: 600, def: 450, mdef: 500, spd: 50, xp: 2500, gold: 2000, skills: [{ name: '龍之氣息', type: 'magical', multiplier: 2.0, chance: 20 }], drops: [{ id: 'dragon_scale_mat', chance: 30 }, { id: 'dragon_body', chance: 0.2, isEquip: true }, { id: 'dragon_scale_vest', chance: 0.5, isEquip: true }, { id: 'dragon_fang_blade', chance: 0.5, isEquip: true }, { id: 'scroll_armor', chance: 1.5 }] },
-        { id: 'cockatrice', name: '考庫雷斯', emoji: '🐔🐍', hp: 5500, atk: 550, def: 300, mdef: 450, spd: 70, xp: 2200, gold: 1800, skills: [{ name: '石化啄擊', type: 'debuff', stat: 'spd', percent: -50, turns: 2, chance: 20 }], drops: [{ id: 'dragon_scale_mat', chance: 40 }, { id: 'necklace_dex', chance: 1, isEquip: true }, { id: 'scroll_weapon', chance: 1 }] }
+        { id: 'skeleton_knight_dv', name: '骷髏騎士', emoji: '🛡️💀', hp: 4500, atk: 450, def: 350, mdef: 300, spd: 25, xp: 1500, gold: 1000, skills: [{ name: '烈焰斬', type: 'physical', multiplier: 1.6, chance: 15 }], drops: [
+            { id: 'ancient_bone', chance: 45 },
+            { id: 'dragon_scale_boots', chance: 2.5, isEquip: true },
+            { id: 'dragon_hands', chance: 2, isEquip: true },
+            { id: 'dragon_scale_greaves', chance: 2, isEquip: true },
+            { id: 'dragon_head', chance: 1.5, isEquip: true },
+            { id: 'ogre_belt', chance: 2, isEquip: true },
+            { id: 'scroll_weapon', chance: 1.5 },
+        ] },
+        { id: 'wyvern_dv', name: '幼龍', emoji: '🐲', hp: 6000, atk: 600, def: 450, mdef: 500, spd: 50, xp: 2500, gold: 2000, skills: [{ name: '龍之氣息', type: 'magical', multiplier: 2.0, chance: 20 }], drops: [
+            { id: 'dragon_scale_mat', chance: 40 },
+            { id: 'dragon_scale_vest', chance: 1.5, isEquip: true },
+            { id: 'dragon_fang_blade', chance: 1, isEquip: true },
+            { id: 'dragon_body', chance: 0.5, isEquip: true },
+            { id: 'scroll_armor', chance: 2 },
+        ] },
+        { id: 'cockatrice', name: '考庫雷斯', emoji: '🐔🐍', hp: 5500, atk: 550, def: 300, mdef: 450, spd: 70, xp: 2200, gold: 1800, skills: [{ name: '石化啄擊', type: 'debuff', stat: 'spd', percent: -50, turns: 2, chance: 20 }], drops: [
+            { id: 'dragon_scale_mat', chance: 50 },
+            { id: 'necklace_dex', chance: 1.5, isEquip: true },
+            { id: 'scroll_weapon', chance: 2 },
+        ] }
     ],
+    // ==================== T3: 說話之島地監 深層 (Lv 60-75) ====================
     talking_island_dungeon: [
-        { id: 'lycanthrope', name: '萊肯', emoji: '🐺🗡️', hp: 12000, atk: 1200, def: 800, mdef: 700, spd: 65, xp: 8000, gold: 5000, skills: [{ name: '迅捷撕裂', type: 'physical', multiplier: 1.3, hits: 2, chance: 25 }], drops: [{ id: 'werewolf_paw', chance: 50 }, { id: 'abyss_ring', chance: 0.5, isEquip: true }, { id: 'necklace_str', chance: 0.3, isEquip: true }, { id: 'necklace_dex', chance: 0.3, isEquip: true }, { id: 'speed_boots', chance: 0.5, isEquip: true }, { id: 'abyss_robe', chance: 0.2, isEquip: true }, { id: 'abyss_gloves', chance: 0.4, isEquip: true }, { id: 'abyss_dagger', chance: 0.2, isEquip: true }, { id: 'abyss_boots', chance: 0.5, isEquip: true }, { id: 'scroll_weapon', chance: 2 }] },
-        { id: 'cerberus_minion', name: '地獄犬', emoji: '🐕🔥', hp: 10000, atk: 1000, matk: 900, def: 600, mdef: 900, spd: 60, xp: 7500, gold: 4500, skills: [{ name: '三連噴火', type: 'magical', multiplier: 0.9, hits: 3, chance: 20 }], drops: [{ id: 'fire_core', chance: 20 }, { id: 'fire_lord_weapon_2h', chance: 0.1, isEquip: true }, { id: 'brave_potion', chance: 5 }] },
-        { id: 'bugbear', name: '食人妖精', emoji: '👹', hp: 15000, atk: 1500, def: 1000, mdef: 600, spd: 40, xp: 9500, gold: 6000, skills: [{ name: '巨力擊碎', type: 'physical', multiplier: 1.8, stunChance: 15, chance: 15 }], drops: [{ id: 'stolen_pouch', chance: 60 }, { id: 'stone_great_sword', chance: 0.5, isEquip: true }, { id: 'ogre_belt', chance: 2, isEquip: true }, { id: 'scroll_weapon', chance: 2 }] }
+        { id: 'lycanthrope', name: '萊肯', emoji: '🐺🗡️', hp: 12000, atk: 1200, def: 800, mdef: 700, spd: 65, xp: 8000, gold: 5000, skills: [{ name: '迅捷撕裂', type: 'physical', multiplier: 1.3, hits: 2, chance: 25 }], drops: [
+            { id: 'werewolf_paw', chance: 50 },
+            { id: 'brave_potion', chance: 10 },
+            { id: 'abyss_boots', chance: 1.5, isEquip: true },
+            { id: 'abyss_gloves', chance: 1.2, isEquip: true },
+            { id: 'speed_boots', chance: 1, isEquip: true },
+            { id: 'abyss_ring', chance: 0.8, isEquip: true },
+            { id: 'necklace_str', chance: 0.5, isEquip: true },
+            { id: 'necklace_dex', chance: 0.5, isEquip: true },
+            { id: 'abyss_robe', chance: 0.3, isEquip: true },
+            { id: 'abyss_dagger', chance: 0.3, isEquip: true },
+            { id: 'scroll_weapon', chance: 3 },
+        ] },
+        { id: 'cerberus_minion', name: '地獄犬', emoji: '🐕🔥', hp: 10000, atk: 1000, matk: 900, def: 600, mdef: 900, spd: 60, xp: 7500, gold: 4500, skills: [{ name: '三連噴火', type: 'magical', multiplier: 0.9, hits: 3, chance: 20 }], drops: [
+            { id: 'fire_core', chance: 30 },
+            { id: 'brave_potion', chance: 12 },
+            { id: 'fire_lord_weapon_2h', chance: 0.2, isEquip: true },
+        ] },
+        { id: 'bugbear', name: '食人妖精', emoji: '👹', hp: 15000, atk: 1500, def: 1000, mdef: 600, spd: 40, xp: 9500, gold: 6000, skills: [{ name: '巨力擊碎', type: 'physical', multiplier: 1.8, stunChance: 15, chance: 15 }], drops: [
+            { id: 'stolen_pouch', chance: 60 },
+            { id: 'stone_great_sword', chance: 1, isEquip: true },
+            { id: 'ogre_belt', chance: 2.5, isEquip: true },
+            { id: 'scroll_weapon', chance: 3 },
+        ] }
     ],
+    // ==================== T3: 古魯丁地監 終層 (Lv 75-85) ====================
     gludio_dungeon_deep: [
-        { id: 'death_soldier', name: '死亡士兵', emoji: '👻', hp: 35000, atk: 2500, def: 2500, mdef: 2200, spd: 70, xp: 25000, gold: 15000, skills: [{ name: '死亡之影', type: 'physical', multiplier: 1.5, armorPen: 30, chance: 15 }], drops: [{ id: 'ancient_bone', chance: 60 }, { id: 'chaos_blade', chance: 0.1, isEquip: true }, { id: 'chaos_great_sword', chance: 0.1, isEquip: true }, { id: 'chaos_mail', chance: 0.1, isEquip: true }, { id: 'chaos_helm', chance: 0.2, isEquip: true }, { id: 'scroll_armor', chance: 3 }] },
-        { id: 'succubus_deep', name: '地獄思克巴', emoji: '👿', hp: 30000, matk: 3000, def: 1800, mdef: 3500, spd: 90, xp: 28000, gold: 18000, skills: [{ name: '奪魂之吻', type: 'magical', multiplier: 2.2, lifesteal: 30, chance: 20 }, { id: 'mana_drain', name: '法力抽取', type: 'magical', multiplier: 1.0, drainMp: true, chance: 15 }], drops: [{ id: 'mp_potion', chance: 30 }, { id: 'necklace_int', chance: 0.5, isEquip: true }, { id: 'belt_of_mind', chance: 0.5, isEquip: true }, { id: 'void_emperor_blade', chance: 0.05, isEquip: true }, { id: 'void_robe', chance: 0.2, isEquip: true }, { id: 'void_boots', chance: 0.2, isEquip: true }, { id: 'scroll_weapon', chance: 3 }] },
-        { id: 'horrid_ghoul', name: '負面食屍鬼', emoji: '🧟‍♂️', hp: 40000, atk: 3200, matk: 2500, def: 2000, mdef: 3000, spd: 50, xp: 32000, gold: 20000, skills: [{ name: '麻痺毒素', type: 'debuff', stat: 'spd', percent: -70, turns: 3, chance: 20 }], drops: [{ id: 'ancient_bone', chance: 70 }, { id: 'earring_wisdom', chance: 1, isEquip: true }, { id: 'belt_of_mind', chance: 0.8, isEquip: true }, { id: 'scroll_weapon', chance: 4 }] }
+        { id: 'death_soldier', name: '死亡士兵', emoji: '👻', hp: 35000, atk: 2500, def: 2500, mdef: 2200, spd: 70, xp: 25000, gold: 15000, skills: [{ name: '死亡之影', type: 'physical', multiplier: 1.5, armorPen: 30, chance: 15 }], drops: [
+            { id: 'ancient_bone', chance: 60 },
+            { id: 'chaos_helm', chance: 0.8, isEquip: true },
+            { id: 'chaos_mail', chance: 0.3, isEquip: true },
+            { id: 'chaos_blade', chance: 0.2, isEquip: true },
+            { id: 'chaos_great_sword', chance: 0.2, isEquip: true },
+            { id: 'scroll_armor', chance: 4 },
+        ] },
+        { id: 'succubus_deep', name: '地獄思克巴', emoji: '👿', hp: 30000, matk: 3000, def: 1800, mdef: 3500, spd: 90, xp: 28000, gold: 18000, skills: [{ name: '奪魂之吻', type: 'magical', multiplier: 2.2, lifesteal: 30, chance: 20 }, { id: 'mana_drain', name: '法力抽取', type: 'magical', multiplier: 1.0, drainMp: true, chance: 15 }], drops: [
+            { id: 'mp_potion', chance: 35 },
+            { id: 'necklace_int', chance: 1, isEquip: true },
+            { id: 'belt_of_mind', chance: 0.8, isEquip: true },
+            { id: 'void_boots', chance: 0.5, isEquip: true },
+            { id: 'void_robe', chance: 0.3, isEquip: true },
+            { id: 'void_emperor_blade', chance: 0.1, isEquip: true },
+            { id: 'scroll_weapon', chance: 4 },
+        ] },
+        { id: 'horrid_ghoul', name: '負面食屍鬼', emoji: '🧟‍♂️', hp: 40000, atk: 3200, matk: 2500, def: 2000, mdef: 3000, spd: 50, xp: 32000, gold: 20000, skills: [{ name: '麻痺毒素', type: 'debuff', stat: 'spd', percent: -70, turns: 3, chance: 20 }], drops: [
+            { id: 'ancient_bone', chance: 65 },
+            { id: 'earring_wisdom', chance: 1.5, isEquip: true },
+            { id: 'belt_of_mind', chance: 1, isEquip: true },
+            { id: 'scroll_weapon', chance: 5 },
+        ] }
     ],
+    // ==================== T4: 火龍窟 (Lv 85-95) ====================
     fire_dragon_cave: [
-        { id: 'lava_golem_foc', name: '熔岩巨靈', emoji: '🌋', hp: 80000, atk: 5500, def: 8000, mdef: 5000, spd: 30, xp: 80000, gold: 50000, skills: [{ name: '大地粉碎', type: 'physical', multiplier: 2.0, stunChance: 20, chance: 15 }], drops: [{ id: 'lava_heart', chance: 40 }, { id: 'overlord_armor', chance: 0.05, isEquip: true }, { id: 'scroll_armor', chance: 5 }] },
-        { id: 'fire_elemental_foc', name: '火之大精靈', emoji: '🔥', hp: 65000, matk: 6000, def: 4000, mdef: 9000, spd: 85, xp: 90000, gold: 60000, skills: [{ name: '地獄烈焰', type: 'magical', multiplier: 2.5, chance: 20 }], drops: [{ id: 'fire_core', chance: 50 }, { id: 'sage_cosmic_robe', chance: 0.05, isEquip: true }, { id: 'scroll_weapon', chance: 5 }] },
-        { id: 'salamander', name: '火蜥蜴', emoji: '🦎🔥', hp: 70000, atk: 4500, matk: 4000, def: 5000, mdef: 6000, spd: 100, xp: 85000, gold: 55000, skills: [{ name: '火焰噴流', type: 'magical', multiplier: 1.5, dot: { type: 'burn', percent: 10, turns: 3 }, chance: 20 }], drops: [{ id: 'fire_core', chance: 45 }, { id: 'spirit_ring', chance: 1, isEquip: true }, { id: 'leather_belt', chance: 5, isEquip: true }, { id: 'scroll_accessory', chance: 3 }] }
+        { id: 'lava_golem_foc', name: '熔岩巨靈', emoji: '🌋', hp: 80000, atk: 5500, def: 8000, mdef: 5000, spd: 30, xp: 80000, gold: 50000, skills: [{ name: '大地粉碎', type: 'physical', multiplier: 2.0, stunChance: 20, chance: 15 }], drops: [
+            { id: 'lava_heart', chance: 45 },
+            { id: 'overlord_armor', chance: 0.1, isEquip: true },
+            { id: 'scroll_armor', chance: 6 },
+        ] },
+        { id: 'fire_elemental_foc', name: '火之大精靈', emoji: '🔥', hp: 65000, matk: 6000, def: 4000, mdef: 9000, spd: 85, xp: 90000, gold: 60000, skills: [{ name: '地獄烈焰', type: 'magical', multiplier: 2.5, chance: 20 }], drops: [
+            { id: 'fire_core', chance: 55 },
+            { id: 'sage_cosmic_robe', chance: 0.1, isEquip: true },
+            { id: 'scroll_weapon', chance: 6 },
+        ] },
+        { id: 'salamander', name: '火蜥蜴', emoji: '🦎🔥', hp: 70000, atk: 4500, matk: 4000, def: 5000, mdef: 6000, spd: 100, xp: 85000, gold: 55000, skills: [{ name: '火焰噴流', type: 'magical', multiplier: 1.5, dot: { type: 'burn', percent: 10, turns: 3 }, chance: 20 }], drops: [
+            { id: 'fire_core', chance: 50 },
+            { id: 'spirit_ring', chance: 1.5, isEquip: true },
+            { id: 'leather_belt', chance: 3, isEquip: true },
+            { id: 'scroll_accessory', chance: 4 },
+        ] }
     ],
+    // ==================== T4: 安塔瑞斯棲息地 (Lv 95-99) ====================
     antharas_lair: [
-        { id: 'dragon_guardian', name: '地龍守護者', emoji: '🐲🛡️', hp: 250000, atk: 8500, def: 25000, mdef: 20000, spd: 100, xp: 250000, gold: 200000, skills: [{ name: '守護領域', type: 'shield', shieldMultiplier: 0.5, chance: 15 }], drops: [{ id: 'earth_dragon_scale', chance: 40 }, { id: 'dragonslayer', chance: 0.01, isEquip: true }, { id: 'scroll_weapon', chance: 8 }] },
-        { id: 'cave_beast', name: '洞穴巨人', emoji: '🐘', hp: 300000, atk: 12000, def: 35000, mdef: 15000, spd: 60, xp: 300000, gold: 250000, skills: [{ name: '岩石投擲', type: 'physical', multiplier: 2.2, chance: 15 }], drops: [{ id: 'earth_dragon_scale', chance: 50 }, { id: 'overlord_armor', chance: 0.01, isEquip: true }, { id: 'scroll_armor', chance: 10 }] },
-        { id: 'teralin', name: '地龍之眼', emoji: '👁️', hp: 180000, matk: 15000, def: 15000, mdef: 45000, spd: 120, xp: 350000, gold: 300000, skills: [{ name: '麻痺凝視', type: 'debuff', stat: 'spd', percent: -90, turns: 2, chance: 25 }], drops: [{ id: 'earth_dragon_scale', chance: 45 }, { id: 'invisi_cloak', chance: 0.01, isEquip: true }, { id: 'invis_cloak_frag', chance: 1, isEquip: true }, { id: 'scroll_weapon', chance: 12 }] }
+        { id: 'dragon_guardian', name: '地龍守護者', emoji: '🐲🛡️', hp: 250000, atk: 8500, def: 25000, mdef: 20000, spd: 100, xp: 250000, gold: 200000, skills: [{ name: '守護領域', type: 'shield', shieldMultiplier: 0.5, chance: 15 }], drops: [
+            { id: 'earth_dragon_scale', chance: 45 },
+            { id: 'dragonslayer', chance: 0.05, isEquip: true },
+            { id: 'scroll_weapon', chance: 10 },
+        ] },
+        { id: 'cave_beast', name: '洞穴巨人', emoji: '🐘', hp: 300000, atk: 12000, def: 35000, mdef: 15000, spd: 60, xp: 300000, gold: 250000, skills: [{ name: '岩石投擲', type: 'physical', multiplier: 2.2, chance: 15 }], drops: [
+            { id: 'earth_dragon_scale', chance: 50 },
+            { id: 'overlord_armor', chance: 0.05, isEquip: true },
+            { id: 'scroll_armor', chance: 12 },
+        ] },
+        { id: 'teralin', name: '地龍之眼', emoji: '👁️', hp: 180000, matk: 15000, def: 15000, mdef: 45000, spd: 120, xp: 350000, gold: 300000, skills: [{ name: '麻痺凝視', type: 'debuff', stat: 'spd', percent: -90, turns: 2, chance: 25 }], drops: [
+            { id: 'earth_dragon_scale', chance: 50 },
+            { id: 'invisi_cloak', chance: 0.05, isEquip: true },
+            { id: 'invis_cloak_frag', chance: 1.5, isEquip: true },
+            { id: 'scroll_weapon', chance: 15 },
+        ] }
     ]
 };
 

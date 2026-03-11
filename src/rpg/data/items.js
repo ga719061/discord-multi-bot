@@ -6,8 +6,8 @@ export const QUALITY_MULTIPLIER = {
     fine: { label: '🟢 精良', bonus: 0.10, ansi: '1;32' },
     rare: { label: '🔵 稀有', bonus: 0.25, ansi: '1;34' },
     epic: { label: '🟣 史詩', bonus: 0.50, ansi: '1;35' },
-    mythic: { label: '🔴 神話', bonus: 0.75, ansi: '1;31' },
-    legendary: { label: '🟠 傳說', bonus: 1.00, ansi: '1;33' },
+    mythic: { label: '🔴 神話', bonus: 0.80, ansi: '1;31' },
+    legendary: { label: '🟠 傳說', bonus: 1.20, ansi: '1;33' },
 };
 
 export const EQUIP_SELL_PRICES = { common: 30, fine: 80, rare: 200, epic: 500, mythic: 1000, legendary: 1500 };
