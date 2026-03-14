@@ -1,9 +1,9 @@
 import { ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
 import { getBattle, updateBattle, deleteBattle, getCharacter, updateCharacter, addGold, addToInventory, addEquipment, getLearnedSkills, registerFirstKill, addMercenaryHistory } from '../rpgDatabase.js';
-import { rpgEmbed, rpgButton, hpBar, mpBar, hpBarBare, mpBarBare, battleActionRows, backButton, getUnlockedSkills, qualityLabel, broadcastRpgEvent, calcDamage, isCrit, isDodge, applyBuffsAndStates, processTurnEndStates, hasState, consumeShield, getJobTitle, formatItemName, executeSetHooks, formatBattleLog, safeReply } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, hpBar, mpBar, hpBarBare, mpBarBare, battleActionRows, backButton, getUnlockedSkills, qualityLabel, broadcastRpgEvent, calcDamage, isCrit, isDodge, applyBuffsAndStates, processTurnEndStates, hasState, consumeShield, getJobTitle, formatItemName, executeSetHooks, formatBattleLog, safeReply, rollQualityForArea, getBetterQuality } from '../rpgHelpers.js';
 import { fmt, COLORS } from '../../utils/style.js';
 import { logger } from '../../utils/logger.js';
-import { SKILLS, EQUIPMENT, SHOP_ITEMS, getXpForLevel, getItemDisplayName, SKILL_BOOK_DROP_POOLS, SKILL_BOOKS, getSkillDef, AREAS, QUALITY_MULTIPLIER, CLASSES } from '../data/gameData.js';
+import { SKILLS, EQUIPMENT, SHOP_ITEMS, ITEM_NAMES, getXpForLevel, getItemDisplayName, SKILL_BOOK_DROP_POOLS, SKILL_BOOKS, getSkillDef, AREAS, QUALITY_MULTIPLIER, CLASSES } from '../data/gameData.js';
 import { showHub } from './hub.js';
 import { handleBossDeathIntercept, handleBossAttack } from '../bosses/bossSystem.js';
 
@@ -770,10 +770,9 @@ export async function handleBattleAction(interaction) {
                         }
                         log += `<@${userId}> 使用了 ${skill.emoji} ${skill.name}！混沌之力席捲戰場！`;
                     } else if (skill.special === 'mage_summon') {
-                        ps.mp -= skillContext.skill.mp;
                         const char = getCharacter(interaction.guildId, userId);
                         const lvl = char.level || 1;
-                        const maxSummons = lvl >= 80 ? 4 : (lvl >= 60 ? 3 : (lvl >= 40 ? 2 : 1));
+                        const maxSummons = lvl >= 80 ? 4 : (lvl >= 65 ? 3 : (lvl >= 45 ? 2 : 1)); // 召喚數量隨等級提升
                         const aliveSummons = battle.ally_summons.filter(s => s.hp > 0).length;
 
                         if (aliveSummons >= maxSummons) {
@@ -781,16 +780,21 @@ export async function handleBattleAction(interaction) {
                         }
 
                         ps.mp -= skill.mp;
-                        let sName = '噴火雛龍';
-                        let sEmoji = '🐲';
-                        let sMult = 0.9;
-                        if (lvl >= 80) { sName = '遠古金龍'; sEmoji = '👑🐉'; sMult = 2.8; }
-                        else if (lvl >= 60) { sName = '蒼藍巨龍'; sEmoji = '💎🐉'; sMult = 2.0; }
-                        else if (lvl >= 40) { sName = '荒野飛龍'; sEmoji = '🐉'; sMult = 1.4; }
+                        let sName = '骸骨';
+                        let sEmoji = '☠️';
+                        let sMult = 0.7;
+
+                        if (lvl >= 80) { sName = '死亡騎士'; sEmoji = '💀🔥'; sMult = 4.0; }
+                        else if (lvl >= 72) { sName = '黑豹'; sEmoji = '🐆'; sMult = 3.2; }
+                        else if (lvl >= 60) { sName = '先烈艾爾摩將軍'; sEmoji = '⚔️💂‍♂️'; sMult = 2.6; }
+                        else if (lvl >= 52) { sName = '阿魯巴'; sEmoji = '🦍'; sMult = 2.1; }
+                        else if (lvl >= 48) { sName = '魅魔'; sEmoji = '👿'; sMult = 1.7; }
+                        else if (lvl >= 40) { sName = '鋼鐵高崙'; sEmoji = '🤖'; sMult = 1.3; }
+                        else if (lvl >= 32) { sName = '斯巴托'; sEmoji = '💀'; sMult = 1.0; }
 
                         const summonAtk = Math.floor((ps.matk || ps.atk) * sMult);
-                        const summonHp = Math.floor(ps.max_hp * (0.4 + (lvl / 200)));
-                        const summonDef = Math.floor((ps.def || 10) * 0.6);
+                        const summonHp = Math.floor(ps.max_hp * (0.3 + (lvl / 200))); // 血量略微下調以平衡高攻擊
+                        const summonDef = Math.floor((ps.def || 10) * 0.5);
 
                         battle.ally_summons.push({
                             isSummon: true,
@@ -1094,7 +1098,9 @@ export async function handleBattleAction(interaction) {
                 const inv = getInventory(interaction.guildId, userId);
                 const usable = inv.filter(i => {
                     const shopItem = SHOP_ITEMS.consumables.find(s => s.id === i.item_id);
-                    return shopItem && (shopItem.effect.type === 'heal_hp' || shopItem.effect.type === 'heal_mp' || shopItem.effect.type === 'escape');
+                    const itemDef = ITEM_NAMES[i.item_id];
+                    const effect = shopItem?.effect || itemDef?.effect;
+                    return effect && (effect.type === 'heal_hp' || effect.type === 'heal_mp' || effect.type === 'escape' || effect.type === 'buff');
                 });
 
                 if (usable.length === 0) {
@@ -1147,6 +1153,10 @@ export async function handleBattleAction(interaction) {
                     const embed = rpgEmbed('🏃 逃跑成功！', `<@${userId}> 使用煙霧彈先行撤退了！`);
                     const payload = { embeds: [embed], components: [backButton()] };
                     return safeReply(interaction, payload);
+                } else if (def.effect.type === 'buff') {
+                    ps.buffs = ps.buffs || [];
+                    ps.buffs.push({ ...def.effect, turns: def.effect.turns, name: def.name, emoji: def.emoji });
+                    log = `<@${userId}> 使用了 ${def.emoji} ${def.name}！獲得了強效增益！`;
                 }
             }
 
@@ -1659,7 +1669,14 @@ async function handleVictory(interaction, battle, battleId, log) {
                 if (Math.random() * 100 < drop.chance * dropMultiplier) {
                     const receiverId = alives[Math.floor(Math.random() * alives.length)];
                     const eqDef = EQUIPMENT[drop.id];
-                    const quality = eqDef ? eqDef.quality : 'common';
+                    let quality = eqDef ? eqDef.quality : 'common';
+                    
+                    // 5% 機率觸發區域共鳴 (幸運掉落)
+                    if (Math.random() < 0.05) {
+                        const resonanceQuality = rollQualityForArea(battle.area_id);
+                        quality = getBetterQuality(quality, resonanceQuality);
+                    }
+
                     await awardItem(receiverId, drop.id, !!drop.isEquip, quality);
                 }
             }

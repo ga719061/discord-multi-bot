@@ -1,5 +1,5 @@
 import { ActionRowBuilder } from 'discord.js';
-import { rpgEmbed, rpgButton, backButton, calcDamage, isCrit, isDodge, qualityLabel, broadcastRpgEvent, calculateTotalStats, getJobTitle, formatItemName, executeSetHooks, safeReply } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, backButton, calcDamage, isCrit, isDodge, qualityLabel, broadcastRpgEvent, calculateTotalStats, getJobTitle, formatItemName, executeSetHooks, safeReply, rollQualityForArea, getBetterQuality } from '../rpgHelpers.js';
 import { fmt, COLORS } from '../../utils/style.js';
 import { getCharacter, updateCharacter, addGold, addToInventory, addEquipment, registerFirstKill, addMercenaryHistory, getEquipmentList } from '../rpgDatabase.js';
 import { logger } from '../../utils/logger.js';
@@ -208,10 +208,22 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                             if (m.currentHp > 0) m.currentHp -= Math.floor(totalDmg);
                         });
                     } else if (usedSkill.special === 'mage_summon') {
-                        // 召喚模擬：給予厚護盾並賦予少許增傷 Buff 當作寵物在場
-                        const summonHp = Math.floor(total.max_hp * (0.4 + ((char.level || 1) / 200)));
+                        // 召喚模擬：根據等級給予強化的護盾與增傷 Buff
+                        const lvl = char.level || 1;
+                        let sMult = 0.7;
+                        let bMult = 20;
+
+                        if (lvl >= 80) { sMult = 4.0; bMult = 60; }
+                        else if (lvl >= 72) { sMult = 3.2; bMult = 50; }
+                        else if (lvl >= 60) { sMult = 2.6; bMult = 40; }
+                        else if (lvl >= 52) { sMult = 2.1; bMult = 35; }
+                        else if (lvl >= 48) { sMult = 1.7; bMult = 30; }
+                        else if (lvl >= 40) { sMult = 1.3; bMult = 25; }
+                        else if (lvl >= 32) { sMult = 1.0; bMult = 20; }
+
+                        const summonHp = Math.floor(total.max_hp * (0.3 + (lvl / 200)) * sMult * 0.5); // 自動戰鬥中護盾倍率微調
                         playerShield += summonHp;
-                        playerBuffs.push({ atkPercent: 20, matkPercent: 20, turns: 3 });
+                        playerBuffs.push({ atkPercent: bMult, matkPercent: bMult, turns: 4 });
                     } else {
                         const isPhysical = usedSkill.type === 'physical';
                         const isMagical = usedSkill.type === 'magical';
@@ -545,7 +557,13 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                             if (Math.random() * 100 < drop.chance * dropMultiplier) {
                                 const receiver = participants[Math.floor(Math.random() * participants.length)];
                                 const eqDef = EQUIPMENT[drop.id];
-                                const quality = eqDef ? eqDef.quality : 'common';
+                                let quality = eqDef ? eqDef.quality : 'common';
+
+                                // 5% 機率觸發區域共鳴 (幸運掉落)
+                                if (Math.random() < 0.05) {
+                                    const resonanceQuality = rollQualityForArea(areaId);
+                                    quality = getBetterQuality(quality, resonanceQuality);
+                                }
 
                                 dropsList.push({ id: drop.id, isEquip: !!drop.isEquip, quality, receiverName: receiver.name });
                                 if (drop.isEquip) addEquipment(guildId, receiver.id, drop.id, quality, receiver.level);

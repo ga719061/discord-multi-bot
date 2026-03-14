@@ -173,6 +173,44 @@ export async function handleExpeditionInteractions(interaction) {
             return safeReply(interaction, { content: '🐕 遠征時間不足 1 小時，無法領取收益！提前停止將損失進度。', flags: ['Ephemeral'] });
         }
 
+        if (reward.levelsGained > 0) {
+            const oldLevel = reward.newLevel - reward.levelsGained;
+            for (let l = oldLevel + 1; l <= reward.newLevel; l++) {
+                if ([30, 60, 90, 99].includes(l)) {
+                    const { broadcastRpgEvent, getJobTitle } = await import('../rpgHelpers.js');
+                    const newTitle = getJobTitle({ class: char.class, level: l });
+                    const vName = interaction.member?.displayName || interaction.user.username;
+                    await broadcastRpgEvent(interaction.client, interaction.guildId, {
+                        title: '位階突破！',
+                        description: `太驚人了！冒險者 ${fmt(COLORS.BLUE, vName)} 在遠征歸來後\n晉升為 ${fmt(COLORS.GOLD, newTitle)}！\n達到了 ${fmt(COLORS.GREEN, 'Lv.' + l)} 的全新境界！`,
+                        color: l >= 60 ? 0xFFAA00 : 0x00FF00,
+                        type: 'milestone'
+                    });
+                }
+            }
+        }
+
+        // 處理極品掉落廣播
+        if (reward.drops?.length > 0) {
+            for (const d of reward.drops) {
+                if (['epic', 'mythic', 'legendary'].includes(d.quality)) {
+                    const { broadcastRpgEvent } = await import('../rpgHelpers.js');
+                    const vName = interaction.member?.displayName || interaction.user.username;
+                    const qColor = d.quality === 'epic' ? 0x9b59b6 : d.quality === 'mythic' ? 0xe74c3c : 0xe67e22;
+                    const qEmoji = d.quality === 'epic' ? '🟣' : d.quality === 'mythic' ? '🔴' : '🟠';
+                    const qLabel = d.quality === 'epic' ? '史詩' : d.quality === 'mythic' ? '神話' : '傳說';
+                    const typeLabel = d.isBook ? '技能書' : '裝備';
+
+                    await broadcastRpgEvent(interaction.client, interaction.guildId, {
+                        title: '遠征奇蹟！極品現世',
+                        description: `冒險者 ${fmt(COLORS.BLUE, vName)} 在長時間遠征歸來後\n帶回了 ${qEmoji} ${fmt(COLORS.WHITE, qLabel + typeLabel)}：\n「${fmt(COLORS.WHITE, getItemDisplayName(d.id))}」！`,
+                        color: qColor,
+                        type: 'rare_drop'
+                    });
+                }
+            }
+        }
+
         const dropMsg = reward.drops.length > 0 ? reward.drops.map(d => `${getItemDisplayName(d.id)} x${d.qty}`).join('\n') : '無額外掉落';
         const levelUpMsg = reward.levelsGained > 0 ? `\n🎉 **升級！** Lv.${reward.newLevel - reward.levelsGained} → Lv.${reward.newLevel} (+${reward.levelsGained * 5} 自由點數)` : '';
         const embed = rpgEmbed(

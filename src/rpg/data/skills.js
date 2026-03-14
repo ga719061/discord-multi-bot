@@ -31,7 +31,7 @@ export const SKILLS = {
         { id: 'fireball', name: '火球', emoji: '🔥', mp: 12, type: 'magical', target: 'single', multiplier: 1.4, dot: { type: 'burn', percent: 12, turns: 3 }, desc: 'MATK×1.4 + 持續三回合燃燒损伤' },
         { id: 'mana_surge', name: '魔力增幅', emoji: '✨', mp: 0, type: 'buff', target: 'self', recoverMp: 50, effect: { matkPercent: 50, turns: 2 }, desc: '回復 50 MP 並大幅提升魔攻 CD:2' },
         { id: 'frost_nova', name: '極道落雷', emoji: '⚡', mp: 20, type: 'magical', target: 'all', multiplier: 1.5, stunChance: 45, desc: '全體強效雷擊並有機率造成眩暈' },
-        { id: 'summon_contract', name: '召喚：巨龍契約', emoji: '🐲', mp: 30, type: 'summon', special: 'mage_summon', cd: 3, desc: '呼喚古代龍族助戰 CD:3' },
+        { id: 'summon_contract', name: '召喚術', emoji: '📜', mp: 30, type: 'summon', special: 'mage_summon', cd: 3, desc: '根據施法者等級召喚強大的魔物助戰 CD:3' },
         { id: 'meteor_cluster', name: '落星', emoji: '☄️', mp: 40, type: 'magical', target: 'random', hits: 4, multiplier: 1.3, desc: '召喚隕石隨機轟炸 4 次' },
         { id: 'chain_lightning', name: '雷鳴連鎖', emoji: '⚡', mp: 25, type: 'magical', target: 'all', multiplier: 2.2, desc: 'MATK×2.2 強效集體閃電打擊' },
         { id: 'arcane_shield', name: '魔法屏障', emoji: '🔮', mp: 25, type: 'shield', target: 'self', shieldMultiplier: 4.0, cd: 4, desc: '構築 MATK×4.0 的強力魔力護盾 CD:4' },

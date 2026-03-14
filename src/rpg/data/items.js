@@ -85,7 +85,6 @@ export const EQUIPMENT = {
     bone_feet: { name: '骸骨戰靴', emoji: '👢', type: 'feet', quality: 'rare', stats: { def: 20, spd: 10 }, set_id: 'bone_set' },
     bone_great_sword: { name: '骸骨大劍', emoji: '⚔️', type: 'weapon_2h', quality: 'rare', stats: { atk: 110, lifesteal: 5 }, set_id: 'bone_set' },
     bone_mask: { name: '骸骨面具', emoji: '💀', type: 'head', quality: 'rare', stats: { def: 25, spd: 8 }, set_id: 'bone_set' },
-    bone_chest: { name: '骸骨胸甲', emoji: '🦴', type: 'body', quality: 'rare', stats: { def: 75, hp: 200 }, set_id: 'bone_set' },
     bone_shield: { name: '骸骨之盾', emoji: '🛡️', type: 'shield', quality: 'rare', stats: { def: 55, mdef: 15 }, set_id: 'bone_set' },
     
     abyss_dagger: { name: '深淵匕首', emoji: '🗡️', type: 'weapon_1h', quality: 'rare', stats: { atk: 85, spd: 20 }, set_id: 'abyss_master_set' },
@@ -187,6 +186,10 @@ export const SHOP_ITEMS = {
         { id: 'smoke_bomb', name: '歸還卷軸', emoji: '🪶', price: 80, effect: { type: 'escape' }, desc: '戰鬥中 100% 傳送回安全區' },
         { id: 'teleport_scroll', name: '傳送符印', emoji: '📜', price: 150, effect: { type: 'teleport' }, desc: '標記並傳送回王都' },
         { id: 'revive_scroll', name: '復活卷軸', emoji: '💀', price: 400, effect: { type: 'revive', percent: 30 }, desc: '復活隊友至 30% HP' },
+        { id: 'brave_potion', name: '勇敢藥水', emoji: '🍺', price: 500, type: 'consumable', quality: 'fine', desc: '5回合內 SPD+15, ATK+10%' },
+        { id: 'wisdom_potion', name: '智慧藥水', emoji: '🧪', price: 500, type: 'consumable', quality: 'fine', desc: '5回合內 MATK+15%, MP回復+10' },
+        { id: 'defense_potion', name: '鋼鐵藥水', emoji: '🛡️', price: 500, type: 'consumable', quality: 'fine', desc: '5回合內 DEF+20, 減傷+10%' },
+        { id: 'focus_potion', name: '集中藥水', emoji: '🎯', price: 500, type: 'consumable', quality: 'fine', desc: '5回合內 暴擊+15%, 命中+10%' },
     ],
     weapons: [
         { id: 'steel_sword', name: '鋼鐵單手劍', emoji: '🗡️', price: 200, type: 'weapon_1h', quality: 'common', stats: { atk: 10 }, desc: '單手 ATK+10' },
@@ -256,12 +259,15 @@ export const ITEM_NAMES = {
     chaos_essence: { name: '混沌精華', emoji: '🌀', sellPrice: 120 },
 
     // ===== 消耗品與其他 =====
-    hp_potion_s: { name: '紅色藥水', emoji: '🧪', sellPrice: 15 },
-    hp_potion_m: { name: '橙色藥水', emoji: '🧪', sellPrice: 50 },
-    hp_potion_l: { name: '白色藥水', emoji: '🧪', sellPrice: 140 },
-    mp_potion: { name: '藍色藥水', emoji: '💙', sellPrice: 80 },
-    brave_potion: { name: '勇敢藥水', emoji: '🍺', sellPrice: 200 },
-    smoke_bomb: { name: '歸還卷軸', emoji: '🪶', sellPrice: 40 },
+    hp_potion_s: { name: '紅色藥水', emoji: '🧪', sellPrice: 15, effect: { type: 'heal_hp', percent: 25 } },
+    hp_potion_m: { name: '橙色藥水', emoji: '🧪', sellPrice: 50, effect: { type: 'heal_hp', percent: 50 } },
+    hp_potion_l: { name: '白色藥水', emoji: '🧪', sellPrice: 140, effect: { type: 'heal_hp', percent: 85 } },
+    mp_potion: { name: '藍色藥水', emoji: '💙', sellPrice: 80, effect: { type: 'heal_mp', percent: 40 } },
+    brave_potion: { name: '勇敢藥水', emoji: '🍺', sellPrice: 200, effect: { type: 'buff', stats: { spd: 15, atk_pct: 10 }, turns: 5 } },
+    wisdom_potion: { name: '智慧藥水', emoji: '🧪', sellPrice: 200, effect: { type: 'buff', stats: { matk_pct: 15, mp_regen: 10 }, turns: 5 } },
+    defense_potion: { name: '鋼鐵藥水', emoji: '🛡️', sellPrice: 200, effect: { type: 'buff', stats: { def: 20, dmg_reduction: 10 }, turns: 5 } },
+    focus_potion: { name: '集中藥水', emoji: '🎯', sellPrice: 200, effect: { type: 'buff', stats: { crit: 15, hit_rate: 10 }, turns: 5 } },
+    smoke_bomb: { name: '歸還卷軸', emoji: '🪶', sellPrice: 40, effect: { type: 'escape' } },
     teleport_scroll: { name: '傳送符印', emoji: '📜', sellPrice: 75 },
     revive_scroll: { name: '復活卷軸', emoji: '💀', sellPrice: 200 },
 

@@ -27,7 +27,10 @@ export const BOSSES = {
             { id: 'orcish_amulet', chance: 20, isEquip: true },
             { id: 'earring_protection', chance: 15, isEquip: true },
             { id: 'orcish_king_blade', chance: 1, isEquip: true },
+            { id: 'boar_king_axe', chance: 1, isEquip: true },
             { id: 'orcish_crown', chance: 15, isEquip: true },
+            { id: 'brave_potion', chance: 20 },
+            { id: 'hp_potion_m', chance: 50 },
         ]
     },
 
@@ -50,6 +53,8 @@ export const BOSSES = {
             { id: 'spirit_wood', chance: 100 },
             { id: 'spirit_staff', chance: 20, isEquip: true },
             { id: 'forest_weapon_2h', chance: 15, isEquip: true },
+            { id: 'wisdom_potion', chance: 20 },
+            { id: 'mp_potion', chance: 40 },
         ]
     },
 
@@ -73,6 +78,8 @@ export const BOSSES = {
             { id: 'caspa_cap', chance: 25, isEquip: true },
             { id: 'bone_lord_staff', chance: 15, isEquip: true },
             { id: 'wisdom_boots', chance: 20, isEquip: true },
+            { id: 'defense_potion', chance: 15 },
+            { id: 'hp_potion_m', chance: 40 },
         ]
     },
 
@@ -98,6 +105,8 @@ export const BOSSES = {
             { id: 'dragon_eye_amulet', chance: 15, isEquip: true },
             { id: 'dragon_scale_armor', chance: 10, isEquip: true },
             { id: 'scroll_weapon', chance: 30 },
+            { id: 'focus_potion', chance: 15 },
+            { id: 'hp_potion_l', chance: 30 },
         ]
     },
 
@@ -127,6 +136,9 @@ export const BOSSES = {
             { id: 'baphomet_amulet', chance: 20, isEquip: true },
             { id: 'baphomet_staff', chance: 10, isEquip: true },
             { id: 'baphomet_armor', chance: 10, isEquip: true },
+            { id: 'brave_potion', chance: 15 },
+            { id: 'focus_potion', chance: 15 },
+            { id: 'hp_potion_l', chance: 30 },
         ]
     },
 
@@ -160,10 +172,14 @@ export const BOSSES = {
             { id: 'dk_heart', chance: 100 },
             { id: 'chaos_ring', chance: 10, isEquip: true },
             { id: 'dk_flame_blade', chance: 5, isEquip: true },
+            { id: 'void_lord_mantle', chance: 3, isEquip: true },
             { id: 'dk_helmet', chance: 8, isEquip: true },
             { id: 'dk_armor', chance: 10, isEquip: true },
             { id: 'dk_gloves', chance: 8, isEquip: true },
             { id: 'dk_boots', chance: 8, isEquip: true },
+            { id: 'brave_potion', chance: 15 },
+            { id: 'defense_potion', chance: 15 },
+            { id: 'hp_potion_l', chance: 50 },
         ]
     },
 
@@ -194,6 +210,9 @@ export const BOSSES = {
             { id: 'emperor_crown', chance: 1, isEquip: true },
             { id: 'lava_dragon_core', chance: 15, isEquip: true },
             { id: 'volcanic_greatsword', chance: 2, isEquip: true },
+            { id: 'wisdom_potion', chance: 15 },
+            { id: 'focus_potion', chance: 15 },
+            { id: 'hp_potion_l', chance: 80 },
         ]
     },
 
@@ -232,6 +251,11 @@ export const BOSSES = {
             { id: 'invisi_cloak', chance: 5, isEquip: true },
             { id: 'jiji_crown', chance: 1, isEquip: true },
             { id: 'jiji_chaos_crown', chance: 0.1, isEquip: true },
+            { id: 'brave_potion', chance: 20 },
+            { id: 'wisdom_potion', chance: 20 },
+            { id: 'defense_potion', chance: 20 },
+            { id: 'focus_potion', chance: 20 },
+            { id: 'hp_potion_l', chance: 100 },
         ]
     },
 };

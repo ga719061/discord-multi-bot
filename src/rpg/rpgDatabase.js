@@ -1,7 +1,7 @@
 // ===== RPG 專用資料庫操作函數 =====
 import { getDb as _getDb, getGuildSettings } from '../utils/database.js';
-import { generateRandomAffixes, calculateTotalStats, rollQualityForArea } from './rpgHelpers.js';
-import { MONSTERS, getXpForLevel, CLASSES } from './data/gameData.js';
+import { generateRandomAffixes, calculateTotalStats, rollQualityForArea, getBetterQuality } from './rpgHelpers.js';
+import { MONSTERS, getXpForLevel, CLASSES, EQUIPMENT, SKILL_BOOK_DROP_POOLS, SKILL_BOOKS } from './data/gameData.js';
 export const getDb = _getDb;
 
 // ---------- 初始化 RPG 表 ----------
@@ -643,7 +643,18 @@ export function claimExpedition(guildId, userId) {
     const itemRewards = {}; // { itemId: qty }
     
     const char = getCharacter(guildId, userId);
+    const bookPool = SKILL_BOOK_DROP_POOLS[exp.area_id];
     for (let h = 0; h < finalHours; h++) {
+        // 技能書隨機抽取 (每小時抽樣 8 次，模擬 8 場精英遭遇)
+        if (bookPool) {
+            for (let j = 0; j < 8; j++) {
+                if (Math.random() * 100 < bookPool.chance) {
+                    const bookId = bookPool.books[Math.floor(Math.random() * bookPool.books.length)];
+                    itemRewards[bookId] = (itemRewards[bookId] || 0) + 1;
+                }
+            }
+        }
+
         // 每小時擊殺 60 隻，進行隨機抽樣
         for (let k = 0; k < 60; k++) {
             const randomMonster = areaMonsters[Math.floor(Math.random() * areaMonsters.length)];
@@ -651,11 +662,17 @@ export function claimExpedition(guildId, userId) {
                 for (const d of randomMonster.drops) {
                     if (Math.random() * 100 < d.chance) {
                         if (d.isEquip) {
-                            // 遠征裝備掉落：根據區域品質權重決定品質
-                            const quality = rollQualityForArea(exp.area_id);
+                            // 遠征裝備掉落：回歸裝備原本預設品質
+                            let quality = EQUIPMENT[d.id]?.quality || 'common';
+                            
+                            // 5% 機率觸發區域共鳴 (幸運掉落)
+                            if (Math.random() < 0.05) {
+                                const resonanceQuality = rollQualityForArea(exp.area_id);
+                                quality = getBetterQuality(quality, resonanceQuality);
+                            }
 
                             const eqId = addEquipment(guildId, userId, d.id, quality, char.level);
-                            drops.push({ id: d.id, qty: 1, isEquip: true, eqId: eqId });
+                            drops.push({ id: d.id, qty: 1, isEquip: true, eqId: eqId, quality: quality });
                         } else {
                             itemRewards[d.id] = (itemRewards[d.id] || 0) + 1;
                         }
@@ -698,7 +715,8 @@ export function claimExpedition(guildId, userId) {
     // 發放道具
     for (const [itemId, qty] of Object.entries(itemRewards)) {
         addToInventory(guildId, userId, itemId, qty);
-        drops.push({ id: itemId, qty });
+        const bookDef = SKILL_BOOKS[itemId];
+        drops.push({ id: itemId, qty, isBook: !!bookDef, quality: bookDef?.quality || 'common' });
     }
 
     // 刪除遠征紀錄 (已完成結算)

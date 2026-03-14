@@ -455,10 +455,22 @@ async function randomEvent(interaction, char, areaId) {
         ],
         antharas_lair: [
             { text: '地龍 安塔瑞斯的咆哮從地底深處傳來，大地在顫抖。', hpDamage: 60, mpDamage: 30 },
+        ],
+        gludio_dungeon_low: [
+            { text: '地監石牆中滲出的陰冷氣息讓你感到一陣寒意。', mpDamage: 15 },
+            { text: '你在古魯丁地監的雜物堆中挖出了一些被遺棄的金幣。', gold: 120 },
+        ],
+        talking_island_dungeon: [
+            { text: '極深地底的混沌能量迴盪，你的感官開始變得模糊。', hpDamage: 30, mpDamage: 20 },
+            { text: '你在羊頭惡魔的祭壇旁撿到了一袋沉重的祭品金幣。', gold: 350 },
+        ],
+        gludio_dungeon_deep: [
+            { text: '死亡騎士的守望氣息讓你感到生命力被緩慢吸取。', hpDamage: 50 },
+            { text: '你在骸骨堆中發現了古代騎士留下的遺產。', gold: 500 },
         ]
     };
 
-    const events = eventPools[areaId] || eventPools['outskirts'];
+    const events = eventPools[areaId] || eventPools['talking_island'];
     const event = events[Math.floor(Math.random() * events.length)];
     const { addGold } = await import('../rpgDatabase.js');
 

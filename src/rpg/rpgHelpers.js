@@ -2,7 +2,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelec
 import { RACES, CLASSES, SKILLS, AREAS, QUALITY_MULTIPLIER, EQUIPMENT, SHOP_ITEMS, getXpForLevel, AFFIX_REGISTRY, SET_REGISTRY, SKILL_BOOKS, GLOBAL_STAT_CONVERSION, AREA_QUALITY_WEIGHTS } from './data/gameData.js';
 import { getGuildSettings } from '../utils/database.js';
 import * as StyleUtils from '../utils/style.js';
-const { fmt, COLORS, ansiBar } = StyleUtils;
+export const { fmt, COLORS, ansiBar } = StyleUtils;
 
 // ---------- HP / MP / XP 長條圖 ----------
 export function makeBar(current, max, length = 10) {
@@ -576,6 +576,20 @@ export function getEquipCategory(itemType) {
 
 export function getScrollForCategory(category) {
     return { weapon: 'scroll_weapon', armor: 'scroll_armor', accessory: 'scroll_accessory' }[category] || null;
+}
+
+const QUALITY_ORDER = ['common', 'fine', 'rare', 'epic', 'mythic', 'legendary'];
+
+/**
+ * 比較兩品質等級，回傳較高品質者
+ * @param {string} q1 
+ * @param {string} q2 
+ * @returns {string} 較高品質者
+ */
+export function getBetterQuality(q1, q2) {
+    const idx1 = QUALITY_ORDER.indexOf(q1);
+    const idx2 = QUALITY_ORDER.indexOf(q2);
+    return idx1 >= idx2 ? q1 : q2;
 }
 
 /**

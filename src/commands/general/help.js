@@ -41,6 +41,7 @@ export async function execute(interaction) {
     const visibleCategories = categories.filter(cat => {
         if ((cat === 'admin' || cat === 'ai' || cat === 'logging' || cat === 'roles') && !isAdmin) return false;
         if (cat === 'rpg' && !rpgEnabled && !isAdmin) return false;
+        if (cat === 'game') return false; // 移除 Game 類別
         return true;
     });
 

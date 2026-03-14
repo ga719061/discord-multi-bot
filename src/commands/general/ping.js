@@ -1,5 +1,5 @@
 import { SlashCommandBuilder } from 'discord.js';
-import { ansi, COLORS } from '../../utils/style.js';
+import { ansi, COLORS, fmt } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
     .setName('ping')
