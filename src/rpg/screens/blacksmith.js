@@ -175,7 +175,7 @@ export async function handleReforge(interaction, eqId) {
     removeFromInventory(guildId, userId, materialId, materialCost);
 
     const { AFFIX_REGISTRY } = await import('../data/gameData.js');
-    const affixLines = newAffixes.map(aff => {
+    const affixLines = (newAffixes.affixes || []).map(aff => {
         const reg = AFFIX_REGISTRY[aff.id];
         if (!reg) return '';
         const statsStr = Object.entries(reg.stats).map(([k, v]) => `${k.toUpperCase()} +${Math.floor(v * aff.roll)}`).join(', ');

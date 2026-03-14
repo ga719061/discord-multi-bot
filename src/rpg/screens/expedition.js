@@ -1,6 +1,6 @@
 import { ActionRowBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { getCharacter, getExpedition, startExpedition, claimExpedition, deleteExpedition } from '../rpgDatabase.js';
-import { rpgEmbed, rpgButton, backButton, safeReply, isOwner, notOwnerReply } from '../rpgHelpers.js';
+import { rpgEmbed, rpgButton, backButton, safeReply, isOwner, notOwnerReply, qualityLabel } from '../rpgHelpers.js';
 import { AREAS, getItemDisplayName } from '../data/gameData.js';
 import { fmt, COLORS, ansiBar, ansiBlock } from '../../utils/style.js';
 
@@ -197,14 +197,16 @@ export async function handleExpeditionInteractions(interaction) {
                     const { broadcastRpgEvent } = await import('../rpgHelpers.js');
                     const vName = interaction.member?.displayName || interaction.user.username;
                     const qColor = d.quality === 'epic' ? 0x9b59b6 : d.quality === 'mythic' ? 0xe74c3c : 0xe67e22;
-                    const qEmoji = d.quality === 'epic' ? '🟣' : d.quality === 'mythic' ? '🔴' : '🟠';
-                    const qLabel = d.quality === 'epic' ? '史詩' : d.quality === 'mythic' ? '神話' : '傳說';
+                    const qLabel = qualityLabel(d.quality);
                     const typeLabel = d.isBook ? '技能書' : '裝備';
+                    
+                    const title = d.resonance ? '🌟 區域共鳴：遠征奇蹟！' : '遠征大獲全勝！極品現世';
+                    const resonanceText = d.resonance ? `因為${fmt(COLORS.CYAN, '區域共鳴')}的加护，原本平凡的獎勵昇華了！\n` : '';
 
                     await broadcastRpgEvent(interaction.client, interaction.guildId, {
-                        title: '遠征奇蹟！極品現世',
-                        description: `冒險者 ${fmt(COLORS.BLUE, vName)} 在長時間遠征歸來後\n帶回了 ${qEmoji} ${fmt(COLORS.WHITE, qLabel + typeLabel)}：\n「${fmt(COLORS.WHITE, getItemDisplayName(d.id))}」！`,
-                        color: qColor,
+                        title: title,
+                        description: `${resonanceText}冒險者 ${fmt(COLORS.BLUE, vName)} 在遠征歸來後\n帶回了 ${fmt(COLORS.GOLD, qLabel + typeLabel)}：\n「${fmt(COLORS.WHITE, getItemDisplayName(d.id))}」！`,
+                        color: d.resonance ? 0x00FFFF : qColor,
                         type: 'rare_drop'
                     });
                 }

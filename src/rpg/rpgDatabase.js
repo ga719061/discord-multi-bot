@@ -666,13 +666,18 @@ export function claimExpedition(guildId, userId) {
                             let quality = EQUIPMENT[d.id]?.quality || 'common';
                             
                             // 5% 機率觸發區域共鳴 (幸運掉落)
+                            let resonanceTriggered = false;
                             if (Math.random() < 0.05) {
                                 const resonanceQuality = rollQualityForArea(exp.area_id);
-                                quality = getBetterQuality(quality, resonanceQuality);
+                                const betterQuality = getBetterQuality(quality, resonanceQuality);
+                                if (betterQuality !== quality) {
+                                    quality = betterQuality;
+                                    resonanceTriggered = true;
+                                }
                             }
 
                             const eqId = addEquipment(guildId, userId, d.id, quality, char.level);
-                            drops.push({ id: d.id, qty: 1, isEquip: true, eqId: eqId, quality: quality });
+                            drops.push({ id: d.id, qty: 1, isEquip: true, eqId: eqId, quality: quality, resonance: resonanceTriggered });
                         } else {
                             itemRewards[d.id] = (itemRewards[d.id] || 0) + 1;
                         }

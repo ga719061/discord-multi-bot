@@ -261,11 +261,6 @@ export async function handleBattleAction(interaction) {
         // --- 處理本回合所有實體的 Stat 重算 ---
         Object.values(battle.player_states).forEach(p => {
             applyBuffsAndStates(p);
-            // 減少所有技能冷卻 1
-            if (!p.cooldowns) p.cooldowns = {};
-            for (const sid in p.cooldowns) {
-                if (p.cooldowns[sid] > 0) p.cooldowns[sid]--;
-            }
         });
         if (battle.ally_summons) battle.ally_summons.forEach(applyBuffsAndStates);
         monsters.forEach(applyBuffsAndStates);
@@ -1672,9 +1667,25 @@ async function handleVictory(interaction, battle, battleId, log) {
                     let quality = eqDef ? eqDef.quality : 'common';
                     
                     // 5% 機率觸發區域共鳴 (幸運掉落)
+                    let resonanceTriggered = false;
                     if (Math.random() < 0.05) {
                         const resonanceQuality = rollQualityForArea(battle.area_id);
-                        quality = getBetterQuality(quality, resonanceQuality);
+                        const betterQuality = getBetterQuality(quality, resonanceQuality);
+                        if (betterQuality !== quality) {
+                            quality = betterQuality;
+                            resonanceTriggered = true;
+                        }
+                    }
+
+                    if (resonanceTriggered && ['epic', 'mythic', 'legendary'].includes(quality)) {
+                        const pName = await getPickerName(receiverId);
+                        const qName = qualityLabel(quality);
+                        await broadcastRpgEvent(interaction.client, guildId, {
+                            title: '🌟 區域共鳴：奇蹟降臨！',
+                            description: `大地發出了共鳴！冒險者 ${fmt(COLORS.BLUE, pName)} 在此區域戰鬥時，\n受到英靈的加護，將原本平凡的獎勵昇華為\n${fmt(COLORS.GOLD, qName)} 品質的「${fmt(COLORS.WHITE, getItemDisplayName(drop.id))}」！`,
+                            color: 0x00FFFF,
+                            type: 'rare_drop'
+                        });
                     }
 
                     await awardItem(receiverId, drop.id, !!drop.isEquip, quality);

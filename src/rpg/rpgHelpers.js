@@ -663,7 +663,7 @@ export function getActualStats(itemId, quality, enhancement = 0, bonusData = {})
 // ---------- 隨機詞條生成器 (NEW) ----------
 export function generateRandomAffixes(itemId, quality, charLevel = 1) {
     const itemDef = EQUIPMENT[itemId];
-    if (!itemDef) return {};
+    if (!itemDef) return { affixes: [] };
 
     const category = getEquipCategory(itemDef.type);
     const affPool = Object.values(AFFIX_REGISTRY).filter(a => {
@@ -679,12 +679,12 @@ export function generateRandomAffixes(itemId, quality, charLevel = 1) {
         return typeMatch && levelMatch;
     });
 
-    if (affPool.length === 0) return {};
+    if (affPool.length === 0) return { affixes: [] };
 
     // 品質決定詞條數量
     const countMap = { common: 0, fine: 1, rare: 2, epic: 3, mythic: 4, legendary: 4 };
     const count = countMap[quality] || 0;
-    if (count === 0) return {};
+    if (count === 0) return { affixes: [] };
 
     // 權重隨機抽取
     const affixes = [];
@@ -847,6 +847,13 @@ export function processTurnEndStates(entity, isPlayer = false) {
         // 護盾每回合自然衰減 10% 或至少 20 點，避免低層區永久護盾
         const decay = Math.max(20, Math.floor(entity.shield * 0.1));
         entity.shield = Math.max(0, entity.shield - decay);
+    }
+
+    // Handle Skill Cooldowns
+    if (entity.cooldowns) {
+        for (const sid in entity.cooldowns) {
+            if (entity.cooldowns[sid] > 0) entity.cooldowns[sid]--;
+        }
     }
 
     return log;

@@ -560,9 +560,24 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                                 let quality = eqDef ? eqDef.quality : 'common';
 
                                 // 5% 機率觸發區域共鳴 (幸運掉落)
+                                let resonanceTriggered = false;
                                 if (Math.random() < 0.05) {
                                     const resonanceQuality = rollQualityForArea(areaId);
-                                    quality = getBetterQuality(quality, resonanceQuality);
+                                    const betterQuality = getBetterQuality(quality, resonanceQuality);
+                                    if (betterQuality !== quality) {
+                                        quality = betterQuality;
+                                        resonanceTriggered = true;
+                                    }
+                                }
+
+                                if (resonanceTriggered && ['epic', 'mythic', 'legendary'].includes(quality)) {
+                                    const qName = qualityLabel(quality);
+                                    await broadcastRpgEvent(interaction.client, guildId, {
+                                        title: '🌟 區域共鳴：奇蹟降臨！',
+                                        description: `大地發出了共鳴！冒險者 ${fmt(COLORS.BLUE, receiver.name)} (自動探索) 在此區域戰鬥時，\n受到英靈的加護，將原本平凡的獎勵昇華為\n${fmt(COLORS.GOLD, qName)} 品質的「${fmt(COLORS.WHITE, getItemDisplayName(drop.id))}」！`,
+                                        color: 0x00FFFF,
+                                        type: 'rare_drop'
+                                    });
                                 }
 
                                 dropsList.push({ id: drop.id, isEquip: !!drop.isEquip, quality, receiverName: receiver.name });
