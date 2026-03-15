@@ -253,6 +253,7 @@ export const MONSTERS = {
             { id: 'bandit_hands', chance: 0.8, isEquip: true },
             { id: 'boar_hide_feet', chance: 0.8, isEquip: true },
             { id: 'boar_hide_body', chance: 0.4, isEquip: true },
+            { id: 'elf_dagger', chance: 0.1, isEquip: true },
         ] }
     ],
     // ==================== T1: 妖精之森 (Lv 15-30) ====================
@@ -275,6 +276,7 @@ export const MONSTERS = {
             { id: 'bark_body', chance: 0.4, isEquip: true },
             { id: 'bark_shield', chance: 0.4, isEquip: true },
             { id: 'wisdom_potion', chance: 0.1 },
+            { id: 'crossbow', chance: 0.2, isEquip: true },
             { id: 'scroll_armor', chance: 0.15 },
         ] },
         { id: 'ent', name: '妖精之樹', emoji: '🌳', hp: 1200, atk: 120, def: 100, mdef: 150, spd: 10, xp: 350, gold: 250, skills: [{ name: '根鬚纏繞', type: 'debuff', stat: 'spd', percent: -50, turns: 3, chance: 15 }], drops: [
@@ -320,6 +322,7 @@ export const MONSTERS = {
             { id: 'bone_shield', chance: 0.4, isEquip: true },
             { id: 'bone_great_sword', chance: 0.15, isEquip: true },
             { id: 'defense_potion', chance: 0.1 },
+            { id: 'chain_mail_breaker', chance: 0.1, isEquip: true },
             { id: 'scroll_armor', chance: 0.25 },
         ] }
     ],
@@ -334,6 +337,7 @@ export const MONSTERS = {
             { id: 'ogre_belt', chance: 0.5, isEquip: true },
             { id: 'hp_potion_l', chance: 1 },
             { id: 'focus_potion', chance: 0.05 },
+            { id: 'damascus_sword', chance: 0.05, isEquip: true },
             { id: 'scroll_weapon', chance: 0.25 },
         ] },
         { id: 'wyvern_dv', name: '幼龍', emoji: '🐲', hp: 6000, atk: 600, def: 450, mdef: 500, spd: 50, xp: 2500, gold: 2000, skills: [{ name: '龍之氣息', type: 'magical', multiplier: 2.0, chance: 20 }], drops: [
@@ -343,6 +347,7 @@ export const MONSTERS = {
             { id: 'dragon_body', chance: 0.1, isEquip: true },
             { id: 'mp_potion', chance: 2 },
             { id: 'focus_potion', chance: 0.05 },
+            { id: 'yumi_bow', chance: 0.08, isEquip: true },
             { id: 'scroll_armor', chance: 0.3 },
         ] },
         { id: 'cockatrice', name: '考庫雷斯', emoji: '🐔🐍', hp: 5500, atk: 550, def: 300, mdef: 450, spd: 70, xp: 2200, gold: 1800, skills: [{ name: '石化啄擊', type: 'debuff', stat: 'spd', percent: -50, turns: 2, chance: 20 }], drops: [

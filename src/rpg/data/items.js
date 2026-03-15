@@ -46,6 +46,18 @@ export const EQUIPMENT = {
     orcish_shield: { name: '歐西斯之盾', emoji: '🛡️', type: 'shield', quality: 'fine', stats: { def: 15, mdef: 5 }, set_id: 'orcish_set' },
     orcish_amulet: { name: '歐西斯護符', emoji: '📿', type: 'accessory', quality: 'rare', stats: { def: 10, mdef: 10, hp: 60 }, set_id: 'orcish_set' },
 
+    // ===== 天堂經典武器系列 (Lineage Classics) =====
+    elf_dagger: { name: '精靈匕首', emoji: '🗡️', type: 'weapon_1h', quality: 'fine', stats: { atk: 15, spd: 15 }, desc: '全職業適用，以極高的攻擊速度著稱。' },
+    katana: { name: '武士刀', emoji: '⚔️', type: 'weapon_1h', quality: 'rare', stats: { atk: 35, spd: 5 }, forClass: 'warrior', desc: '性能極其穩定的單手劍。' },
+    chain_mail_breaker: { name: '鎖子甲破壞者', emoji: '🔱', type: 'weapon_1h', quality: 'rare', stats: { atk: 42, spd: 2 }, desc: '對抗鎧甲與不死系生物有奇效。' },
+    crossbow: { name: '十字弓', emoji: '🏹', type: 'weapon_1h', quality: 'fine', stats: { atk: 28, spd: 2 }, forClass: 'ranger', desc: '罕見的單手弩，在某些古籍中曾被作為輕便兵器。' },
+    yumi_bow: { name: '尤米弓', emoji: '🏹', type: 'weapon_2h', quality: 'rare', stats: { atk: 75, spd: 8 }, forClass: 'ranger', desc: '追求純粹破壞力的精靈長弓。' },
+    power_staff: { name: '力量魔法杖', emoji: '🪄', type: 'weapon_2h', quality: 'rare', stats: { atk: 25, matk: 35 }, forClass: 'mage', desc: '為熱衷於近身交戰的法師量身打造。' },
+    crystal_staff: { name: '水晶魔杖', emoji: '🔮', type: 'weapon_2h', quality: 'rare', stats: { matk: 55, mp: 100 }, forClass: 'mage', desc: '能大幅提升魔力上限與回補效率。' },
+    mana_staff: { name: '瑪那魔杖', emoji: '🧙', type: 'weapon_2h', quality: 'epic', stats: { matk: 75, mp: 200 }, forClass: 'mage', desc: '傳說中能吸取敵人意志的古老魔杖。' },
+    damascus_sword: { name: '大馬士革刀', emoji: '🗡️', type: 'weapon_1h', quality: 'rare', stats: { atk: 110, def: 15 }, forClass: 'warrior', desc: '由堅固材料製成，幾乎不會損壞。' },
+    thunder_sword: { name: '雷雨之劍', emoji: '⛈️', type: 'weapon_1h', quality: 'epic', stats: { atk: 140, matk: 80 }, desc: '劍身纏繞著雷光，攻擊時有機率引發落雷。' },
+
     // ===== 荒野與中層區域 (T2: 🔵稀有) =====
     bark_body: { name: '樹皮護甲', emoji: '🧥', type: 'body', quality: 'fine', stats: { def: 25, mdef: 15 }, set_id: 'bark_set' },
     bark_shield: { name: '樹皮大盾', emoji: '🛡️', type: 'shield', quality: 'fine', stats: { def: 20, mdef: 10 }, set_id: 'bark_set' },
