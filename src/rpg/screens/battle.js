@@ -1127,15 +1127,23 @@ export async function handleBattleAction(interaction) {
                     return safeReply(interaction, failMsg);
                 }
 
-                if (def.effect.type === 'heal_hp') {
-                    const heal = Math.floor(ps.max_hp * (def.effect.percent / 100));
+                const itemDefFromNames = ITEM_NAMES[itemId];
+                const itemEffect = def?.effect || itemDefFromNames?.effect;
+
+                if (!itemEffect) {
+                    logger.error(`[Battle] Item ${itemId} has no effect defined.`);
+                    return safeReply(interaction, { content: '🐕 該道具無法在此時使用！', flags: ['Ephemeral'] });
+                }
+
+                if (itemEffect.type === 'heal_hp') {
+                    const heal = Math.floor(ps.max_hp * (itemEffect.percent / 100));
                     ps.hp = Math.min(ps.max_hp, ps.hp + heal);
-                    log = `<@${userId}> 使用了 ${def.emoji} ${def.name}！回復了 ${heal} HP！`;
-                } else if (def.effect.type === 'heal_mp') {
-                    const heal = Math.floor(ps.max_mp * (def.effect.percent / 100));
+                    log = `<@${userId}> 使用了 ${def?.emoji || itemDefFromNames?.emoji} ${def?.name || itemDefFromNames?.name}！回復了 ${heal} HP！`;
+                } else if (itemEffect.type === 'heal_mp') {
+                    const heal = Math.floor(ps.max_mp * (itemEffect.percent / 100));
                     ps.mp = Math.min(ps.max_mp, ps.mp + heal);
-                    log = `<@${userId}> 使用了 ${def.emoji} ${def.name}！回復了 ${heal} MP！`;
-                } else if (def.effect.type === 'escape') {
+                    log = `<@${userId}> 使用了 ${def?.emoji || itemDefFromNames?.emoji} ${def?.name || itemDefFromNames?.name}！回復了 ${heal} MP！`;
+                } else if (itemEffect.type === 'escape') {
                     updateCharacter(interaction.guildId, userId, { hp: ps.hp, mp: ps.mp });
                     battle.player_ids = battle.player_ids.filter(pid => pid !== userId);
                     delete battle.player_states[userId];
@@ -1148,10 +1156,10 @@ export async function handleBattleAction(interaction) {
                     const embed = rpgEmbed('🏃 逃跑成功！', `<@${userId}> 使用煙霧彈先行撤退了！`);
                     const payload = { embeds: [embed], components: [backButton()] };
                     return safeReply(interaction, payload);
-                } else if (def.effect.type === 'buff') {
+                } else if (itemEffect.type === 'buff') {
                     ps.buffs = ps.buffs || [];
-                    ps.buffs.push({ ...def.effect, turns: def.effect.turns, name: def.name, emoji: def.emoji });
-                    log = `<@${userId}> 使用了 ${def.emoji} ${def.name}！獲得了強效增益！`;
+                    ps.buffs.push({ ...itemEffect, turns: itemEffect.turns, name: def?.name || itemDefFromNames?.name, emoji: def?.emoji || itemDefFromNames?.emoji });
+                    log = `<@${userId}> 使用了 ${def?.emoji || itemDefFromNames?.emoji} ${def?.name || itemDefFromNames?.name}！獲得了強效增益！`;
                 }
             }
 
