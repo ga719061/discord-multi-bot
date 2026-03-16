@@ -5,7 +5,7 @@ import {
     getAuctionById, deleteAuction, getAuctionsBySeller, getTotalAuctionsCount, addGold, addEquipment, 
     addAuctionHistory, getPersonalAuctionHistory, getQuestProgress, getLearnedSkills, setAutoSkills,
     getStashedEquipmentList, getStashedInventory, stashEquipment, unstashEquipment, resetCharacterStats,
-    stashItem, unstashItem
+    stashItem, unstashItem, removeMultipleEquipment
 } from '../rpgDatabase.js';
 import { rpgEmbed, rpgButton, safeReply, formatItemName, backButton, generateRandomAffixes, getEquipCategory, getScrollForCategory, ENHANCEMENT_CONFIG, broadcastRpgEvent, calculateTotalStats } from '../rpgHelpers.js';
 import { fmt, COLORS } from '../../utils/style.js';
@@ -89,11 +89,16 @@ export async function showBlacksmithList(interaction, actionType) {
             .addOptions(options.slice(0, 25))
     );
 
-    const backRow = new ActionRowBuilder().addComponents(
-        rpgButton(`rpg_blacksmith`, '返回', undefined, '🔙')
-    );
+    const rows = [row];
+    if (actionType === 'dismantle') {
+        const bulkRow = new ActionRowBuilder().addComponents(
+            rpgButton(`rpg_bs_bulk_dismantle_menu_${userId}`, '批次拆解設定', 'Danger', '♻️')
+        );
+        rows.push(bulkRow);
+    }
+    rows.push(backButton());
 
-    await safeReply(interaction, { embeds: [embed], components: [row, backRow] });
+    await safeReply(interaction, { embeds: [embed], components: rows });
 }
 
 /**
@@ -327,4 +332,112 @@ function recalcAndSaveStats(guildId, userId) {
     const updates = {};
     DB_STAT_FIELDS.forEach(f => { if (total[f] !== undefined) updates[f] = total[f]; });
     updateCharacter(guildId, userId, updates);
+}
+
+/**
+ * 顯示批次拆解選單
+ */
+export async function showBulkDismantleMenu(interaction) {
+    const userId = interaction.user.id;
+    const guildId = interaction.guildId;
+    const eqList = getEquipmentList(guildId, userId).filter(eq => !eq.equipped);
+    
+    if (eqList.length === 0) {
+        return safeReply(interaction, { content: '🐕 你目前沒有任何可以拆解的裝備。', flags: ['Ephemeral'] });
+    }
+
+    const counts = {};
+    const qualities = ['common', 'fine', 'rare', 'epic', 'mythic', 'legendary'];
+    qualities.forEach(q => counts[q] = eqList.filter(eq => eq.quality === q).length);
+
+    const embed = rpgEmbed(
+        '♻️ 批次拆解 — 快速回收',
+        '```ansi\n' + [
+            fmt(COLORS.WHITE, '按品質批次拆解所有未裝備的主背包道具。'),
+            fmt(COLORS.RED, '注意：此操作不可逆，請謹慎選擇！'),
+            '',
+            ...qualities.map(q => {
+                const count = counts[q];
+                const label = QUALITY_MULTIPLIER[q]?.label || q;
+                return count > 0 ? `${label}: ${fmt(COLORS.GOLD, count)} 件` : '';
+            }).filter(Boolean)
+        ].join('\n') + '\n```'
+    );
+
+    const rows = [];
+    let currentRow = new ActionRowBuilder();
+    
+    qualities.forEach(q => {
+        if (counts[q] > 0) {
+            const label = QUALITY_MULTIPLIER[q]?.label.split(' ')[1] || q;
+            const btn = rpgButton(`rpg_bs_bulk_dismantle_do_${q}_${userId}`, `全部拆解 [${label}]`, 'Danger');
+            currentRow.addComponents(btn);
+            if (currentRow.components.length === 3) {
+                rows.push(currentRow);
+                currentRow = new ActionRowBuilder();
+            }
+        }
+    });
+    if (currentRow.components.length > 0) rows.push(currentRow);
+    rows.push(new ActionRowBuilder().addComponents(rpgButton(`rpg_bs_dismantle_list_${userId}`, '返回單件拆解', 'Secondary', '🔙')));
+
+    await safeReply(interaction, { embeds: [embed], components: rows });
+}
+
+/**
+ * 處理批次拆解邏輯
+ */
+export async function handleBulkDismantle(interaction, quality) {
+    const userId = interaction.user.id;
+    const guildId = interaction.guildId;
+    const items = getEquipmentList(guildId, userId).filter(eq => !eq.equipped && eq.quality === quality);
+
+    if (items.length === 0) {
+        return safeReply(interaction, { content: '🐕 找不到該品質的可拆解裝備。', flags: ['Ephemeral'] });
+    }
+
+    let totalShards = 0;
+    let totalEssences = 0;
+
+    items.forEach(eq => {
+        let shardCount = 0;
+        let essenceCount = 0;
+        switch(eq.quality) {
+            case 'common': shardCount = Math.floor(Math.random() * 4) + 5; break;
+            case 'fine': shardCount = Math.floor(Math.random() * 7) + 12; break;
+            case 'rare': shardCount = Math.floor(Math.random() * 11) + 25; break;
+            case 'epic': essenceCount = Math.floor(Math.random() * 2) + 2; break;
+            case 'mythic': essenceCount = Math.floor(Math.random() * 4) + 5; break;
+            case 'legendary': essenceCount = Math.floor(Math.random() * 5) + 8; break;
+        }
+        totalShards += shardCount;
+        totalEssences += essenceCount;
+    });
+
+    const eqIds = items.map(i => i.id);
+    removeMultipleEquipment(eqIds);
+
+    if (totalShards > 0) addToInventory(guildId, userId, 'magic_shard', totalShards);
+    if (totalEssences > 0) addToInventory(guildId, userId, 'chaos_essence', totalEssences);
+
+    const qualityLabel = QUALITY_MULTIPLIER[quality]?.label || quality;
+    const embed = rpgEmbed(
+        '♻️ 批次拆解成功',
+        '```ansi\n' + [
+            fmt(COLORS.GREEN, `你一口氣將 ${items.length} 件 ${qualityLabel} 裝備丟進了大型熔爐！`),
+            '',
+            totalShards > 0 ? fmt(COLORS.CYAN, `✨ 獲得 魔力碎片 x${totalShards}`) : '',
+            totalEssences > 0 ? fmt(COLORS.PURPLE, `🌀 獲得 混沌精華 x${totalEssences}`) : '',
+            '',
+            fmt(COLORS.GRAY, '看著那些裝備化為亮晶晶的能量，你感到心滿意足。')
+        ].filter(Boolean).join('\n') + '\n```',
+        0x2ECC71
+    );
+
+    const row = new ActionRowBuilder().addComponents(
+        rpgButton(`rpg_bs_bulk_dismantle_menu_${userId}`, '繼續批次拆解', 'Primary', '♻️'),
+        rpgButton(`rpg_blacksmith`, '回到鐵匠鋪', 'Secondary', '🔙')
+    );
+
+    await safeReply(interaction, { embeds: [embed], components: [row] });
 }

@@ -210,6 +210,7 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                     } else if (usedSkill.special === 'mage_summon') {
                         // 召喚模擬：根據等級給予強化的護盾與增傷 Buff
                         const lvl = char.level || 1;
+                        const maxSummons = lvl >= 80 ? 4 : (lvl >= 65 ? 3 : (lvl >= 45 ? 2 : 1)); // 召喚數量隨等級提升
                         let sMult = 0.7;
                         let bMult = 20;
 
@@ -221,9 +222,9 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                         else if (lvl >= 40) { sMult = 1.3; bMult = 25; }
                         else if (lvl >= 32) { sMult = 1.0; bMult = 20; }
 
-                        const summonHp = Math.floor(total.max_hp * (0.3 + (lvl / 200)) * sMult * 0.5); // 自動戰鬥中護盾倍率微調
-                        playerShield += summonHp;
-                        playerBuffs.push({ atkPercent: bMult, matkPercent: bMult, turns: 4 });
+                        const summonHpPerOne = Math.floor(total.max_hp * (0.3 + (lvl / 200)) * sMult * 0.5); // 自動戰鬥中護盾倍率微調
+                        playerShield += (summonHpPerOne * maxSummons);
+                        playerBuffs.push({ atkPercent: bMult * maxSummons * 0.5, matkPercent: bMult * maxSummons * 0.5, turns: 4 }); // 攻擊力加成稍微衰減但總量增加
                     } else {
                         const isPhysical = usedSkill.type === 'physical';
                         const isMagical = usedSkill.type === 'magical';
@@ -301,7 +302,8 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                                 }
                             }
 
-                            if (usedSkill.lifeSteal) playerHp = Math.min(total.max_hp, playerHp + Math.floor(totalLifeStealDmg * (usedSkill.lifeSteal / 100)));
+                            const totalLifeStealStat = (usedSkill.lifeSteal || 0) + (total.lifesteal || 0);
+                            if (totalLifeStealStat > 0) playerHp = Math.min(total.max_hp, playerHp + Math.floor(totalLifeStealDmg * (totalLifeStealStat / 100)));
 
                             if (usedSkill.effect) {
                                 playerBuffs.push({ ...usedSkill.effect, turns: usedSkill.effect.turns });
@@ -321,7 +323,8 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                                 for (let i = 0; i < hits; i++) {
                                     totalDmg += (Number(Math.floor(dmg)) || 0);
                                 }
-                                if (usedSkill.lifeSteal) playerHp = Math.min(total.max_hp, playerHp + Math.floor(totalDmg * (usedSkill.lifeSteal / 100)));
+                                const totalLifeStealStat = (usedSkill.lifeSteal || 0) + (total.lifesteal || 0);
+                                if (totalLifeStealStat > 0) playerHp = Math.min(total.max_hp, playerHp + Math.floor(totalDmg * (totalLifeStealStat / 100)));
 
                                 // 注入狀態
                                 if (usedSkill.dot) {
@@ -372,6 +375,12 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                         }
 
                         if (target.currentHp <= 0) executeSetHooks('onKill', ps, target);
+
+                        // 裝備吸血
+                        if (total.lifesteal > 0) {
+                            const heal = Math.floor(dmg * (total.lifesteal / 100));
+                            playerHp = Math.min(total.max_hp, playerHp + heal);
+                        }
 
                         // 處理魔劍士附魔
                         const enchant = playerBuffs.find(b => b.enchantType);
@@ -451,6 +460,13 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
 
                         playerHp = Math.max(0, playerHp - mdmg);
                         ps.hp = playerHp; // 同步回狀態物件
+                        
+                        // 紀錄傷害來源 (用於擊殺資訊)
+                        ps.killerInfo = {
+                            name: m.name,
+                            skill: mSkill ? mSkill.name : '普通攻擊',
+                            damage: mdmg
+                        };
                     }
                     if (playerHp <= 0) break;
                 }
@@ -462,6 +478,13 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                     if (d.dot && wrapPlayer.hp > 0) {
                         const dotDmg = Math.max(1, Math.floor(wrapPlayer.max_hp * (d.dot.percent / 100)));
                         wrapPlayer.hp -= dotDmg;
+                        if (wrapPlayer.hp <= 0) {
+                            ps.killerInfo = {
+                                name: d.dot?.type === 'burn' ? '🔥 灼燒效果' : (d.dot?.type === 'poison' ? '☠️ 劇毒效果' : '持續傷害'),
+                                skill: 'DOT',
+                                damage: dotDmg
+                            };
+                        }
                     }
                     d.turns--;
                     return d.turns > 0 || d.turns === -1;
@@ -497,10 +520,11 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                     const newDeaths = (charAfter?.deaths || 0) + 1;
                     const newStreak = (charAfter?.lose_streak || 0) + 1;
                     const vName = interaction.member?.displayName || interaction.user.username;
+                    const ki = ps.killerInfo || { name: encounterMonsters[0].name, skill: '未知攻擊', damage: '??' };
 
                     await broadcastRpgEvent(interaction.client, guildId, {
                         title: '壯烈犧牲',
-                        description: `冒險者 ${fmt(COLORS.BLUE, vName)} 在自動探索時不幸戰死...\n${fmt(COLORS.RED, '擊殺者: ' + encounterMonsters[0].name)}\n${fmt(COLORS.RED, '當前連敗數: ' + newStreak)}\n${fmt(COLORS.GRAY, '生涯死亡數: ' + newDeaths)}`,
+                        description: `冒險者 ${fmt(COLORS.BLUE, vName)} 被 ${fmt(COLORS.WHITE, ki.name)} 的 「${fmt(COLORS.CYAN, ki.skill)}」 擊倒了！\n造成了 ${fmt(COLORS.RED, ki.damage)} 點致命傷...\n\n${fmt(COLORS.RED, '擊殺者: ' + ki.name)}\n${fmt(COLORS.RED, '當前連敗數: ' + newStreak)}\n${fmt(COLORS.GRAY, '生涯死亡數: ' + newDeaths)}`,
                         color: 0x880000,
                         type: 'death'
                     });
@@ -559,9 +583,9 @@ export async function runAutoFarm(interaction, char, areaId, roundsCount) {
                                 const eqDef = EQUIPMENT[drop.id];
                                 let quality = eqDef ? eqDef.quality : 'common';
 
-                                // 5% 機率觸發區域共鳴 (幸運掉落)
+                                // 5% 機率觸發區域共鳴 (幸運掉落) - 僅限裝備
                                 let resonanceTriggered = false;
-                                if (Math.random() < 0.05) {
+                                if (drop.isEquip && Math.random() < 0.05) {
                                     const resonanceQuality = rollQualityForArea(areaId);
                                     const betterQuality = getBetterQuality(quality, resonanceQuality);
                                     if (betterQuality !== quality) {

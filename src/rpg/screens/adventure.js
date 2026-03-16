@@ -316,6 +316,12 @@ async function startBattle(interaction, char, areaId, forceBoss = false) {
     let monsterData = [];
     let isBossEncounter = false;
 
+    // 隨機遭遇首領 (3% 機率)
+    const bossRoll = Math.random() * 100;
+    if (!forceBoss && bossData && bossRoll < 3) {
+        forceBoss = true;
+    }
+
     if (forceBoss && bossData) {
         isBossEncounter = true;
         const baseHpMultiplier = 2.0;

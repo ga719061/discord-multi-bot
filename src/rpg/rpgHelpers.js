@@ -818,6 +818,13 @@ export function processTurnEndStates(entity, isPlayer = false) {
                 if (isPlayer) {
                     entity.hp = currentHp;
                     log += `\n☠️ <@${entity.id}> 受到持續傷害，損失了 ${dmg} HP！`;
+                    if (currentHp <= 0) {
+                        entity.killerInfo = {
+                            name: d.dot?.type === 'burn' ? '🔥 灼燒效果' : (d.dot?.type === 'poison' ? '☠️ 劇毒效果' : '持續傷害'),
+                            skill: 'DOT',
+                            damage: dmg
+                        };
+                    }
                 } else {
                     entity.currentHp = currentHp;
                     log += `\n☠️ ${entity.name} 受到持續傷害，損失了 ${dmg} HP！`;

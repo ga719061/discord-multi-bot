@@ -77,8 +77,8 @@ export const EQUIPMENT = {
     stone_shield: { name: '巨岩大盾', emoji: '🛡️', type: 'shield', quality: 'rare', stats: { def: 55, mdef: 30 }, set_id: 'stone_set' },
     
     spirit_staff: { name: '精靈之杖', emoji: '🔮', type: 'weapon_2h', quality: 'fine', stats: { matk: 45, mp: 60 } },
-    wisdom_boots: { name: '智力長靴', emoji: '👢', type: 'feet', quality: 'fine', stats: { mdef: 15, spd: 10, mp: 30 } },
-    caspa_cap: { name: '卡司柏帽子', emoji: '🎩', type: 'head', quality: 'fine', stats: { matk: 25, mp: 80 } },
+    wisdom_boots: { name: '智力長靴', emoji: '👢', type: 'feet', quality: 'rare', stats: { matk: 20, mdef: 30, spd: 25, mp: 120 }, desc: '穿上它後，感覺思緒變得無比清晰流暢。' },
+    caspa_cap: { name: '卡司柏帽子', emoji: '🎩', type: 'head', quality: 'epic', stats: { matk: 55, mdef: 25, mp: 250 }, desc: '傳說中大法師卡司柏所佩戴的尖帽，蘊含著龐大的魔力。' },
     
     dragon_head: { name: '龍鱗頭盔', emoji: '⛑️', type: 'head', quality: 'rare', stats: { def: 35, hp: 120 }, set_id: 'dragon_set' },
     dragon_body: { name: '龍鱗鎧甲', emoji: '🛡️', type: 'body', quality: 'rare', stats: { def: 85, mdef: 45, hp: 300 }, set_id: 'dragon_set' },

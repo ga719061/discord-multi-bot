@@ -774,6 +774,7 @@ export async function handleBattleAction(interaction) {
                             return safeReply(interaction,{ content: `🚫 召喚位階已達上限 (${maxSummons} 尊)。`, flags: ['Ephemeral'] });
                         }
 
+                        const canSummonCount = maxSummons - aliveSummons;
                         ps.mp -= skill.mp;
                         let sName = '骸骨';
                         let sEmoji = '☠️';
@@ -791,31 +792,34 @@ export async function handleBattleAction(interaction) {
                         const summonHp = Math.floor(ps.max_hp * (0.3 + (lvl / 200))); // 血量略微下調以平衡高攻擊
                         const summonDef = Math.floor((ps.def || 10) * 0.5);
 
-                        battle.ally_summons.push({
-                            isSummon: true,
-                            name: sName,
-                            emoji: sEmoji,
-                            hp: summonHp,
-                            max_hp: summonHp,
-                            atk: summonAtk,
-                            matk: summonAtk * 0.5,
-                            def: summonDef,
-                            mdef: Math.floor(summonDef * 0.8),
-                            spd: ps.spd,
-                            buffs: [], debuffs: [],
-                            b_atk: summonAtk,
-                            b_matk: summonAtk * 0.5,
-                            b_def: summonDef,
-                            b_mdef: Math.floor(summonDef * 0.8),
-                            b_spd: ps.spd
-                        });
+                        for (let i = 0; i < canSummonCount; i++) {
+                            battle.ally_summons.push({
+                                isSummon: true,
+                                name: sName,
+                                emoji: sEmoji,
+                                hp: summonHp,
+                                max_hp: summonHp,
+                                atk: summonAtk,
+                                matk: summonAtk * 0.5,
+                                def: summonDef,
+                                mdef: Math.floor(summonDef * 0.8),
+                                spd: ps.spd,
+                                buffs: [], debuffs: [],
+                                b_atk: summonAtk,
+                                b_matk: summonAtk * 0.5,
+                                b_def: summonDef,
+                                b_mdef: Math.floor(summonDef * 0.8),
+                                b_spd: ps.spd
+                            });
+                        }
 
                         // 設置冷卻時間
                         if (skill.cd) {
                             ps.cooldowns = ps.cooldowns || {};
                             ps.cooldowns[skill.id] = skill.cd + 1;
                         }
-                        log = `<@${userId}> 使用了 ${skill.emoji} ${skill.name}！召喚了 ${sEmoji}${sName} 加入戰線！ (上限: ${maxSummons})`;
+                        log = `<@${userId}> 使用了 ${skill.emoji} ${skill.name}！召喚了 ${canSummonCount} 尊 ${sEmoji}${sName} 加入戰線！ (上限: ${maxSummons})`;
+
 
                     } else if (skill.target === 'random') {
                         // 隨機多段打擊
@@ -1512,6 +1516,14 @@ async function applyMonsterSkill(m, skill, targetInfo, battle, calcDamage, isDod
     }
     target.hp -= totalDmg;
 
+    // 紀錄傷害來源 (用於擊殺資訊)
+    target.killerInfo = {
+        name: m.name,
+        emoji: m.emoji,
+        skill: skill ? skill.name : '普通攻擊',
+        damage: totalDmg
+    };
+
     // 反彈傷害 (Reflection)
     let reflectMsg = '';
     const reflectBuff = (target.buffs || []).find(b => b.reflect);
@@ -1573,9 +1585,11 @@ async function applyMonsterSkill(m, skill, targetInfo, battle, calcDamage, isDod
 
                 const victim = await interaction.guild.members.fetch(targetId).catch(() => null);
                 const vName = victim ? victim.displayName : interaction.user.username;
+                const ki = target.killerInfo || { name: m.name, skill: '未知攻擊', damage: '??' };
+                
                 await broadcastRpgEvent(interaction.client, interaction.guildId, {
                     title: '壯烈犧牲',
-                    description: `冒險者 ${fmt(COLORS.BLUE, vName)} 在對抗 ${fmt(COLORS.WHITE, m.name)} 時不幸戰死...\n${fmt(COLORS.RED, '當前連敗數: ' + newStreak)}\n${fmt(COLORS.GRAY, '生涯死亡數: ' + newDeaths)}`,
+                    description: `冒險者 ${fmt(COLORS.BLUE, vName)} 被 ${fmt(COLORS.WHITE, ki.name)} 的 「${fmt(COLORS.CYAN, ki.skill)}」 擊倒了！\n造成了 ${fmt(COLORS.RED, ki.damage)} 點致命傷...\n\n${fmt(COLORS.RED, '當前連敗數: ' + newStreak)}\n${fmt(COLORS.GRAY, '生涯死亡數: ' + newDeaths)}`,
                     color: 0x880000,
                     type: 'death'
                 });
@@ -1674,9 +1688,9 @@ async function handleVictory(interaction, battle, battleId, log) {
                     const eqDef = EQUIPMENT[drop.id];
                     let quality = eqDef ? eqDef.quality : 'common';
                     
-                    // 5% 機率觸發區域共鳴 (幸運掉落)
+                    // 5% 機率觸發區域共鳴 (幸運掉落) - 僅限裝備
                     let resonanceTriggered = false;
-                    if (Math.random() < 0.05) {
+                    if (drop.isEquip && Math.random() < 0.05) {
                         const resonanceQuality = rollQualityForArea(battle.area_id);
                         const betterQuality = getBetterQuality(quality, resonanceQuality);
                         if (betterQuality !== quality) {

@@ -380,6 +380,12 @@ export function addEquipment(guildId, userId, itemId, quality = 'common', charLe
 export function removeEquipment(equipmentId) {
     getDb().prepare('DELETE FROM rpg_equipment WHERE id = ?').run(equipmentId);
 }
+export function removeMultipleEquipment(equipmentIds) {
+    if (!equipmentIds || equipmentIds.length === 0) return;
+    const db = getDb();
+    const placeholders = equipmentIds.map(() => '?').join(',');
+    db.prepare(`DELETE FROM rpg_equipment WHERE id IN (${placeholders})`).run(...equipmentIds);
+}
 export function getEquipment(eqId) {
     return getDb().prepare('SELECT * FROM rpg_equipment WHERE id = ?').get(eqId);
 }

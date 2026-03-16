@@ -457,48 +457,49 @@ export const SUMMON_RECIPES = {
     talking_island: {
         ingredients: [
             { id: 'stolen_pouch', count: 10 },
-            { id: 'slime_gel', count: 10 }
+            { id: 'slime_gel', count: 10 },
+            { id: 'werewolf_paw', count: 5 }
         ]
     },
     elven_forest: {
         ingredients: [
             { id: 'spirit_wood', count: 15 },
-            { id: 'fungus_spore', count: 10 }
+            { id: 'fungus_spore', count: 15 },
+            { id: 'arachne_web', count: 10 }
         ]
     },
     gludio_dungeon_low: {
         ingredients: [
-            { id: 'ancient_bone', count: 20 },
-            { id: 'arachne_web', count: 15 }
+            { id: 'ancient_bone', count: 30 }
         ]
     },
     dragon_valley: {
         ingredients: [
-            { id: 'dragon_scale_mat', count: 25 },
-            { id: 'ancient_bone', count: 25 }
+            { id: 'dragon_scale_mat', count: 30 },
+            { id: 'ancient_bone', count: 30 }
         ]
     },
     talking_island_dungeon: {
         ingredients: [
-            { id: 'werewolf_paw', count: 30 },
-            { id: 'ancient_bone', count: 40 }
+            { id: 'werewolf_paw', count: 40 },
+            { id: 'fire_core', count: 20 },
+            { id: 'stolen_pouch', count: 20 }
         ]
     },
     gludio_dungeon_deep: {
         ingredients: [
-            { id: 'ancient_bone', count: 100 }
+            { id: 'ancient_bone', count: 150 }
         ]
     },
     fire_dragon_cave: {
         ingredients: [
-            { id: 'lava_heart', count: 40 },
-            { id: 'fire_core', count: 40 }
+            { id: 'lava_heart', count: 50 },
+            { id: 'fire_core', count: 50 }
         ]
     },
     antharas_lair: {
         ingredients: [
-            { id: 'earth_dragon_scale', count: 5 },
-            { id: 'dragon_scale_mat', count: 50 }
+            { id: 'earth_dragon_scale', count: 15 }
         ]
     }
 };

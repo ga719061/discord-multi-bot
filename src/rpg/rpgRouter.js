@@ -15,7 +15,7 @@ import { showAutoConfig, handleAutoConfigSelect } from './screens/autoConfig.js'
 import { showRanking } from './screens/ranking.js';
 import { showTavern, handleTavernAction } from './screens/tavern.js';
 import { showAuctionHub, showAuctionBrowse, handleAuctionBuy, showAuctionListSelection, handleAuctionListPrompt, handleAuctionSubmit, showMyAuctions, handleAuctionCancel, showAuctionHistory } from './screens/auction.js';
-import { showBlacksmith, showBlacksmithList, handleDismantle, handleReforge, handleEnhance } from './screens/blacksmith.js';
+import { showBlacksmith, showBlacksmithList, handleDismantle, handleReforge, handleEnhance, showBulkDismantleMenu, handleBulkDismantle } from './screens/blacksmith.js';
 import { renderExpedition, handleExpeditionInteractions } from './screens/expedition.js';
 import { logger } from '../utils/logger.js';
 
@@ -57,6 +57,7 @@ export function registerRpgRouter(client) {
                      'rpg_bs_select_',
                      'rpg_bs_dismantle_',
                      'rpg_bs_reforge_',
+                     'rpg_bs_bulk_dismantle_',
                      'rpg_exp_'
                ];
                const isShared = sharedPrefixes.some(p => id.startsWith(p));
@@ -235,6 +236,14 @@ export function registerRpgRouter(client) {
                      }
                      if (id.startsWith('rpg_bs_enhance_list_')) {
                           return await showBlacksmithList(interaction, 'enhance');
+                     }
+                     if (id.startsWith('rpg_bs_bulk_dismantle_menu_')) {
+                          return await showBulkDismantleMenu(interaction);
+                     }
+                     if (id.startsWith('rpg_bs_bulk_dismantle_do_')) {
+                          const parts = id.split('_');
+                          const quality = parts[5];
+                          return await handleBulkDismantle(interaction, quality);
                      }
                      if (id.startsWith('rpg_bs_select_')) {
                           // customId = rpg_bs_select_{userId}, 實際選擇值在 values[0]
