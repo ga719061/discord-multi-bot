@@ -141,6 +141,7 @@ export async function handleExpeditionInteractions(interaction) {
     const parts = id.split('_');
     const action = parts[2]; // exp_ACTION_...
     const userId = parts[parts.length - 1];
+    const char = getCharacter(interaction.guildId, userId);
 
     if (!isOwner(interaction, userId)) return notOwnerReply(interaction);
 
