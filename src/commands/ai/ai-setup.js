@@ -247,16 +247,7 @@ export async function execute(interaction) {
         // 傳送入場台詞到目標頻道
         await targetChannel.send('🛡️ **（號角長鳴）汪！諸位廷臣肅靜！本王已駕臨『御前圓桌會議』！**\n從此刻起，卸下所有規矩，只要呼喚 (@) 本王，你們的每一句諫言，本王都將親自審度與回應。現在，開始你們的奏報吧！').catch(() => { });
 
-        // 設定時間到時的離場台詞
-        setTimeout(async () => {
-            const { getAiSettings, updateAiSetting } = await import('../../utils/database.js');
-            const currentSettings = getAiSettings(guildId);
-            if (currentSettings.party_channel_id === targetChannel.id && currentSettings.party_expires_at === expiresAt) {
-                updateAiSetting(guildId, 'party_channel_id', null);
-                updateAiSetting(guildId, 'party_expires_at', null);
-                await targetChannel.send('🛑 **（敲擊權杖）汪！時間已到，今日的御前會議到此為止！**\n本王乏了，所有的諫言本王都已聽見，諸臣退朝！').catch(() => { });
-            }
-        }, minutes * 60 * 1000);
+        // 派對到期由 partyManager 輪詢處理（重啟後依然有效）
 
     } else if (sub === 'context') {
         const switchValue = interaction.options.getString('switch');

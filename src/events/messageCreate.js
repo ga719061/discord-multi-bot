@@ -283,9 +283,20 @@ export function register(client) {
                     }
 
                     const aiReply = await getAiResponse(displayText, fullPrompt, modelName, useSearch, history, imageAttachments);
-                    // 若回應超過 2000 字，截斷
-                    const replyText = aiReply.slice(0, 1990);
-                    await message.reply(replyText);
+                    // 若回應超過 2000 字，自動分段發送
+                    const MAX_LEN = 1990;
+                    if (aiReply.length <= MAX_LEN) {
+                        await message.reply(aiReply);
+                    } else {
+                        const chunks = [];
+                        for (let i = 0; i < aiReply.length; i += MAX_LEN) {
+                            chunks.push(aiReply.slice(i, i + MAX_LEN));
+                        }
+                        await message.reply(chunks[0]);
+                        for (let i = 1; i < chunks.length; i++) {
+                            await message.channel.send(chunks[i]);
+                        }
+                    }
                     return; // AI 處理完，不走後面的邏輯
                 }
             } catch (err) {

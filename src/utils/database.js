@@ -79,7 +79,9 @@ export function initDatabase() {
       model TEXT DEFAULT 'gemini-2.0-flash',
       admin_ids TEXT DEFAULT '[]',
       search_enabled INTEGER DEFAULT 0,
-      context_enabled INTEGER DEFAULT 1
+      context_enabled INTEGER DEFAULT 1,
+      party_channel_id TEXT DEFAULT NULL,
+      party_expires_at INTEGER DEFAULT NULL
     );
 
     CREATE TABLE IF NOT EXISTS reminders (
@@ -92,6 +94,12 @@ export function initDatabase() {
       status TEXT DEFAULT 'pending',
       created_at INTEGER
     );
+  `);
+
+  // === 索引 (加速 leaderboard 等查詢) ===
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_user_levels_guild_rank
+    ON user_levels(guild_id, level DESC, xp DESC);
   `);
 
   const guildSettingsInfo = db.pragma('table_info(guild_settings)');
@@ -116,6 +124,12 @@ export function initDatabase() {
   }
   if (!aiColumns.includes('context_enabled')) {
     db.prepare("ALTER TABLE ai_settings ADD COLUMN context_enabled INTEGER DEFAULT 1").run();
+  }
+  if (!aiColumns.includes('party_channel_id')) {
+    db.prepare("ALTER TABLE ai_settings ADD COLUMN party_channel_id TEXT DEFAULT NULL").run();
+  }
+  if (!aiColumns.includes('party_expires_at')) {
+    db.prepare("ALTER TABLE ai_settings ADD COLUMN party_expires_at INTEGER DEFAULT NULL").run();
   }
   if (!guildColumns.includes('rpg_broadcast_channel')) {
     db.prepare("ALTER TABLE guild_settings ADD COLUMN rpg_broadcast_channel TEXT DEFAULT NULL").run();
@@ -267,7 +281,7 @@ export function getAiSettings(guildId) {
   };
 }
 
-const ALLOWED_AI_KEYS = ['enabled', 'expires_at', 'system_prompt', 'whitelist', 'model', 'admin_ids', 'search_enabled', 'context_enabled'];
+const ALLOWED_AI_KEYS = ['enabled', 'expires_at', 'system_prompt', 'whitelist', 'model', 'admin_ids', 'search_enabled', 'context_enabled', 'party_channel_id', 'party_expires_at'];
 
 export function updateAiSetting(guildId, key, value) {
   if (!ALLOWED_AI_KEYS.includes(key)) throw new Error(`不可許的欄位名稱: ${key}`);

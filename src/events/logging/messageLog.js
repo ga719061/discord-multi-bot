@@ -5,23 +5,9 @@ import { fmt, COLORS } from '../../utils/style.js';
 
 export function register(client) {
     client.on('messageDelete', async (message) => {
+        // Partial 訊息沒有作者/內容資訊，記錄下來只是噪音，直接跳過
+        if (message.partial) return;
         if (!message.guild || message.author?.bot) return;
-
-        // 如果訊息是 Partial，我們可能抓不到內容與附件
-        if (message.partial) {
-            const partialEmbed = new EmbedBuilder()
-                .setColor(0x555555)
-                .setTitle('🐕🗑️ 訊息被吃掉了，但本王沒看清...')
-                .setDescription(
-                    `**頻道:** ${message.channel}\n` +
-                    `**注意:** 這則訊息在機器人啟動前就存在，或未被快取，本王無法讀取其內容與圖片。`
-                )
-                .setFooter({ text: `ID: ${message.id}` })
-                .setTimestamp();
-            
-            sendLog(message.guild, partialEmbed, 'message');
-            return;
-        }
 
         // 嘗試偵測刪除者 (如果是管理員刪除，Audit Log 會有紀錄)
         const executor = await getAuditLogExecutor(message.guild, AuditLogEvent.MessageDelete, message.author.id);
