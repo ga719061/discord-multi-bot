@@ -7,7 +7,7 @@ export function register(client) {
     client.on('messageDelete', async (message) => {
         // Partial 訊息沒有作者/內容資訊，記錄下來只是噪音，直接跳過
         if (message.partial) return;
-        if (!message.guild || message.author?.bot) return;
+        if (!message.guild || !message.author || message.author.bot) return;
 
         // 嘗試偵測刪除者 (如果是管理員刪除，Audit Log 會有紀錄)
         const executor = await getAuditLogExecutor(message.guild, AuditLogEvent.MessageDelete, message.author.id);
@@ -82,7 +82,8 @@ export function register(client) {
     });
 
     client.on('messageUpdate', async (oldMessage, newMessage) => {
-        if (!oldMessage.guild || oldMessage.author?.bot) return;
+        if (oldMessage.partial) return;
+        if (!oldMessage.guild || !oldMessage.author || oldMessage.author.bot) return;
         if (oldMessage.content === newMessage.content) return;
 
         let oldContent = oldMessage.content || '';
