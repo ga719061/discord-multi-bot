@@ -22,9 +22,7 @@ export function initDatabase() {
       log_channel TEXT,
       log_toggles TEXT DEFAULT '{"message":1,"member":1,"server":1,"voice":1,"thread":1}',
       selfrole_roles TEXT DEFAULT '[]',
-      level_up_announcement_enabled INTEGER DEFAULT 1,
-      rpg_broadcast_channel TEXT DEFAULT NULL,
-      rpg_broadcast_toggles TEXT DEFAULT '{"milestone":1,"rare_drop":1,"first_kill":1,"quest_complete":1,"death":1,"enhancement":1}'
+      level_up_announcement_enabled INTEGER DEFAULT 1
     );
 
     CREATE TABLE IF NOT EXISTS user_levels (
@@ -131,13 +129,6 @@ export function initDatabase() {
   if (!aiColumns.includes('party_expires_at')) {
     db.prepare("ALTER TABLE ai_settings ADD COLUMN party_expires_at INTEGER DEFAULT NULL").run();
   }
-  if (!guildColumns.includes('rpg_broadcast_channel')) {
-    db.prepare("ALTER TABLE guild_settings ADD COLUMN rpg_broadcast_channel TEXT DEFAULT NULL").run();
-  }
-  if (!guildColumns.includes('rpg_broadcast_toggles')) {
-    db.prepare("ALTER TABLE guild_settings ADD COLUMN rpg_broadcast_toggles TEXT DEFAULT '{\"milestone\":1,\"rare_drop\":1,\"first_kill\":1,\"quest_complete\":1,\"death\":1,\"enhancement\":1}'").run();
-  }
-  
   const userLevelInfo = db.pragma('table_info(user_levels)');
   const userLevelColumns = userLevelInfo.map(c => c.name);
   if (!userLevelColumns.includes('total_voice_mins')) {
@@ -163,7 +154,7 @@ export function getGuildSettings(guildId) {
   return row;
 }
 
-const ALLOWED_GUILD_KEYS = ['welcome_channel', 'welcome_message', 'log_channel', 'log_toggles', 'selfrole_roles', 'level_up_announcement_enabled', 'rpg_enabled', 'rpg_broadcast_channel', 'rpg_broadcast_toggles'];
+const ALLOWED_GUILD_KEYS = ['welcome_channel', 'welcome_message', 'log_channel', 'log_toggles', 'selfrole_roles', 'level_up_announcement_enabled'];
 
 export function updateGuildSetting(guildId, key, value) {
   if (!ALLOWED_GUILD_KEYS.includes(key)) throw new Error(`不可許的欄位名稱: ${key}`);

@@ -1,7 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { getUserLevel, getRankTitle } from '../../utils/database.js';
-import { getCharacter } from '../../rpg/rpgDatabase.js';
-import { fmt, COLORS, getJobTitle } from '../../rpg/rpgHelpers.js';
 
 export const data = new SlashCommandBuilder()
     .setName('userinfo')
@@ -25,9 +23,6 @@ export async function execute(interaction) {
     // 1. 取得等級系統資料
     const levelData = getUserLevel(guildId, target.id);
     const rankTitle = getRankTitle(levelData.level);
-
-    // 2. 取得 RPG 系統資料
-    const rpgData = getCharacter(guildId, target.id);
 
     const roles = member.roles.cache
         .filter((r) => r.id !== interaction.guild.id)
@@ -54,18 +49,6 @@ export async function execute(interaction) {
                 `> **語音時數**: ${levelData.total_voice_mins || 0} 分鐘`
             ].join('\n'), inline: true }
         );
-
-    // 如果有 RPG 角色，則顯示 RPG 資料
-    if (rpgData) {
-        embed.addFields(
-            { name: '⚔️ 冒險生涯 (RPG)', value: [
-                `> **職業**: ${getJobTitle(rpgData)}`,
-                `> **等級**: Lv.${rpgData.level}`,
-                `> **資產**: ${rpgData.gold} 💰 / ${rpgData.gems} 💎`,
-                `> **擊殺首領**: ${rpgData.boss_kills || 0} 隻`
-            ].join('\n'), inline: true }
-        );
-    }
 
     embed.addFields(
         { name: '🏷️ 身分組', value: roles.length > 1024 ? roles.slice(0, 1020) + '...' : roles, inline: false }

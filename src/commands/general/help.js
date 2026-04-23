@@ -2,7 +2,6 @@ import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBu
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { isRpgEnabled } from '../../rpg/rpgDatabase.js';
 import { ansi, fmt, COLORS } from '../../utils/style.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -33,14 +32,11 @@ export async function execute(interaction) {
         'roles': '🏷️ 身分組',
         'steam': '🎮 Steam 遊戲特價',
         'welcome': '👋 歡迎',
-        'rpg': '⚔️ RPG 冒險',
     };
 
     const isAdmin = interaction.member?.permissions.has(PermissionFlagsBits.Administrator);
-    const rpgEnabled = isRpgEnabled(interaction.guildId);
     const visibleCategories = categories.filter(cat => {
         if ((cat === 'admin' || cat === 'ai' || cat === 'logging' || cat === 'roles') && !isAdmin) return false;
-        if (cat === 'rpg' && !rpgEnabled && !isAdmin) return false;
         if (cat === 'game') return false; // 移除 Game 類別
         return true;
     });
@@ -88,7 +84,6 @@ export async function execute(interaction) {
                     '> 📢 `/announce` — 發布精美的王國聖旨公告',
                     '> 📝 `/setup-log` — 安置領地史官與配置監控開關',
                     '> 📈 `/setup-leveling` — 設定皇家等級公告開關',
-                    '> ⚔️ `/setup-rpg` — 管理 RPG 系統開關與廣播設定',
                     '> 🤖 `/ai-setup` — 管理 AI 模型、搜尋與上下文設定',
                     '> 🏷️ `/reactionrole` — 建立點擊按鈕的自助身分組',
                     '> 🏷️ `/selfrole` — 建立下拉式選單的自助身分組',

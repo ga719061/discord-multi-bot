@@ -1,11 +1,8 @@
-import { MONSTERS, AREAS, RACES, CLASSES, ITEM_NAMES, EQUIPMENT, STAT_LABELS, AFFIX_REGISTRY, BOSSES, SKILLS } from '../rpg/data/gameData.js';
-import { LORE_RUMORS } from '../rpg/data/loreData.js';
-import { getRankTitle, getGuildSettings } from './database.js';
-import { ENHANCEMENT_CONFIG } from '../rpg/rpgHelpers.js';
+import { getGuildSettings } from './database.js';
 
 /**
  * 伺服器功能與指令知識庫
- * 用於注入 AI 提示詞，使其了解伺服器運作方式與深層 RPG 數據
+ * 用於注入 AI 提示詞，使其了解伺服器運作方式
  */
 
 export function getServerKnowledge(guildId, isAdmin = false) {
@@ -50,97 +47,7 @@ V. 管理與自動化 (管理員專用)
 - 皇家聖旨 (@everyone): /announce。
 - 自助身分組: /selfrole (下拉選單領取)。
 - 歡迎與日誌: /setup-welcome, /setup-log。
-
-
-V. RPG 核心冒險系統 (核心數據)
-1. 冒險區域與怪物：`;
-
-    for (const area of AREAS) {
-        knowledge += `\n- 📍 ${area.name} (Lv.${area.levelReq}+): ${area.desc}`;
-        const areaBoss = BOSSES[area.id];
-        if (areaBoss) {
-            knowledge += ` [區域領主: ${areaBoss.emoji}${areaBoss.name}]`;
-        }
-    }
-
-    knowledge += `\n\n2. 種族與屬性：
-- 力量 (STR): +0.5 ATK, +1 HP (所有職業通用，物理系加成更高)。
-- 智力 (INT): +0.5 MATK, +2 MP (所有職業通用，法系加成更高)。
-- 體質 (VIT): +4 HP, +0.3 DEF (所有職業通用，坦克系加成更高)。
-- 敏捷 (AGI): +0.2 SPD (所有職業通用，遊俠加成更高)。
-- 幸運 (LUK): +0.02% 暴擊, +0.1% 暴傷 (所有職業通用)。
-- 種族初始加成：`;
-    for (const r of Object.values(RACES)) {
-        const bonusStr = Object.entries(r.bonus).map(([k, v]) => `${STAT_LABELS[k] || k}${v >= 0 ? '+' : ''}${v}`).join(', ');
-        knowledge += `\n- ${r.emoji}${r.name}: ${bonusStr}`;
-    }
-
-    knowledge += `\n\n3. 職業體系：`;
-    for (const c of Object.values(CLASSES)) {
-        const growthStr = Object.entries(c.growth).map(([k, v]) => `${STAT_LABELS[k] || k}+${v}`).join(',');
-        knowledge += `\n- ${c.emoji}${c.name}: ${c.desc} (成長: ${growthStr})`;
-    }
-
-    knowledge += `\n\n4. 皇家旅館 (Gigi Inn)：
-- 功能: 補給、休息、寄存物品、洗點重練。
-- NPC: 旅館老闆老狄恩 (Dean)、退役騎士亞伯 (Abel)、流浪學者賽恩 (Sion)。
-- 傳聞系統: 包含史萊姆之戒、巴風特威脅、甚至是禁忌的「三合一史詩鑑定」等。
-
-5. 戰鬥與成長系統：
-- 裝備強化: 可至「鐵匠鋪」強化至 +9。超過安定值有機率損毀。
-- 裝備拆解: 分解裝備獲得「魔力碎片」與「混沌精華」。
-- 屬性洗煉: 消耗素材重新抽取裝備詞條。
-- 拍賣場: 使用 /rpg auction 買賣裝備、道具、技能書。
-- 傭兵小隊: 最多招募 3 名隊友助戰。僱用他人可獲得分紅回饋。
-- 掉落率邏輯 (天堂風格): 掉落率依區域 Tier 階梯式分佈。
-  - T1 (話島/妖森): 基礎裝備 2~4%，素材 45~55%。
-  - T2 (地監/龍谷): 裝備 1~3%，捲軸 0.8~2%。
-  - T3 (深層): 進階裝備 0.2~1.5%，捲軸 3~5%。
-  - T4 (火龍窟/地龍): 頂級裝備 0.05~0.1%，捲軸 6~15%。
-- 裝備品質系統 (區域加權): 品質由區域決定，T1 以普通/精良為主，T4 以史詩/神話為主。
-  - 普通(白) → 精良(綠) → 稀有(藍) → 史詩(紫) → 神話(紅) → 傳說(橘)。
-  - 品質倍率: 普通 1.0x / 精良 1.1x / 稀有 1.25x / 史詩 1.5x / 神話 1.8x / 傳說 2.2x。
-  - 品質越高，隨機詞條數量越多 (普通0條 → 傳說4條)。
-- 隨機詞條範例: 
 `;
-    Object.values(AFFIX_REGISTRY).slice(0, 10).forEach(a => {
-        knowledge += `${a.name}(${a.type}), `;
-    });
-    knowledge += `等。
-- 技能系統: 領主技能 (Boss drops) 與職業起始技能。
-
-VI. 王國秘辛 (Rumors)：
-- ${LORE_RUMORS.secrets.slice(0, 3).join('\n- ')}
-
-VII. 最近修正：
-- 天堂風格掉落率全面改造: 24 隻怪物 × 8 區域 Drop Table 重新平衡。
-- 區域品質加權系統上線: 不同區域掉落不同品質等級的裝備。
-- 神話品質 (Mythic) 隨機詞條修復: 神話裝備現在正確產生 4 條詞條。
-- 角色面板屬性排版已優化，支援 Emoji 對齊。
-- 裝備生命值/魔力值重複加總修正完畢。
-- 初階道具名稱 ID 顯示 Bug 已修復。
-
-VIII. 皇家百科：全怪物掉落清單 (機率參考)：\n`;
-
-    for (const area of AREAS) {
-        knowledge += `\n【${area.name}】:`;
-        const monsters = MONSTERS[area.id] || [];
-        for (const m of monsters) {
-            const dropsStr = m.drops.map(d => {
-                const item = ITEM_NAMES[d.id] || EQUIPMENT[d.id];
-                return `${item ? item.name : d.id}(${d.chance}%)`;
-            }).join(', ');
-            knowledge += `\n  - ${m.emoji}${m.name}: ${dropsStr}`;
-        }
-        const boss = BOSSES[area.id];
-        if (boss) {
-            const bossDrops = boss.drops.map(d => {
-                const item = ITEM_NAMES[d.id] || EQUIPMENT[d.id];
-                return `${item ? item.name : d.id}(${d.chance}%)`;
-            }).join(', ');
-            knowledge += `\n  - 🌟 ${boss.name} (領主): ${bossDrops}`;
-        }
-    }
 
     if (isAdmin) {
         knowledge += `\n\n[管理員附註]: 歡迎系統狀態: ${settings.welcome_channel ? '已啟用' : '未配置'}。`;

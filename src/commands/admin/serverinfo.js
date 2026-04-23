@@ -52,13 +52,6 @@ export async function execute(interaction) {
             { name: '📊 領地發展度統計摘要', value: developmentReport, inline: false },
 
             {
-                name: '⚔️ RPG 王國境界', value: [
-                    `🎮 **遊戲模組**: ${getToggle(settings.rpg_enabled !== 0)}`,
-                    `📜 **歷代記廣播**: ${settings.rpg_broadcast_channel ? `<#${settings.rpg_broadcast_channel}>` : '`尚未設定`'}`
-                ].join('\n'), inline: true
-            },
-
-            {
                 name: '🧠 AI 核心意識', value: [
                     `🔋 **主機狀態**: ${getToggle(aiSettings.enabled)}`,
                     `🤖 **當前機型**: \`${aiSettings.model || 'Gemini 1.5 Pro'}\``,

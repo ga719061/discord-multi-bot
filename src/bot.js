@@ -5,8 +5,6 @@ import { loadCommands } from './handlers/commandHandler.js';
 import { loadEvents } from './handlers/eventHandler.js';
 import { initDatabase, getDb, updateGuildSetting } from './utils/database.js';
 import { logger } from './utils/logger.js';
-import { initRpgTables } from './rpg/rpgDatabase.js';
-import { registerRpgRouter } from './rpg/rpgRouter.js';
 import { initVoiceXpManager } from './utils/voiceXpManager.js';
 
 dns.setDefaultResultOrder('ipv4first');
@@ -198,15 +196,13 @@ client.on(Events.InteractionCreate, async (interaction) => {
 async function start() {
   try {
     initDatabase();
-    initRpgTables();
     logger.info('資料庫初始化完成。');
 
     await loadCommands(client);
     logger.info(`已載入 ${client.commands.size} 個指令。`);
 
     await loadEvents(client);
-    registerRpgRouter(client);
-    logger.info('事件與 RPG 路由註冊完成。');
+    logger.info('事件註冊完成。');
 
     const { initReminderManager } = await import('./utils/reminderManager.js');
     const { initGiveawayManager } = await import('./utils/giveawayManager.js');
