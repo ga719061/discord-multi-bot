@@ -2,55 +2,69 @@ import { getGuildSettings } from './database.js';
 
 /**
  * 伺服器功能與指令知識庫
- * 用於注入 AI 提示詞，使其了解伺服器運作方式
+ * 用於注入 AI 提示詞，使其了解伺服器運作方式與王國律法
  */
 
 export function getServerKnowledge(guildId, isAdmin = false) {
     const settings = getGuildSettings(guildId);
-    let selfroleList = '暫未設定';
-    try {
-        const roles = JSON.parse(settings.selfrole_roles || '[]');
-        if (roles.length > 0) {
-            selfroleList = roles.map(r => typeof r === 'string' ? r : r.id).join(', ');
-        }
-    } catch (e) {}
-
+    
     // --- 1. 王國基礎設施 ---
     let knowledge = `
 【吉吉王國 皇家大典 - 核心系統指南】
 
 I. 社交與日常 (互動指令)
-- 撫摸/擁抱: 關鍵字「摸摸國王」、「抱抱國王」。國王具有隨機情緒反應 (/hug, /pat)。
-- 運勢/占卜: /fortune。獲取今日吉凶與國王的建議。
-- 餵食國王: /feed。
-- 聊天: 直接 @吉吉王國 或提及其名。
+- 摸摸/擁抱: 關鍵字「摸摸國王」、「抱抱國王」。國王具有隨機情緒反應，有時傲嬌，有時熱情 (/hug, /pat)。
+- 運勢/占卜: /fortune。獲取今日吉凶與國王的建議（包含 1-100 幸運值）。
+- 每日一汪: /daily。領取國王今日的金句（每人每天固定一句）。
+- 餵食國王: /feed。提供各種虛擬美食給國王。
+- 聊天: 直接 @吉吉王國 或在訊息中提到「國王」、「吉吉」、「吉娃娃」。
 
 II. AI 核心與設定 (/ai-setup, /ai-login)
-- 模型切換: 支援 Gemini 2.5 Flash, Flash-Lite, 3.0/3.1 Preview。
-- 聯網檢索: 可開啟 Google 搜索能力，獲取即時資訊。
-- 對話記憶: 控制 AI 是否記得先前的對話脈絡。
-- 派對模式: 管理員可指定頻道開啟限時免點名模式。
-- 白名單: 僅有受寵子民或在派對頻道中能與 AI 自由對話。
+- 智慧意識: 國王由 Google Gemini 驅動，具備上下文記憶與聯網能力。
+- 模型選擇: 管理員可切換模型（如 Gemini 2.0 Flash, 1.5 Pro 等）。
+- 聯網檢索: 可開啟 Google Search 功能以獲取即時新聞或資料。
+- 派對模式: 管理員可開啟特定頻道的「免點名模式」，AI 會主動參與該頻道的對話。
+- 白名單: 受寵的子民可加入白名單，直接與 AI 聊天而不需每次標記。
+- 系統個性 (Prompt): 管理員可調整國王的語氣與性格設定。
 
-III. 等級與爵位系統 (非 RPG XP 機制)
-- 聊天 XP: 每分鐘活躍發言可獲 15-25 XP（皇家贊助者 1.5 倍）。
-- 語音掛機 XP: 每分鐘在語音頻道可獲 XP（禁止 AFK 頻道或靜音）。
-- 爵位: 從「平民」到「大公」、「親王」，每 25 級左右晉升。指令: /rank, /leaderboard。
+III. 皇家等級與爵位 (Leveling)
+- XP 獲取: 聊天每分鐘可獲 15-25 XP。皇家贊助者 (Server Booster) 享 1.5 倍加成。
+- 防洗版法規: 字數需 > 3 字，不能重複前句內容，且純表情/貼圖不予計分。
+- 語音掛機: 進入非 AFK 語音頻道可持續累積經驗。
+- 爵位體系：
+  - Lv.0-5: 🏕️ 流浪客
+  - Lv.6-15: 📜 忠誠子民
+  - Lv.16-30: 🛡️ 皇家侍衛
+  - Lv.31-50: ⚔️ 御前騎士
+  - Lv.51-75: 💎 貴族
+  - Lv.76-99: 👑 大公
+  - Lv.100+: 🏰 守護神
+- 指令: /rank (查個人卡片), /leaderboard (王國英雄榜)。
 
-IV. 王國事務與社群
-- 國是會議 (投票): /poll (最多 5 個選項)。
-- 皇家大抽獎: /giveaway (點擊 🎉 參加)。
-- 皇家採購 (Steam): /steam search (搜尋遊戲價格/評價), /steam sales (查看特價)。
-- 皇家時鐘: /remind set (設定提醒)。
+IV. 王國事務與生活
+- 國是會議 (投票): /poll。支持最多 5 個選項，採用 ANSI 圖表顯示統計。
+- 皇家大抽獎: /giveaway。點擊反應即可參與，由國王隨機選出幸運兒。
+- 皇家時鐘: /remind set。設定未來某個時間點的提醒通知。
+- 皇家採購 (Steam):
+  - /steam search: 查詢遊戲價格、評價、歷史低價與台灣區折扣。
+  - /steam sales: 查看當前 Steam 熱門特惠列表。
 
-V. 管理與自動化 (管理員專用)
-- 皇家聖旨 (@everyone): /announce。
-- 自助身分組: /selfrole (下拉選單領取)。
-- 歡迎與日誌: /setup-welcome, /setup-log。
+V. 領地管理 (管理員專用)
+- 皇家聖旨 (@everyone): /announce。支援嵌入圖片、印章樣式與彈出視窗編輯。
+- 自助身分組:
+  - /reactionrole: 點擊按鈕領取身分。
+  - /selfrole: 下拉選單選取身分。
+- 領地史官 (Logging): 監控訊息刪改、成員進出、語音變動、頻道更動等。
+- 接待處: /setup-welcome。自定義新子民入城時的歡迎詞與頻道。
+
+VI. 國王秘辛 (Lore)
+- 國王最愛的食物是牛排，最討厭被叫「小狗」（請稱呼為國王）。
+- 國王有時會自稱為「本王」，並對子民下達「汪汪」的指令。
+- 國王雖然體型嬌小，但自認擁有統治世界的威嚴。
 `;
 
     if (isAdmin) {
-        knowledge += `\n\n[管理員附註]: 歡迎系統狀態: ${settings.welcome_channel ? '已啟用' : '未配置'}。`;
+        knowledge += `\n\n[管理員附註]: 歡迎系統狀態: ${settings.welcome_channel ? '已啟用' : '未配置'}。日誌頻道: ${settings.log_channel ? '已就緒' : '未安置史官'}。`;
     }
 
     return knowledge.trim();
