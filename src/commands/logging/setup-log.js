@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, ChannelType, PermissionFlagsBits, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } from 'discord.js';
 import { updateGuildSetting, getGuildSettings } from '../../utils/database.js';
 import { fmt, COLORS } from '../../utils/style.js';
+import { parseJsonObject } from '../../utils/jsonUtils.js';
 
 export const data = new SlashCommandBuilder()
     .setName('setup-log')
@@ -26,7 +27,7 @@ export async function execute(interaction) {
     }
 
     // 發送控制面板
-    const toggles = JSON.parse(settings.log_toggles || '{"message":1,"member":1,"server":1,"voice":1,"thread":1}');
+    const toggles = parseJsonObject(settings.log_toggles, { message: 1, member: 1, server: 1, voice: 1, thread: 1 });
     
     const categories = [
         { label: '💬 訊息紀錄', description: '監控訊息刪除與修改 (含刪除者偵測)', value: 'message' },

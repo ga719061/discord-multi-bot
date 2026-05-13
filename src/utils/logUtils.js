@@ -1,6 +1,7 @@
 import { EmbedBuilder, AuditLogEvent } from 'discord.js';
 import { getGuildSettings } from './database.js';
 import { logger } from './logger.js';
+import { parseJsonObject } from './jsonUtils.js';
 
 /**
  * 從 Audit Log 中抓特執行者 (現行犯)
@@ -51,7 +52,7 @@ export async function sendLog(guild, embed, category = null) {
         // 檢查細分開關
         if (category && settings.log_toggles) {
             try {
-                const toggles = JSON.parse(settings.log_toggles);
+                const toggles = parseJsonObject(settings.log_toggles, {});
                 if (toggles[category] === 0) return; // 已關閉，不傳送
             } catch (e) {
                 logger.warn(`[Log] 無法解析 log_toggles: ${e.message}`);

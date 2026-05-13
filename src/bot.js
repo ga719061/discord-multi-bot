@@ -1,11 +1,13 @@
 import 'dotenv/config';
 import dns from 'node:dns';
+import http from 'http';
 import { Client, GatewayIntentBits, Collection, Partials, Events, EmbedBuilder } from 'discord.js';
 import { loadCommands } from './handlers/commandHandler.js';
 import { loadEvents } from './handlers/eventHandler.js';
-import { initDatabase, getDb, updateGuildSetting } from './utils/database.js';
+import { initDatabase, getDb, updateGuildSetting, getGuildSettings } from './utils/database.js';
 import { logger } from './utils/logger.js';
 import { initVoiceXpManager } from './utils/voiceXpManager.js';
+import { normalizePollVotes, parseJsonArray } from './utils/jsonUtils.js';
 
 dns.setDefaultResultOrder('ipv4first');
 
@@ -26,6 +28,7 @@ client.commands = new Collection();
 client.cooldowns = new Collection();
 // 暫存領地的邀請連結，用於追蹤是誰邀請的
 export const inviteCache = new Collection();
+let healthServer = null;
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.isChatInputCommand()) {
@@ -53,7 +56,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const db = getDb();
         const settings = db.prepare('SELECT selfrole_roles FROM guild_settings WHERE guild_id = ?').get(guild.id);
-        const allowedRoles = settings ? JSON.parse(settings.selfrole_roles) : [];
+        const allowedRoles = settings ? parseJsonArray(settings.selfrole_roles, []) : [];
 
         const toAdd = roleIds.filter(id => allowedRoles.includes(id));
         const toRemove = allowedRoles.filter(id => !roleIds.includes(id));
@@ -112,7 +115,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         if (!poll) return interaction.reply({ content: '此投票已失效。', flags: ['Ephemeral'] });
 
-        const currentVotes = JSON.parse(poll.votes);
+        const opts = parseJsonArray(poll.options, []);
+        if (optionIndex < 0 || optionIndex >= opts.length) {
+          return interaction.reply({ content: '投票選項不存在。', flags: ['Ephemeral'] });
+        }
+
+        const currentVotes = normalizePollVotes(poll.votes, opts.length);
         for (const key of Object.keys(currentVotes)) {
           currentVotes[key] = currentVotes[key].filter(id => id !== interaction.user.id);
         }
@@ -121,7 +129,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
         db.prepare('UPDATE polls SET votes = ? WHERE message_id = ?').run(JSON.stringify(currentVotes), messageId);
 
         const totalVotes = Object.values(currentVotes).reduce((sum, arr) => sum + arr.length, 0);
-        const opts = JSON.parse(poll.options);
         const { COLORS, ansiBar, ansiBlock, fmt } = await import('./utils/style.js');
 
         const pollLines = opts.map((opt, idx) => {
@@ -201,6 +208,8 @@ async function start() {
     await loadCommands(client);
     logger.info(`已載入 ${client.commands.size} 個指令。`);
 
+    await client.login(process.env.DISCORD_TOKEN);
+
     await loadEvents(client);
     logger.info('事件註冊完成。');
 
@@ -212,7 +221,7 @@ async function start() {
     initPartyManager(client);
     initVoiceXpManager(client);
 
-    await client.login(process.env.DISCORD_TOKEN);
+    startHealthServer();
     logger.info('機器人已成功登入！');
 
     // 登入後緩存所有邀請碼
@@ -237,17 +246,25 @@ async function start() {
     });
   } catch (error) {
     logger.error('啟動失敗:', error);
-    process.exit(1);
+    try {
+      client.destroy();
+    } catch {}
+    process.exitCode = 1;
   }
 }
 
-import http from 'http';
-const port = process.env.PORT || 3000;
-http.createServer((req, res) => {
-  res.writeHead(200);
-  res.end('Bot is alive!');
-}).listen(port, () => {
-  logger.info(`HTTP 伺服器監聽於連接埠 ${port}。`);
-});
+function startHealthServer() {
+  if (healthServer) return healthServer;
+
+  const port = process.env.PORT || 3000;
+  healthServer = http.createServer((req, res) => {
+    res.writeHead(200);
+    res.end('Bot is alive!');
+  }).listen(port, () => {
+    logger.info(`HTTP 伺服器監聽於連接埠 ${port}。`);
+  });
+
+  return healthServer;
+}
 
 start();

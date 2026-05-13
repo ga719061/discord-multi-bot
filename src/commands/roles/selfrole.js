@@ -8,6 +8,7 @@ import {
 } from 'discord.js';
 import { getGuildSettings, updateGuildSetting } from '../../utils/database.js';
 import { fmt, COLORS } from '../../utils/style.js';
+import { parseJsonArray } from '../../utils/jsonUtils.js';
 
 export const data = new SlashCommandBuilder()
     .setName('selfrole')
@@ -76,7 +77,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const sub = interaction.options.getSubcommand();
     const settings = getGuildSettings(interaction.guildId);
-    let roles = JSON.parse(settings.selfrole_roles || '[]');
+    let roles = parseJsonArray(settings.selfrole_roles, []);
 
     // 向後相容處理：將舊的字串陣列轉為物件陣列
     if (roles.length > 0 && typeof roles[0] === 'string') {

@@ -8,17 +8,21 @@ const XP_MAX = 25;
 
 // === 記憶體快取 ===
 const xpCooldownCache = new Map();
+let cleanupInterval = null;
 const xpMessageCache = new Map(); // 用於防重複發言的快取
 
 // 定期清理快取避免記憶體無限增長 (每 10 分鐘清理超過 5 分鐘未更新的條目)
-setInterval(() => {
-    const cutoff = Date.now() - 5 * 60_000;
-    for (const [key, time] of xpCooldownCache) {
-        if (time < cutoff) xpCooldownCache.delete(key);
-    }
-    // xpMessageCache 沒有時間戳，直接清空即可（下次發言會重新建立）
-    if (xpMessageCache.size > 10000) xpMessageCache.clear();
-}, 10 * 60_000);
+function startCleanupInterval() {
+    if (cleanupInterval) return;
+    cleanupInterval = setInterval(() => {
+        const cutoff = Date.now() - 5 * 60_000;
+        for (const [key, time] of xpCooldownCache) {
+            if (time < cutoff) xpCooldownCache.delete(key);
+        }
+        // xpMessageCache 沒有時間戳，直接清空即可（下次發言會重新建立）
+        if (xpMessageCache.size > 10000) xpMessageCache.clear();
+    }, 10 * 60_000);
+}
 
 // ========== 吉吉國王互動系統 ==========
 
@@ -193,6 +197,7 @@ function handleKingInteraction(message) {
 // ========== 主事件 ==========
 
 export function register(client) {
+    startCleanupInterval();
     client.on('messageCreate', async (message) => {
         if (message.author.bot || !message.guild) return;
 

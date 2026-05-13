@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
+import { parseJsonArray } from './jsonUtils.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
@@ -265,8 +266,8 @@ export function getAiSettings(guildId) {
   }
   return {
     ...row,
-    whitelist: JSON.parse(row.whitelist || '[]'),
-    admin_ids: JSON.parse(row.admin_ids || '[]'),
+    whitelist: parseJsonArray(row.whitelist, []),
+    admin_ids: parseJsonArray(row.admin_ids, []),
     search_enabled: !!row.search_enabled,
     context_enabled: row.context_enabled !== 0,
   };
