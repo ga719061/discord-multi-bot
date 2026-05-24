@@ -12,6 +12,7 @@ import { isV2Message, v2EditPayload, v2Notice } from './utils/componentsV2.js';
 import { UI_COLORS } from './utils/style.js';
 import { buildPollPayload } from './commands/fun/poll.js';
 import { buildAnnouncementPayload, buildAnnouncementPreviewButtons, pendingAnnouncements } from './commands/admin/announce.js';
+import { buildSteamDealDetailPayload, fetchSteamAppDetails, getSteamFailureMessage } from './utils/steamDeals.js';
 
 dns.setDefaultResultOrder('ipv4first');
 
@@ -52,6 +53,37 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (interaction.isStringSelectMenu()) {
     try {
+      if (interaction.customId === 'steam_deal_detail') {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const appId = Number(interaction.values[0]);
+        if (!Number.isSafeInteger(appId) || appId <= 0) {
+          return interaction.editReply(v2EditPayload(v2Notice(
+            '🛒 遊戲資料已失效',
+            '這筆 Steam 遊戲資料無法辨識，請查看最新發布的特價榜單。',
+            UI_COLORS.WARNING
+          )));
+        }
+
+        try {
+          const details = await fetchSteamAppDetails(appId);
+          if (!details) {
+            return interaction.editReply(v2EditPayload(v2Notice(
+              '🛒 詳情暫不可用',
+              'Steam 暫時沒有提供這款遊戲的完整情報，請稍後再試。',
+              UI_COLORS.WARNING
+            )));
+          }
+          return interaction.editReply(v2EditPayload(buildSteamDealDetailPayload(appId, details)));
+        } catch (error) {
+          logger.warn(`[SteamDeals] 互動詳情查詢失敗 app=${appId} code=${error.code || 'unavailable'}: ${error.message}`);
+          return interaction.editReply(v2EditPayload(v2Notice(
+            '🛒 Steam 查詢失敗',
+            getSteamFailureMessage(error),
+            UI_COLORS.WARNING
+          )));
+        }
+      }
+
       if (interaction.customId === 'selfrole_select') {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const roleIds = interaction.values;

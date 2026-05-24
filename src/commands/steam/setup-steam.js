@@ -121,7 +121,7 @@ async function handleDealList(interaction) {
     });
 
     await channel.send(payload);
-    await interaction.editReply(v2EditPayload(v2Notice('🛒 特價榜單已送出', `Steam 特價榜單已送出到 ${channel}。`, UI_COLORS.SUCCESS)));
+    await interaction.editReply(v2EditPayload(v2Notice('🛒 特價榜單已送出', `已將 ${deals.length} 款 Steam 熱門特價送出到 ${channel}，成員可從榜單查看即時詳情。`, UI_COLORS.SUCCESS)));
   } catch (err) {
     logger.warn(`[SteamDeals] 手動投放失敗 guild=${interaction.guildId} code=${err.code || 'unavailable'}: ${err.message}`);
     await interaction.editReply(v2EditPayload(v2Notice('🛒 Steam 推播失敗', getSteamFailureMessage(err), UI_COLORS.WARNING)));
