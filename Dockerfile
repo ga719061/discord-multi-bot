@@ -18,5 +18,6 @@ COPY . .
 # 建立 data 目錄（SQLite 資料庫用）
 RUN mkdir -p /app/data
 
-# 註冊斜線指令 + 啟動 bot
-CMD ["sh", "-c", "node scripts/deploy-commands.js && node src/bot.js"]
+# Slash commands are deployed explicitly during releases. Do not block bot
+# startup on a Discord API synchronization request during every restart.
+CMD ["node", "src/bot.js"]
