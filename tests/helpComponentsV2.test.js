@@ -54,9 +54,17 @@ test('help home renders a Components V2 payload with navigational admin styling'
     const payload = ephemeralV2Payload(view.components);
     const container = view.components[0].toJSON();
     const actionRows = container.components.filter((component) => component.type === ComponentType.ActionRow);
+    const sectionButtons = container.components
+        .filter((component) => component.type === ComponentType.Section && component.accessory?.custom_id)
+        .map((component) => component.accessory);
+    const buttons = [
+        ...sectionButtons,
+        ...actionRows.flatMap((row) => row.components),
+    ];
     const adminButton = actionRows
         .flatMap((row) => row.components)
         .find((button) => button.label === '管理');
+    const customIds = buttons.map((button) => button.custom_id);
 
     assert.equal(container.type, ComponentType.Container);
     assert.equal((payload.flags & MessageFlags.Ephemeral) !== 0, true);
@@ -64,6 +72,7 @@ test('help home renders a Components V2 payload with navigational admin styling'
     assert.equal('embeds' in payload, false);
     assert.equal('content' in payload, false);
     assert.equal(adminButton.style, ButtonStyle.Secondary);
+    assert.equal(new Set(customIds).size, customIds.length);
     assert.equal(countComponents(container) <= 40, true);
 });
 

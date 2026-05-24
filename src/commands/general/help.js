@@ -348,7 +348,7 @@ function renderHome(context) {
                 .addTextDisplayComponents(v2Text(statusText))
                 .setButtonAccessory(
                     new ButtonBuilder()
-                        .setCustomId(makeCustomId(context, 'cat', firstCategory.id, 0))
+                        .setCustomId(`${makeCustomId(context, 'cat', firstCategory.id, 0)}:featured`)
                         .setLabel('開始瀏覽')
                         .setEmoji('📖')
                         .setStyle(ButtonStyle.Primary)
