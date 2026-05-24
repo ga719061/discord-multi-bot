@@ -138,8 +138,8 @@ export function buildSteamDealsPayload(deals, options = {}) {
   const title = options.title || '🐕👑 吉吉王國・御用百視達特價榜';
   const intro = options.intro || '汪！皇家採購廳已巡完 Steam 商店，以下是本王替子民挑出的熱門特價清單：';
   const footer = options.footer || '🐕 吉吉國王每日採購聖旨 | 台灣區價格';
-  const featuredImages = deals
-    .slice(0, 3)
+  const galleryImages = deals
+    .slice(0, 10)
     .map((game) => game.large_capsule_image || game.header_image)
     .filter(Boolean);
   const lines = deals.slice(0, 10).map((game, index) => {
@@ -156,7 +156,7 @@ export function buildSteamDealsPayload(deals, options = {}) {
       description: intro,
       accentColor: UI_COLORS.ROYAL,
       fields: [{ name: '🛒 今日採購清單', value: lines.join('\n\n') }],
-      images: featuredImages,
+      images: galleryImages,
       footer,
     }),
   ]);
