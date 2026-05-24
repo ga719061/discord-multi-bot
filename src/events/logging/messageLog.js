@@ -1,7 +1,7 @@
 import { EmbedBuilder, AuditLogEvent } from 'discord.js';
 import { sendLog, getAuditLogExecutor, resolveMentions } from '../../utils/logUtils.js';
-import { getGuildSettings } from '../../utils/database.js';
 import { fmt, COLORS } from '../../utils/style.js';
+import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
 export function register(client) {
     client.on('messageDelete', async (message) => {
@@ -68,17 +68,7 @@ export function register(client) {
             }
         }
 
-        const settings = getGuildSettings(message.guild.id);
-        if (settings?.log_channel) {
-            try {
-                const channel = await message.guild.channels.fetch(settings.log_channel).catch(() => null);
-                if (channel) {
-                    await channel.send({ embeds }).catch(() => {});
-                }
-            } catch (e) {
-                // 靜默失敗或記錄日誌
-            }
-        }
+        await sendLog(message.guild, embedsToV2Payload(embeds), 'message');
     });
 
     client.on('messageUpdate', async (oldMessage, newMessage) => {

@@ -1,5 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import { ansiBlock, COLORS, fmt } from './style.js';
+import { v2Card, v2Payload } from './componentsV2.js';
+import { UI_COLORS } from './style.js';
 
 const STEAM_FEATURED_URL = 'https://store.steampowered.com/api/featuredcategories?l=tchinese&cc=tw';
 const STEAM_SEARCH_SPECIALS_URL = 'https://store.steampowered.com/search/results/?query&start=0&count=50&dynamic_data=&sort_by=_ASC&specials=1&cc=tw&l=tchinese&infinite=1';
@@ -130,6 +132,34 @@ export function buildSteamDealsEmbeds(deals, options = {}) {
 
     return embed;
   });
+}
+
+export function buildSteamDealsPayload(deals, options = {}) {
+  const title = options.title || '🐕👑 吉吉王國・御用百視達特價榜';
+  const intro = options.intro || '汪！皇家採購廳已巡完 Steam 商店，以下是本王替子民挑出的熱門特價清單：';
+  const footer = options.footer || '🐕 吉吉國王每日採購聖旨 | 台灣區價格';
+  const featuredImages = deals
+    .slice(0, 3)
+    .map((game) => game.large_capsule_image || game.header_image)
+    .filter(Boolean);
+  const lines = deals.slice(0, 10).map((game, index) => {
+    const discount = Number(game.discount_percent) || 0;
+    const final = formatSteamPrice(game.final_price);
+    const original = formatSteamPrice(game.original_price);
+    const originalText = original && original !== final ? ` ~~${original}~~` : '';
+    return `${getRankMedal(index)} **[${escapeMarkdown(game.name)}](https://store.steampowered.com/app/${game.id})**  \n` +
+      `📉 **-${discount}%**${originalText} → **${final}**`;
+  });
+  return v2Payload([
+    v2Card({
+      title,
+      description: intro,
+      accentColor: UI_COLORS.ROYAL,
+      fields: [{ name: '🛒 今日採購清單', value: lines.join('\n\n') }],
+      images: featuredImages,
+      footer,
+    }),
+  ]);
 }
 
 function uniqueSteamDeals(items, limit) {

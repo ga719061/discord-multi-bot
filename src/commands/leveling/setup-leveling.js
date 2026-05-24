@@ -1,5 +1,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { updateGuildSetting, getGuildSettings } from '../../utils/database.js';
+import { v2Notice } from '../../utils/componentsV2.js';
+import { UI_COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
     .setName('設定等級系統')
@@ -23,8 +25,9 @@ export async function execute(interaction) {
 
     updateGuildSetting(interaction.guildId, 'level_up_announcement_enabled', enabled ? 1 : 0);
 
-    await interaction.reply({
-        content: `🐕✅ 本王已將等級升遷公告設定為：**${enabled ? '開啟' : '關閉'}** 汪！`,
-        flags: ['Ephemeral'],
-    });
+    await interaction.reply(v2Notice(
+        '📈 皇家晉升公告已更新',
+        `本王已將等級升遷公告設定為：**${enabled ? '開啟' : '關閉'}** 汪！`,
+        enabled ? UI_COLORS.SUCCESS : UI_COLORS.MUTED
+    ));
 }

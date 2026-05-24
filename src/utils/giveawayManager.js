@@ -2,6 +2,8 @@ import { EmbedBuilder } from 'discord.js';
 import { getDb, markGiveawayEnded } from './database.js';
 import { fmt, COLORS, ansiBlock } from './style.js';
 import { logger } from './logger.js';
+import { embedsToV2Payload, isV2Message, v2Notice } from './componentsV2.js';
+import { UI_COLORS } from './style.js';
 
 let client;
 let checkInterval;
@@ -111,29 +113,35 @@ export async function endGiveaway(giveaway) {
 
         const resultEmbed = new EmbedBuilder()
             .setTitle('🐕🎊 本王欽點的幸運兒出爐了！')
-            .setDescription(resultAnsi)
+            .setDescription(`恭喜 ${winnerMentionList} 領受本王賞賜！\n\n${resultAnsi}`)
             .setColor(0x00FF00)
             .setFooter({ text: '🐕 吉吉國王官方認證抽獎' })
             .setTimestamp();
 
-        await channel.send({
-            content: `🐕🎉 汪汪！恭喜 ${winnerMentionList} 獲得了 **${giveaway.prize}**！快來領賞！`,
-            embeds: [resultEmbed]
-        });
+        await channel.send(embedsToV2Payload([resultEmbed], {
+            allowedMentions: { parse: [], users: winnersArray.map((user) => user.id) },
+        }));
 
         // 標記結束
         markGiveawayEnded(giveaway.id);
 
-        // 更新原訊息表示已結束，保留縮圖但確保不顯示大圖
-        const endedEmbed = EmbedBuilder.from(message.embeds[0])
-            .setTitle('🐕🎉 抽獎活動 (已結束)')
-            .setColor(0x99AAB5)
-            .setThumbnail('attachment://stamp.png')
-            .setImage(null);
-            
-        await message.edit({ 
-            embeds: [endedEmbed]
-        }).catch(() => {});
+        // 舊公開訊息保留 Embed 更新方式；新發布訊息以 V2 結束卡重繪。
+        if (isV2Message(message)) {
+            const endedEmbed = new EmbedBuilder()
+                .setTitle('🐕🎉 抽獎活動 (已結束)')
+                .setDescription(`本次賞賜已揭曉：**${giveaway.prize}**\n得主：${winnerNameList}`)
+                .setColor(UI_COLORS.MUTED)
+                .setFooter({ text: '🐕 謝謝所有參與的子民！' });
+            const endedPayload = embedsToV2Payload([endedEmbed]);
+            await message.edit({ components: endedPayload.components }).catch(() => {});
+        } else if (message.embeds[0]) {
+            const endedEmbed = EmbedBuilder.from(message.embeds[0])
+                .setTitle('🐕🎉 抽獎活動 (已結束)')
+                .setColor(0x99AAB5)
+                .setThumbnail('attachment://stamp.png')
+                .setImage(null);
+            await message.edit({ embeds: [endedEmbed] }).catch(() => {});
+        }
 
     } catch (err) {
         logger.error(`[GiveawayManager] 開獎失敗 (ID: ${giveaway.id}):`, err);
@@ -141,5 +149,10 @@ export async function endGiveaway(giveaway) {
 }
 
 async function announceNoParticipants(channel, giveaway) {
-    await channel.send(`🐕 汪嗚...沒有人參加獎品 **${giveaway.prize}** 的抽獎，本王決定把獎品自己啃掉！汪！`);
+    await channel.send(v2Notice(
+        '🎁 皇家抽獎無人領賞',
+        `🐕 汪嗚...沒有人參加獎品 **${giveaway.prize}** 的抽獎，本王決定收回賞賜！`,
+        UI_COLORS.MUTED,
+        { ephemeral: false }
+    ));
 }

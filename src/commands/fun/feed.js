@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { fmt, COLORS } from '../../utils/style.js';
+import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
     .setName('餵食')
@@ -73,5 +74,5 @@ export async function execute(interaction) {
         )
         .setFooter({ text: '🐕 本王的胃口可是很挑剔的！汪！' });
 
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply(embedsToV2Payload([embed]));
 }

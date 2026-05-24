@@ -1,17 +1,19 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { getLeaderboard, getRankTitle } from '../../utils/database.js';
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
+import { embedsToV2Payload, v2EditPayload, v2Notice } from '../../utils/componentsV2.js';
+import { UI_COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
     .setName('排行榜')
     .setDescription('🏆 皇家封神榜：查看王國內貢獻度最高的十大傑出子民')
 
 export async function execute(interaction) {
-    await interaction.deferReply();
+    await interaction.deferReply({ flags: MessageFlags.IsComponentsV2 });
     const top = getLeaderboard(interaction.guildId, 10);
 
     if (top.length === 0) {
-        return interaction.editReply({ content: '🐕 汪...史冊上還空空如也，多聊天來留下你的痕跡吧！' });
+        return interaction.editReply(v2EditPayload(v2Notice('📜 史冊尚未開卷', '汪...多聊天來留下你的痕跡吧！', UI_COLORS.MUTED, { ephemeral: false })));
     }
 
     const embed = new EmbedBuilder()
@@ -43,5 +45,5 @@ export async function execute(interaction) {
     embed.addFields({ name: '📜 功勳排行', value: list });
     embed.setFooter({ text: '🐕 排位越高，代表你對王國的忠誠度越高喔！汪！' });
 
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(v2EditPayload(embedsToV2Payload([embed])));
 }

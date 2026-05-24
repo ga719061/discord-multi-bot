@@ -3,6 +3,7 @@ import { getGuildSettings, getReactionRolesByGuild, getAiSettings } from '../../
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
 import { DEFAULT_AI_MODEL } from '../../utils/aiConfig.js';
 import { buildGuildDiagnostics } from '../../utils/guildDiagnostics.js';
+import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
     .setName('伺服器資訊')
@@ -97,7 +98,7 @@ export async function execute(interaction) {
         )
         .setFooter({ text: '🐕👑 本王對自己的領地非常驕傲！汪！' });
 
-    await interaction.reply({ embeds: [embed], flags: ['Ephemeral'] });
+    await interaction.reply(embedsToV2Payload([embed], { ephemeral: true }));
 }
 
 function formatDiagnostic(item) {

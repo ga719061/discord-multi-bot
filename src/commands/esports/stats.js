@@ -1,6 +1,7 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { MessageFlags, SlashCommandBuilder } from 'discord.js';
 import { cachedStats, buildCacheKey } from './lib/cache.js';
 import { buildStatsReply } from './lib/embed.js';
+import { v2EditPayload } from '../../utils/componentsV2.js';
 import { fetchLolStats } from './lib/providers/lol.js';
 import { fetchValorantStats } from './lib/providers/valorant.js';
 
@@ -53,12 +54,12 @@ export async function execute(interaction) {
   const region = isValorant ? 'ap' : interaction.options.getString('區服') || 'tw';
   const key = buildCacheKey(game, playerName, tag, region);
 
-  await interaction.deferReply();
+  await interaction.deferReply({ flags: MessageFlags.IsComponentsV2 });
 
   const result = await cachedStats(key, () => {
     if (isValorant) return fetchValorantStats(playerName, tag);
     return fetchLolStats(playerName, tag, region);
   });
 
-  await interaction.editReply(buildStatsReply(result, playerName, tag));
+  await interaction.editReply(v2EditPayload(buildStatsReply(result, playerName, tag)));
 }

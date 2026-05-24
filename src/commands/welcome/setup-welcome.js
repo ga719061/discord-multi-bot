@@ -1,6 +1,8 @@
 import { SlashCommandBuilder, ChannelType, PermissionFlagsBits } from 'discord.js';
 import { updateGuildSetting } from '../../utils/database.js';
 import { fmt, COLORS } from '../../utils/style.js';
+import { v2Notice } from '../../utils/componentsV2.js';
+import { UI_COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
     .setName('設定歡迎')
@@ -30,12 +32,9 @@ export async function execute(interaction) {
         updateGuildSetting(interaction.guildId, 'welcome_message', message);
     }
 
-    await interaction.reply({
-        content: `🐕✅ **本王已接收旨意！**\n` +
+    await interaction.reply(v2Notice('🎺 迎賓大廳已設定', `🐕✅ **本王已接收旨意！**\n` +
             '```ansi\n' +
             `目標頻道: ${fmt(COLORS.GREEN, '#' + channel.name)}\n` +
             `歡迎模式: ${message ? fmt(COLORS.GOLD, '自訂聖旨') : fmt(COLORS.CYAN, '預設歡呼')}\n` +
-            '```',
-        flags: ['Ephemeral'],
-    });
+            '```', UI_COLORS.SUCCESS));
 }

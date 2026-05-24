@@ -1,5 +1,7 @@
 import { getDb } from './database.js';
 import { logger } from './logger.js';
+import { v2Notice } from './componentsV2.js';
+import { UI_COLORS } from './style.js';
 
 let client;
 let checkInterval;
@@ -54,9 +56,12 @@ async function endParty(row) {
         const channel = await guild.channels.fetch(row.party_channel_id).catch(() => null);
         if (!channel || !channel.isTextBased()) return;
 
-        await channel.send(
-            '🛑 **（敲擊權杖）汪！時間已到，今日的御前會議到此為止！**\n本王乏了，所有的諫言本王都已聽見，諸臣退朝！'
-        ).catch(() => { });
+        await channel.send(v2Notice(
+            '👑 御前圓桌會議閉幕',
+            '🛑 **（敲擊權杖）汪！時間已到，今日的御前會議到此為止！**\n本王乏了，所有的諫言本王都已聽見，諸臣退朝！',
+            UI_COLORS.SPECIAL,
+            { ephemeral: false }
+        )).catch(() => { });
 
         logger.info(`[PartyManager] 領地 ${guild.name} 的派對已結束。`);
     } catch (err) {

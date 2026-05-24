@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { fmt, COLORS } from '../../utils/style.js';
+import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
     .setName('占卜')
@@ -63,5 +64,5 @@ export async function execute(interaction) {
 
     embed.setFooter({ text: `🐕 本王的占卜準確率高達... 嗯... 汪！` });
 
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply(embedsToV2Payload([embed]));
 }

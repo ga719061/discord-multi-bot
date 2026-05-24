@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { fmt, COLORS } from '../../utils/style.js';
+import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
     .setName('每日一汪')
@@ -48,5 +49,5 @@ export async function execute(interaction) {
         )
         .setFooter({ text: `每天只有一句金句喔！明天再來找本王吧～` });
 
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply(embedsToV2Payload([embed]));
 }

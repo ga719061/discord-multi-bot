@@ -1,5 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { ansiBlock, COLORS } from '../../../utils/style.js';
+import { embedsToV2Payload } from '../../../utils/componentsV2.js';
 
 export function buildStatsReply(result, playerName, tag) {
   const playerId = `${playerName}#${tag}`;
@@ -12,10 +13,9 @@ export function buildStatsReply(result, playerName, tag) {
     .setStyle(ButtonStyle.Link)
     .setURL(result.sourceUrl);
 
-  return {
-    embeds: [embed],
-    components: [new ActionRowBuilder().addComponents(sourceButton)],
-  };
+  return embedsToV2Payload([embed], {
+    actionRows: [new ActionRowBuilder().addComponents(sourceButton)],
+  });
 }
 
 function buildSuccessEmbed(result) {

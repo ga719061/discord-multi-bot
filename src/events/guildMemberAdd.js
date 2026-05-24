@@ -2,6 +2,7 @@ import { EmbedBuilder } from 'discord.js';
 import { getGuildSettings } from '../utils/database.js';
 import { logger } from '../utils/logger.js';
 import { fmt, COLORS, ansiBlock } from '../utils/style.js';
+import { embedsToV2Payload } from '../utils/componentsV2.js';
 
 export function register(client) {
     client.on('guildMemberAdd', async (member) => {
@@ -57,7 +58,9 @@ export function register(client) {
                 .setFooter({ text: '🐕👑 吉吉國王：汪！又多了一個可以摸摸的人類了！' })
                 .setTimestamp();
 
-            await channel.send({ embeds: [embed] });
+            await channel.send(embedsToV2Payload([embed], {
+                allowedMentions: { parse: [], users: [member.id] },
+            }));
             logger.info(`歡迎 ${member.user.tag} 加入 ${member.guild.name}`);
         } catch (error) {
             logger.error('歡迎事件錯誤:', error);

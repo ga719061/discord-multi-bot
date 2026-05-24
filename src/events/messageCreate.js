@@ -4,6 +4,8 @@ import { getAiResponse, DEFAULT_AI_PROMPT } from '../utils/aiChat.js';
 import { DEFAULT_AI_MODEL } from '../utils/aiConfig.js';
 import { buildAiMentionPolicy, sanitizeAiReplyMentions, buildAllowedMentions } from '../utils/aiMentions.js';
 import { logger } from '../utils/logger.js';
+import { embedsToV2Payload, v2Notice } from '../utils/componentsV2.js';
+import { UI_COLORS } from '../utils/style.js';
 
 const XP_COOLDOWN = 60_000;
 const XP_MIN = 15;
@@ -139,7 +141,7 @@ function handleKingInteraction(message) {
             .setTitle(`${r.mood} 摸摸吉吉國王`)
             .setDescription(`${message.author} 摸了摸吉吉國王...\n\n${r.text}`)
             .setFooter({ text: '🐕 直接打「摸摸國王」就能摸本王喔！' });
-        message.reply({ embeds: [embed] });
+        message.reply(embedsToV2Payload([embed], { allowedMentions: { parse: [] } }));
         return true;
     }
 
@@ -151,7 +153,7 @@ function handleKingInteraction(message) {
             .setTitle('🐕💕 抱抱吉吉國王')
             .setDescription(`${message.author} 把吉吉國王抱了起來...\n\n${r.text}`)
             .setFooter({ text: '🐕 直接打「抱抱國王」就能抱本王喔！' });
-        message.reply({ embeds: [embed] });
+        message.reply(embedsToV2Payload([embed], { allowedMentions: { parse: [] } }));
         return true;
     }
 
@@ -167,7 +169,7 @@ function handleKingInteraction(message) {
                 { name: '👑 國王的話', value: r.text }
             )
             .setFooter({ text: '🐕 打「占卜」就能請本王占卜！' });
-        message.reply({ embeds: [embed] });
+        message.reply(embedsToV2Payload([embed], { allowedMentions: { parse: [] } }));
         return true;
     }
 
@@ -188,7 +190,7 @@ function handleKingInteraction(message) {
             .setDescription(`> ${quote}\n\n— 吉吉國王`)
             .addFields({ name: '🍀 幸運指數', value: `${'⭐'.repeat(Math.ceil(luckyNum / 20))} (${luckyNum}/100)` })
             .setFooter({ text: '🐕 每天打「每日一汪」找本王領金句！' });
-        message.reply({ embeds: [embed] });
+        message.reply(embedsToV2Payload([embed], { allowedMentions: { parse: [] } }));
         return true;
     }
 
@@ -209,15 +211,7 @@ function handleKingInteraction(message) {
             reply = pick(defaultTalkReplies);
         }
 
-        const embed = new EmbedBuilder()
-            .setColor(0xFFD700)
-            .setTitle('🐕👑 吉吉國王的回覆')
-            .addFields(
-                { name: `💬 ${message.author.displayName} 說`, value: cleanContent.slice(0, 1024) || '...' },
-                { name: '🐕 國王的回應', value: reply }
-            )
-            .setFooter({ text: '🐕 @本王 或在訊息提到「國王」就能跟本王聊天！' });
-        message.reply({ embeds: [embed] });
+        message.reply({ content: reply, allowedMentions: { parse: [], repliedUser: false } });
         return true;
     }
 
@@ -417,7 +411,12 @@ export function register(client) {
                     msg = `🐕👑 **【皇家冊封大典】** 汪！本王看見了 ${message.author} 的忠誠與努力！\n特別賜予你 **「${newTitle}」** 的頭銜！成為王國的棟樑吧！🎉`;
                 }
 
-                message.channel.send(msg).catch(() => { });
+                message.channel.send(v2Notice(
+                    oldTitle !== newTitle ? '👑 皇家冊封大典' : '🐕👑 皇家晉升喜報',
+                    msg,
+                    oldTitle !== newTitle ? UI_COLORS.ROYAL : UI_COLORS.SUCCESS,
+                    { ephemeral: false, allowedMentions: { parse: [], users: [message.author.id] } }
+                )).catch(() => { });
             }
         }
     });

@@ -1,4 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
+import { embedsToV2Payload } from '../utils/componentsV2.js';
 
 export function register(client) {
     // === 方案一：偵測系統訊息 (每次 boost 都會觸發，包含重複加成) ===
@@ -18,6 +19,8 @@ export function register(client) {
             .setThumbnail(member.user.displayAvatarURL({ size: 128 }))
             .setFooter({ text: '🐕 感謝你支持吉吉國王的統治！' });
 
-        await channel.send({ content: `${member}`, embeds: [embed] }).catch(() => { });
+        await channel.send(embedsToV2Payload([embed], {
+            allowedMentions: { parse: [], users: [member.id] },
+        })).catch(() => { });
     });
 }

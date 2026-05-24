@@ -59,6 +59,7 @@ export function initDatabase() {
       guild_id TEXT,
       channel_id TEXT,
       message_id TEXT,
+      creator_id TEXT DEFAULT NULL,
       question TEXT,
       options TEXT,
       votes TEXT DEFAULT '{}',
@@ -151,6 +152,10 @@ export function initDatabase() {
   const userLevelColumns = userLevelInfo.map(c => c.name);
   if (!userLevelColumns.includes('total_voice_mins')) {
     db.prepare("ALTER TABLE user_levels ADD COLUMN total_voice_mins INTEGER DEFAULT 0").run();
+  }
+  const pollInfo = db.pragma('table_info(polls)');
+  if (!pollInfo.map(c => c.name).includes('creator_id')) {
+    db.prepare('ALTER TABLE polls ADD COLUMN creator_id TEXT DEFAULT NULL').run();
   }
 
   return db;

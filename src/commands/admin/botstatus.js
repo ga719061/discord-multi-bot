@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, version as djsVersion } from 'discord.js';
 import os from 'os';
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
+import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
     .setName('機器人狀態')
@@ -65,6 +66,5 @@ export async function execute(interaction) {
         .setFooter({ text: '🐕 本王元氣滿滿！隨時待命！汪！' })
         .setTimestamp();
 
-    await interaction.reply({ embeds: [embed], flags: ['Ephemeral'] });
+    await interaction.reply(embedsToV2Payload([embed], { ephemeral: true }));
 }
-

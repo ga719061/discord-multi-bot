@@ -2,6 +2,8 @@ import { SlashCommandBuilder, ChannelType, PermissionFlagsBits, EmbedBuilder, Ac
 import { updateGuildSetting, getGuildSettings } from '../../utils/database.js';
 import { fmt, COLORS } from '../../utils/style.js';
 import { parseJsonObject } from '../../utils/jsonUtils.js';
+import { embedsToV2Payload, v2Notice } from '../../utils/componentsV2.js';
+import { UI_COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
     .setName('設定紀錄')
@@ -19,9 +21,7 @@ export async function execute(interaction) {
 
     if (channel) {
         updateGuildSetting(interaction.guildId, 'log_channel', channel.id);
-        return await interaction.reply({
-            content: `🐕✅ **本王已將史官安置在 ${channel}！**\n` + '```ansi\n' + fmt(COLORS.CYAN, '從今以後，領地內的一舉一動都逃不過本王的法眼！汪！') + '\n```'
-        });
+        return await interaction.reply(v2Notice('📝 史官已安置', `🐕✅ **本王已將史官安置在 ${channel}！**\n` + '```ansi\n' + fmt(COLORS.CYAN, '從今以後，領地內的一舉一動都逃不過本王的法眼！汪！') + '\n```', UI_COLORS.SUCCESS, { ephemeral: false }));
     }
 
     // 發送控制面板
@@ -70,5 +70,5 @@ export async function execute(interaction) {
         )
         .setFooter({ text: '🐕 汪！本王喜歡聽各種領地的八卦！' });
 
-    await interaction.reply({ embeds: [embed], components: [row], flags: ['Ephemeral'] });
+    await interaction.reply(embedsToV2Payload([embed], { actionRows: [row], ephemeral: true }));
 }

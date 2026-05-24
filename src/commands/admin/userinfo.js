@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { getUserLevel, getRankTitle } from '../../utils/database.js';
+import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
     .setName('查身家')
@@ -54,5 +55,5 @@ export async function execute(interaction) {
 
     embed.setFooter({ text: '🐕 本王對每位子民都瞭若指掌！' });
 
-    await interaction.reply({ embeds: [embed], flags: ['Ephemeral'] });
+    await interaction.reply(embedsToV2Payload([embed], { ephemeral: true }));
 }

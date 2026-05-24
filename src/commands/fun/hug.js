@@ -1,4 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
     .setName('抱抱')
@@ -40,7 +41,7 @@ export async function execute(interaction) {
             .setDescription(`${interaction.user} 抱了 ${target}...\n\n${jealous}`)
             .setFooter({ text: '🐕 本王的醋罈子打翻了！汪！' });
 
-        await interaction.reply({ embeds: [embed] });
+        await interaction.reply(embedsToV2Payload([embed]));
     } else {
         // 抱國王
         const reaction = hugKingReactions[Math.floor(Math.random() * hugKingReactions.length)];
@@ -51,6 +52,6 @@ export async function execute(interaction) {
             .setDescription(`${interaction.user} 把吉吉國王抱了起來...\n\n${reaction.text}`)
             .setFooter({ text: '🐕 本王的體溫 38.5°C，暖暖的喔～汪！' });
 
-        await interaction.reply({ embeds: [embed] });
+        await interaction.reply(embedsToV2Payload([embed]));
     }
 }

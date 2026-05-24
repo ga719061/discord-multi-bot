@@ -1,5 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { getAiSettings, updateAiSetting } from '../../utils/database.js';
+import { embedsToV2Payload, v2Notice } from '../../utils/componentsV2.js';
+import { UI_COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
     .setName('智慧登入')
@@ -20,17 +22,11 @@ export async function execute(interaction) {
     const CORRECT_PASSWORD = process.env.AI_ADMIN_PASSWORD;
 
     if (!CORRECT_PASSWORD) {
-        return interaction.reply({
-            content: '❌ **系統錯誤**：管理員未在 `.env` 設定 `AI_ADMIN_PASSWORD`，無法登入！',
-            flags: ['Ephemeral']
-        });
+        return interaction.reply(v2Notice('🔐 登入功能未設定', '管理員未在 `.env` 設定 `AI_ADMIN_PASSWORD`，無法登入！', UI_COLORS.DANGER));
     }
 
     if (password !== CORRECT_PASSWORD) {
-        return interaction.reply({
-            content: '❌ 密碼錯誤！拒絕存取。',
-            flags: ['Ephemeral']
-        });
+        return interaction.reply(v2Notice('🔐 拒絕存取', '密碼錯誤，無法進入 AI 核心管理區。', UI_COLORS.DANGER));
     }
 
     const guildId = interaction.guildId;
@@ -43,12 +39,9 @@ export async function execute(interaction) {
         updateAiSetting(guildId, 'admin_ids', JSON.stringify(adminIds));
     }
 
-    await interaction.reply({
-        embeds: [new EmbedBuilder()
+    await interaction.reply(embedsToV2Payload([new EmbedBuilder()
             .setColor(0x00FF00)
             .setTitle('🔐 登入成功！')
             .setDescription('您已成功驗證身份。現在可以使用 `/智慧設定` 指令了。')
-        ],
-        flags: ['Ephemeral']
-    });
+        ], { ephemeral: true }));
 }

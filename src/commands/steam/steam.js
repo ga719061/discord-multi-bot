@@ -1,7 +1,9 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
 import { fetchSteamJson, getSteamFailureMessage } from '../../utils/steamDeals.js';
 import { logger } from '../../utils/logger.js';
+import { embedsToV2Payload, v2EditPayload, v2Notice } from '../../utils/componentsV2.js';
+import { UI_COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
     .setName('特價查詢')
@@ -21,7 +23,7 @@ export async function execute(interaction) {
 
     if (sub === '搜尋') {
         const query = interaction.options.getString('遊戲名稱');
-        await interaction.deferReply();
+        await interaction.deferReply({ flags: MessageFlags.IsComponentsV2 });
         await handleSearch(interaction, query);
     }
 }
@@ -32,7 +34,7 @@ async function handleSearch(interaction, query) {
         const searchData = await fetchSteamJson(searchUrl);
 
         if (!searchData.items || searchData.items.length === 0) {
-            return interaction.editReply('🐕❓ 汪？本王聞不到這個遊戲的味道... 你確定名字沒打錯嗎？');
+            return interaction.editReply(v2EditPayload(v2Notice('🎮 沒有搜尋結果', '🐕❓ 汪？本王聞不到這個遊戲的味道... 你確定名字沒打錯嗎？', UI_COLORS.MUTED, { ephemeral: false })));
         }
 
         const game = searchData.items[0];
@@ -42,7 +44,7 @@ async function handleSearch(interaction, query) {
         const detailData = await fetchSteamJson(detailUrl);
 
         if (!detailData[appId] || !detailData[appId].success) {
-            return interaction.editReply('🐕📜 汪... Steam 找到了遊戲，但暫時沒有可顯示的詳細資料。');
+            return interaction.editReply(v2EditPayload(v2Notice('🎮 詳細資料不可用', '🐕📜 Steam 找到了遊戲，但暫時沒有可顯示的詳細資料。', UI_COLORS.WARNING, { ephemeral: false })));
         }
 
         const details = detailData[appId].data;
@@ -87,10 +89,10 @@ async function handleSearch(interaction, query) {
             )
             .setFooter({ text: '🛒 皇家採購手冊 | 汪！把錢錢變成喜歡的樣子吧！' });
 
-        await interaction.editReply({ embeds: [embed] });
+        await interaction.editReply(v2EditPayload(embedsToV2Payload([embed])));
 
     } catch (error) {
         logger.warn(`[SteamSearch] 查詢失敗 guild=${interaction.guildId} code=${error.code || 'unavailable'}: ${error.message}`);
-        await interaction.editReply(getSteamFailureMessage(error));
+        await interaction.editReply(v2EditPayload(v2Notice('🎮 Steam 查詢失敗', getSteamFailureMessage(error), UI_COLORS.WARNING, { ephemeral: false })));
     }
 }

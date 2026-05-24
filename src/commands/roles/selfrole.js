@@ -9,6 +9,8 @@ import {
 import { getGuildSettings, updateGuildSetting } from '../../utils/database.js';
 import { fmt, COLORS } from '../../utils/style.js';
 import { parseJsonArray } from '../../utils/jsonUtils.js';
+import { embedsToV2Payload, v2Notice } from '../../utils/componentsV2.js';
+import { UI_COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
     .setName('自助身分組')
@@ -89,18 +91,18 @@ export async function execute(interaction) {
         ];
 
         if (dangerousPermissions.some(perm => role.permissions.has(perm))) {
-            return interaction.reply({ content: '🐕 ⚠️ 基於安全性考量，不能將具備管理權限的身分組加入自助領取清單！', flags: ['Ephemeral'] });
+            return interaction.reply(v2Notice('🏷️ 無法加入身分組', '🐕 基於安全性考量，不能將具備管理權限的身分組加入自助領取清單！', UI_COLORS.DANGER));
         }
 
         if (role.managed || role.id === interaction.guildId) {
-            return interaction.reply({ content: '🐕 汪！不能添加機器人專用或所有人身分組！', flags: ['Ephemeral'] });
+            return interaction.reply(v2Notice('🏷️ 無法加入身分組', '🐕 汪！不能添加機器人專用或所有人身分組！', UI_COLORS.DANGER));
         }
 
         if (roles.some(r => r.id === role.id)) {
-            return interaction.reply({ content: '🐕 汪！這個身分組已經在清單裡了！', flags: ['Ephemeral'] });
+            return interaction.reply(v2Notice('🏷️ 清單未變更', '🐕 汪！這個身分組已經在清單裡了！', UI_COLORS.WARNING));
         }
         if (roles.length >= 25) {
-            return interaction.reply({ content: '🐕 汪！下拉選單最多隻能容納 25 個身分組！', flags: ['Ephemeral'] });
+            return interaction.reply(v2Notice('🏷️ 選單已滿', '🐕 汪！下拉選單最多只能容納 25 個身分組！', UI_COLORS.WARNING));
         }
 
         roles.push({ id: role.id, requirement: requirement?.id || null });
@@ -108,21 +110,21 @@ export async function execute(interaction) {
 
         let msg = `🐕✅ 已將 ${role} 加入自助清單！`;
         if (requirement) msg += ` (需備有 ${requirement} 才能領取)`;
-        await interaction.reply({ content: msg, flags: ['Ephemeral'] });
+        await interaction.reply(v2Notice('🏷️ 身分組已加入', msg, UI_COLORS.SUCCESS));
 
     } else if (sub === '刪除選項') {
         const role = interaction.options.getRole('身分組');
         if (!roles.some(r => r.id === role.id)) {
-            return interaction.reply({ content: '🐕 汪！這個身分組不在清單裡！', flags: ['Ephemeral'] });
+            return interaction.reply(v2Notice('🏷️ 清單未變更', '🐕 汪！這個身分組不在清單裡！', UI_COLORS.WARNING));
         }
 
         roles = roles.filter(r => r.id !== role.id);
         updateGuildSetting(interaction.guildId, 'selfrole_roles', JSON.stringify(roles));
-        await interaction.reply({ content: `🐕✅ 已將 ${role} 從自助清單移除！`, flags: ['Ephemeral'] });
+        await interaction.reply(v2Notice('🏷️ 身分組已移除', `🐕✅ 已將 ${role} 從自助清單移除！`, UI_COLORS.SUCCESS));
 
     } else if (sub === '列表總覽') {
         if (roles.length === 0) {
-            return interaction.reply({ content: '🐕 目前沒有設定任何自助身分組。', flags: ['Ephemeral'] });
+            return interaction.reply(v2Notice('🏷️ 自助清單空空如也', '🐕 目前沒有設定任何自助身分組。', UI_COLORS.MUTED));
         }
 
         const roleLines = roles.map(r => {
@@ -142,11 +144,11 @@ export async function execute(interaction) {
             .setDescription('```ansi\n' + (roleLines || '尚無設定') + '\n```')
             .setFooter({ text: '🐕 使用 /自助身分組 發布選單 發送到頻道供成員領取！' });
 
-        await interaction.reply({ embeds: [embed], flags: ['Ephemeral'] });
+        await interaction.reply(embedsToV2Payload([embed], { ephemeral: true }));
 
     } else if (sub === '發布選單') {
         if (roles.length === 0) {
-            return interaction.reply({ content: '🐕 汪！請先使用 `/自助身分組 新增選項` 加入身分組！', flags: ['Ephemeral'] });
+            return interaction.reply(v2Notice('🏷️ 尚無可發布選項', '🐕 汪！請先使用 `/自助身分組 新增選項` 加入身分組！', UI_COLORS.WARNING));
         }
 
         const channel = interaction.options.getChannel('頻道');
@@ -183,7 +185,7 @@ export async function execute(interaction) {
             .setDescription(description)
             .setFooter({ text: '吉吉國王會自動處理你的請求！汪！' });
 
-        await channel.send({ embeds: [embed], components: [row] });
-        await interaction.reply({ content: `🐕✅ 選單已發送到 ${channel}！`, flags: ['Ephemeral'] });
+        await channel.send(embedsToV2Payload([embed], { actionRows: [row] }));
+        await interaction.reply(v2Notice('🏷️ 選單已發布', `🐕✅ 選單已發送到 ${channel}！`, UI_COLORS.SUCCESS));
     }
 }

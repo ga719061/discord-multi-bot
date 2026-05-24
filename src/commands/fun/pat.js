@@ -1,4 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
     .setName('摸摸')
@@ -25,5 +26,5 @@ export async function execute(interaction) {
         .setDescription(`${interaction.user} 摸了摸吉吉國王...\n\n${reaction.text}`)
         .setFooter({ text: '🐕 本王的心情是隨機的！汪！' });
 
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply(embedsToV2Payload([embed]));
 }

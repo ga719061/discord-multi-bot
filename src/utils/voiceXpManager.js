@@ -1,5 +1,7 @@
 import { logger } from './logger.js';
 import { addXp, getGuildSettings } from './database.js';
+import { v2Notice } from './componentsV2.js';
+import { UI_COLORS } from './style.js';
 
 const SCAN_INTERVAL = 10 * 60 * 1000; // 10 分鐘
 const BASE_XP = 10;
@@ -55,7 +57,12 @@ async function scanVoiceChannels(client) {
                     if (settings.level_up_announcement_enabled !== 0) {
                         const channel = guild.systemChannel || state.channel;
                         if (channel && channel.isTextBased()) {
-                            await channel.send(`🐕👑 **汪汪！** 恭喜 ${state.member} 在語音頻道修行有成，晉升為 **等級 ${result.newLevel}**！🎉`).catch(() => {});
+                            await channel.send(v2Notice(
+                                '🐕👑 皇家晉升喜報',
+                                `恭喜 ${state.member} 在語音頻道修行有成，晉升為 **等級 ${result.newLevel}**！🎉`,
+                                UI_COLORS.SUCCESS,
+                                { ephemeral: false, allowedMentions: { parse: [], users: [state.member.id] } }
+                            )).catch(() => {});
                         }
                     }
                 }

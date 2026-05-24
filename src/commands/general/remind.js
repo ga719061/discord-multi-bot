@@ -2,6 +2,8 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { addReminder, getUserReminders, deleteReminder } from '../../utils/database.js';
 import { parseReminderTime } from '../../utils/reminderManager.js';
 import { fmt, COLORS } from '../../utils/style.js';
+import { embedsToV2Payload, v2Notice } from '../../utils/componentsV2.js';
+import { UI_COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
     .setName('提醒')
@@ -44,37 +46,25 @@ export async function execute(interaction) {
         
         const targetTime = parseReminderTime(timeStr);
         if (!targetTime) {
-            return interaction.reply({
-                content: '🐕 汪嗚！時間格式錯誤... 請使用 `10m`, `1h` 或 `16:00` 這種格式喔！',
-                flags: ['Ephemeral']
-            });
+            return interaction.reply(v2Notice('⏰ 時間格式錯誤', '🐕 汪嗚！請使用 `10m`、`1h` 或 `16:00` 這種格式喔！', UI_COLORS.WARNING));
         }
 
         const timeDiff = targetTime - Date.now();
         if (timeDiff <= 0) {
-            return interaction.reply({
-                content: '🐕 汪！你設定的時間已經過去了耶... 本王沒辦法回到過去幫你提醒喔！',
-                flags: ['Ephemeral']
-            });
+            return interaction.reply(v2Notice('⏰ 時間已過', '🐕 本王沒辦法回到過去幫你提醒，請重新設定未來的時間喔！', UI_COLORS.WARNING));
         }
 
         addReminder(interaction.guildId, interaction.channelId, interaction.user.id, content, targetTime);
         
         const dateStr = new Date(targetTime).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-        return interaction.reply({
-            content: `🐕✅ 遵命！本王已記下了：\n> **內容**：${content}\n> **時間**：${dateStr}\n屆時本王會在這頻道準時汪一聲提醒你！`,
-            flags: ['Ephemeral']
-        });
+        return interaction.reply(v2Notice('⏰ 皇家提醒已登記', `🐕✅ 遵命！本王已記下了：\n> **內容**：${content}\n> **時間**：${dateStr}\n屆時本王會在這頻道準時汪一聲提醒你！`, UI_COLORS.SUCCESS));
     }
 
     if (subcommand === '清單') {
         const reminders = getUserReminders(interaction.user.id);
         
         if (reminders.length === 0) {
-            return interaction.reply({
-                content: '🐕 汪！你目前沒有任何待處理的提醒喔！真是個輕鬆自在的子民呢～',
-                flags: ['Ephemeral']
-            });
+            return interaction.reply(v2Notice('📜 提醒清單空空如也', '🐕 你目前沒有任何待處理的提醒喔！真是個輕鬆自在的子民呢～', UI_COLORS.MUTED));
         }
 
         const embed = new EmbedBuilder()
@@ -98,7 +88,7 @@ export async function execute(interaction) {
             });
         });
 
-        return interaction.reply({ embeds: [embed], flags: ['Ephemeral'] });
+        return interaction.reply(embedsToV2Payload([embed], { ephemeral: true }));
     }
 
     if (subcommand === '刪除') {
@@ -106,15 +96,9 @@ export async function execute(interaction) {
         const result = deleteReminder(id, interaction.user.id);
 
         if (result.changes === 0) {
-            return interaction.reply({
-                content: `🐕 汪嗚...找不到編號為 \`${id}\` 的提醒，或者是那不屬於你。`,
-                flags: ['Ephemeral']
-            });
+            return interaction.reply(v2Notice('📜 找不到提醒', `🐕 汪嗚...找不到編號為 \`${id}\` 的提醒，或者是那不屬於你。`, UI_COLORS.WARNING));
         }
 
-        return interaction.reply({
-            content: `🐕✅ 好的！本王已經把編號 \`${id}\` 的提醒從大典中抹去了！`,
-            flags: ['Ephemeral']
-        });
+        return interaction.reply(v2Notice('📜 提醒已刪除', `🐕✅ 好的！本王已經把編號 \`${id}\` 的提醒從大典中抹去了！`, UI_COLORS.SUCCESS));
     }
 }

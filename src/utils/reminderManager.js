@@ -2,6 +2,7 @@ import { getDueReminders, updateReminderStatus } from './database.js';
 import { EmbedBuilder } from 'discord.js';
 import { logger } from './logger.js';
 import { fmt, COLORS } from './style.js';
+import { embedsToV2Payload } from './componentsV2.js';
 
 let checkInterval = null;
 
@@ -60,10 +61,9 @@ async function checkReminders(client) {
                     .setTimestamp()
                     .setFooter({ text: '🐕 吉吉國王溫馨提醒' });
 
-                await channel.send({
-                    content: `🔔 <@${reminder.user_id}> 國王駕到！提醒時間到囉！`,
-                    embeds: [embed]
-                });
+                await channel.send(embedsToV2Payload([embed], {
+                    allowedMentions: { parse: [], users: [reminder.user_id] },
+                }));
 
                 // 更新狀態為已完成
                 updateReminderStatus(reminder.id, 'completed');

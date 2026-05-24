@@ -1,6 +1,8 @@
 import { SlashCommandBuilder, EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import { addGiveaway } from '../../utils/database.js';
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
+import { UI_COLORS } from '../../utils/style.js';
+import { embedsToV2Payload, v2Notice } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
     .setName('抽獎')
@@ -25,7 +27,7 @@ export async function execute(interaction) {
     const winnersCount = interaction.options.getInteger('名額');
 
     if (duration <= 0 || winnersCount <= 0) {
-        return interaction.reply({ content: '🐕 汪！時間和名額都要大於 0 喔！', flags: ['Ephemeral'] });
+        return interaction.reply(v2Notice('🎁 賞賜設定不成立', '🐕 汪！時間和名額都要大於 0 喔！', UI_COLORS.WARNING));
     }
 
     const endTime = Date.now() + duration * 60 * 1000;
@@ -49,11 +51,10 @@ export async function execute(interaction) {
         .setFooter({ text: '抽獎倒數中...' })
         .setTimestamp(endTime);
 
-    const message = await interaction.reply({ 
-        embeds: [embed], 
+    const message = await interaction.reply(embedsToV2Payload([embed], {
         files: [stampAttachment],
-        fetchReply: true 
-    });
+        fetchReply: true,
+    }));
 
     await message.react('🎉');
 

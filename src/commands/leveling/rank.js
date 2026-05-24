@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getUserLevel, getXpForLevel, getRankTitle } from '../../utils/database.js';
 import { fmt, COLORS, ansiBar, ansiBlock } from '../../utils/style.js';
+import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
     .setName('等級')
@@ -45,5 +46,5 @@ export async function execute(interaction) {
         .setFooter({ text: '🐕 繼續在王國內活躍，本王會賜予你更高的頭銜喔！汪！' })
         .setTimestamp();
 
-    await interaction.reply({ embeds: [embed] });
+    await interaction.reply(embedsToV2Payload([embed]));
 }

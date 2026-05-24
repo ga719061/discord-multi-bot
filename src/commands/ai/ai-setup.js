@@ -2,7 +2,8 @@ import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.
 import { getAiSettings, updateAiSetting } from '../../utils/database.js';
 import { DEFAULT_AI_PROMPT } from '../../utils/aiChat.js';
 import { DEFAULT_AI_MODEL } from '../../utils/aiConfig.js';
-import { fmt, COLORS } from '../../utils/style.js';
+import { fmt, COLORS, UI_COLORS } from '../../utils/style.js';
+import { embedsToV2Payload, v2Notice } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
     .setName('智慧設定')
@@ -123,10 +124,7 @@ export async function execute(interaction) {
     const adminIds = settings.admin_ids || [];
 
     if (!adminIds.includes(userId)) {
-        return interaction.reply({
-            content: '❌ 權限不足！請先使用 `/智慧登入` 輸入密碼進行驗證。',
-            flags: ['Ephemeral']
-        });
+        return interaction.reply(v2Notice('🔐 尚未驗證身份', '請先使用 `/智慧登入` 輸入密碼進行驗證。', UI_COLORS.DANGER));
     }
 
     if (sub === '角色設定') {
@@ -135,14 +133,11 @@ export async function execute(interaction) {
 
         updateAiSetting(guildId, 'system_prompt', finalPrompt);
 
-        await interaction.reply({
-            embeds: [new EmbedBuilder()
+        await interaction.reply(embedsToV2Payload([new EmbedBuilder()
                 .setColor(0x0099FF)
                 .setTitle('🐕🎭 AI 角色設定完成！')
                 .setDescription(prompt ? `汪！AI 現在會以以下方式回應：\n\n\`\`\`ansi\n${fmt(COLORS.CYAN, prompt)}\n\`\`\`` : `汪！AI 的個性已經恢復成**原廠預設的偉大吉吉國王模式**了！`)
-            ],
-            flags: ['Ephemeral'],
-        });
+            ], { ephemeral: true }));
 
     } else if (sub === '白名單管理') {
         const action = interaction.options.getString('動作');
@@ -154,62 +149,50 @@ export async function execute(interaction) {
 
         if (action === 'add') {
             if (list.includes(target.id)) {
-                return interaction.reply({ content: `🐕 ${targetName} 已經在白名單裡惹！`, flags: ['Ephemeral'] });
+                return interaction.reply(v2Notice('👥 白名單未變更', `🐕 ${targetName} 已經在白名單裡惹！`, UI_COLORS.WARNING));
             }
             list.push(target.id);
             updateAiSetting(guildId, 'whitelist', JSON.stringify(list));
-            await interaction.reply({
-                embeds: [new EmbedBuilder()
+            await interaction.reply(embedsToV2Payload([new EmbedBuilder()
                     .setColor(0x00FF00)
                     .setTitle('🐕✅ 白名單更新！')
                     .setDescription(`**${targetName}** 已加入白名單，現在他可以跟 AI 聊天了！汪！`)
-                ],
-                flags: ['Ephemeral'],
-            });
+                ], { ephemeral: true }));
 
         } else if (action === 'remove') {
             if (!list.includes(target.id)) {
-                return interaction.reply({ content: `🐕 ${targetName} 本來就不在白名單裡喔～`, flags: ['Ephemeral'] });
+                return interaction.reply(v2Notice('👥 白名單未變更', `🐕 ${targetName} 本來就不在白名單裡喔～`, UI_COLORS.WARNING));
             }
             list = list.filter(id => id !== target.id);
             updateAiSetting(guildId, 'whitelist', JSON.stringify(list));
-            await interaction.reply({
-                embeds: [new EmbedBuilder()
+            await interaction.reply(embedsToV2Payload([new EmbedBuilder()
                     .setColor(0xFF0000)
                     .setTitle('🐕❌ 白名單更新！')
                     .setDescription(`**${targetName}** 已從白名單移除。再見了，朋友。`)
-                ],
-                flags: ['Ephemeral'],
-            });
+                ], { ephemeral: true }));
         }
 
     } else if (sub === '模型切換') {
         const modelName = interaction.options.getString('模型名稱');
         updateAiSetting(guildId, 'model', modelName);
-        await interaction.reply({
-            embeds: [new EmbedBuilder()
+        await interaction.reply(embedsToV2Payload([new EmbedBuilder()
                 .setColor(0x0099FF)
                 .setTitle('🐕🤖 AI 模型已更新！')
                 .setDescription(`汪！現在使用的模型是：\n**${modelName}**`)
-            ],
-            flags: ['Ephemeral'],
-        });
+            ], { ephemeral: true }));
 
     } else if (sub === '聯網檢索') {
         const switchValue = interaction.options.getString('開關');
         const isEnabled = switchValue === 'enable';
         updateAiSetting(guildId, 'search_enabled', isEnabled ? 1 : 0);
 
-        await interaction.reply({
-            embeds: [new EmbedBuilder()
+        await interaction.reply(embedsToV2Payload([new EmbedBuilder()
                 .setColor(isEnabled ? 0x00FF00 : 0xFF0000)
                 .setTitle(isEnabled ? '🐕🌐 AI 聯網功能已開啟！' : '🐕💤 AI 聯網功能已關閉！')
                 .setDescription(isEnabled
                     ? '汪！現在本王可以上網搜尋最新的資訊了！'
                     : '汪！本王決定專注於內在修養，不再上網了。')
-            ],
-            flags: ['Ephemeral'],
-        });
+            ], { ephemeral: true }));
 
     } else if (sub === '派對模式') {
         const targetChannel = interaction.options.getChannel('目標頻道');
@@ -220,17 +203,19 @@ export async function execute(interaction) {
         updateAiSetting(guildId, 'party_expires_at', expiresAt);
         updateAiSetting(guildId, 'enabled', 1);
 
-        await interaction.reply({
-            embeds: [new EmbedBuilder()
+        await interaction.reply(embedsToV2Payload([new EmbedBuilder()
                 .setColor(0xFFD700)
                 .setTitle('🐕🎉 AI 狂歡派對設定成功！')
                 .setDescription(`已在 <#${targetChannel.id}> 開放「提及聊天」特權！\n在這段時間內，任何人只需 **@本王**，國王就會親自回應！\n⏱️ 持續時間：**${minutes} 分鐘**`)
-            ],
-            flags: ['Ephemeral'],
-        });
+            ], { ephemeral: true }));
 
         // 傳送入場台詞到目標頻道
-        await targetChannel.send('🛡️ **（號角長鳴）汪！諸位廷臣肅靜！本王已駕臨『御前圓桌會議』！**\n從此刻起，卸下所有規矩，只要呼喚 (@) 本王，你們的每一句諫言，本王都將親自審度與回應。現在，開始你們的奏報吧！').catch(() => { });
+        await targetChannel.send(v2Notice(
+            '🎉 御前圓桌會議開幕',
+            '🛡️ **（號角長鳴）汪！諸位廷臣肅靜！本王已駕臨！**\n從此刻起，只要 `@` 本王，你們的每一句諫言，本王都將親自審度與回應。',
+            UI_COLORS.ROYAL,
+            { ephemeral: false }
+        )).catch(() => { });
 
         // 派對到期由 partyManager 輪詢處理（重啟後依然有效）
 
@@ -239,16 +224,13 @@ export async function execute(interaction) {
         const isEnabled = switchValue === 'enable';
         updateAiSetting(guildId, 'context_enabled', isEnabled ? 1 : 0);
 
-        await interaction.reply({
-            embeds: [new EmbedBuilder()
+        await interaction.reply(embedsToV2Payload([new EmbedBuilder()
                 .setColor(isEnabled ? 0x00FF00 : 0xFF0000)
                 .setTitle(isEnabled ? '🐕🧠 AI 上下文記憶已開啟！' : '🐕🧠 AI 上下文記憶已關閉！')
                 .setDescription(isEnabled
                     ? '汪！本王現在會參考之前的對話紀錄，回覆會更加連貫喔！'
                     : '汪！本王決定拋棄過去，只專注於你現在說的一言一語。')
-            ],
-            flags: ['Ephemeral'],
-        });
+            ], { ephemeral: true }));
 
     } else if (sub === '狀態面板') {
         const settings = getAiSettings(guildId);
@@ -265,8 +247,7 @@ export async function execute(interaction) {
             ? `🎉 進行中！頻道：<#${settings.party_channel_id}> (結束時間：<t:${Math.floor(settings.party_expires_at / 1000)}:R>)`
             : '💤 目前沒有舉辦派對';
 
-        await interaction.reply({
-            embeds: [new EmbedBuilder()
+        await interaction.reply(embedsToV2Payload([new EmbedBuilder()
                 .setColor(0x00FF00)
                 .setTitle('🐕🤖 吉吉國王 AI 核心狀態面板')
                 .setDescription('管理者，以下是國王目前的腦袋與靈魂狀態：')
@@ -280,8 +261,6 @@ export async function execute(interaction) {
                     { name: `👥 御准白名單 (${settings.whitelist.length} 人)`, value: whitelistText }
                 )
                 .setFooter({ text: '💡 提示：白名單外的平民只能在「派對模式」期間與國王說話！' })
-            ],
-            flags: ['Ephemeral'],
-        });
+            ], { ephemeral: true }));
     }
 }

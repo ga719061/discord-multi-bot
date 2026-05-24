@@ -1,126 +1,138 @@
+import crypto from 'node:crypto';
 import {
-    SlashCommandBuilder,
-    PermissionFlagsBits,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    FileUploadBuilder,
+    LabelBuilder,
     ModalBuilder,
+    PermissionFlagsBits,
+    SlashCommandBuilder,
     TextInputBuilder,
     TextInputStyle,
-    ActionRowBuilder
 } from 'discord.js';
+import { UI_COLORS } from '../../utils/style.js';
+import { ephemeralV2Payload, v2Card, v2Payload } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
     .setName('發布公告')
     .setDescription('📢 頒布聖旨：發布帶有精美排版與提及功能的官方國家級公告')
     .setDescriptionLocalizations({ 'zh-TW': '📢 頒布聖旨：發布帶有精美排版與提及功能的官方國家級公告' })
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-    .addChannelOption(opt =>
+    .addChannelOption((opt) =>
         opt.setName('頻道')
             .setDescription('要發布公告的指定頻道')
             .setDescriptionLocalizations({ 'zh-TW': '要發布公告的指定頻道' })
-            .setRequired(true)
-    )
-    .addStringOption(opt =>
+            .setRequired(true))
+    .addStringOption((opt) =>
         opt.setName('提及範圍')
-            .setDescription('是否要在發送時提及身分組？ (選填)')
-            .setDescriptionLocalizations({ 'zh-TW': '是否要在發送時提及身分組？ (選填)' })
+            .setDescription('是否要在發送時提及對象？ (選填)')
+            .setDescriptionLocalizations({ 'zh-TW': '是否要在發送時提及對象？ (選填)' })
             .setRequired(false)
             .addChoices(
                 { name: '提及 @everyone (所有人)', value: '@everyone' },
                 { name: '提及 @here (在線上的人)', value: '@here' },
                 { name: '不提及任何對象', value: 'none' }
-            )
-    )
-    .addRoleOption(opt =>
+            ))
+    .addRoleOption((opt) =>
         opt.setName('提及身分組')
             .setDescription('如果要提及特定身分組，請在此選擇 (選填)')
             .setDescriptionLocalizations({ 'zh-TW': '如果要提及特定身分組，請在此選擇 (選填)' })
-            .setRequired(false)
-    )
-    .addAttachmentOption(opt => 
-        opt.setName('圖片1')
-            .setDescription('上傳第一張圖片 (作為主圖顯示)')
-            .setRequired(false)
-    )
-    .addAttachmentOption(opt => 
-        opt.setName('圖片2')
-            .setDescription('上傳第二張圖片 (選填)')
-            .setRequired(false)
-    )
-    .addAttachmentOption(opt => 
-        opt.setName('圖片3')
-            .setDescription('上傳第三張圖片 (選填)')
-            .setRequired(false)
-    );
+            .setRequired(false));
 
-// 存放暫存的公告設定，透過 UUID 對應
 export const pendingAnnouncements = new Map();
+
+export function buildAnnouncementPayload(draft, { preview = false, actionRows = [], files = [] } = {}) {
+    const heading = preview ? '## 預覽模式\n此卡片尚未發布，確認內容後再按下發布。' : null;
+    const mention = draft.mentionText ? `${draft.mentionText}\n\n` : '';
+    const panel = v2Card({
+        title: preview ? '📜 聖旨預覽' : '📜 【致全境子民：國王御旨】',
+        description: [heading, `**${draft.title}**\n\n${mention}${draft.content}`].filter(Boolean).join('\n\n'),
+        accentColor: UI_COLORS.DANGER,
+        thumbnail: preview ? undefined : 'attachment://stamp.png',
+        images: draft.images || [],
+        footer: `${draft.footer ? `${draft.footer} | ` : ''}🔱 王國正版授權印記`,
+        actionRows,
+    });
+    const options = preview ? { allowedMentions: { parse: [] } } : { allowedMentions: draft.allowedMentions, files };
+    return preview ? ephemeralV2Payload([panel]) : v2Payload([panel], options);
+}
+
+export function buildAnnouncementPreviewButtons(uuid) {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(`announce_preview:${uuid}:publish`)
+            .setLabel('發布公告')
+            .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+            .setCustomId(`announce_preview:${uuid}:cancel`)
+            .setLabel('取消')
+            .setStyle(ButtonStyle.Secondary)
+    );
+}
 
 export async function execute(interaction) {
     const channel = interaction.options.getChannel('頻道');
     const mention = interaction.options.getString('提及範圍');
     const mentionRole = interaction.options.getRole('提及身分組');
-    const img1 = interaction.options.getAttachment('圖片1');
-    const img2 = interaction.options.getAttachment('圖片2');
-    const img3 = interaction.options.getAttachment('圖片3');
+    let mentionText = null;
+    let allowedMentions = { parse: [] };
 
-    let mentionText = 'none';
-    if (mention && mention !== 'none') mentionText = mention;
-    if (mentionRole) mentionText = `<@&${mentionRole.id}>`;
+    if (mentionRole) {
+        mentionText = `<@&${mentionRole.id}>`;
+        allowedMentions = { parse: [], roles: [mentionRole.id] };
+    } else if (mention === '@everyone' || mention === '@here') {
+        mentionText = mention;
+        allowedMentions = { parse: ['everyone'] };
+    }
 
-    // 蒐集上傳的圖片網址
-    const imageUrls = [img1, img2, img3]
-        .filter(img => img && img.contentType && img.contentType.startsWith('image/'))
-        .map(img => img.url);
-
-    // 產生唯一 ID 並將這些資訊暫存起來 (5 分鐘後自動清理)
     const uuid = crypto.randomUUID();
     pendingAnnouncements.set(uuid, {
         channelId: channel.id,
-        mentionText: mentionText === 'none' ? null : mentionText,
-        images: imageUrls,
-        timestamp: Date.now()
+        userId: interaction.user.id,
+        mentionText,
+        allowedMentions,
+        timestamp: Date.now(),
     });
-
-    // 5分鐘後清空該暫存避免記憶體洩漏
-    setTimeout(() => {
-        pendingAnnouncements.delete(uuid);
-    }, 5 * 60 * 1000);
-
-    // Custom ID 格式: announce_modal_{UUID}
-    const customId = `announce_modal_${uuid}`;
+    const cleanupTimer = setTimeout(() => pendingAnnouncements.delete(uuid), 5 * 60 * 1000);
+    cleanupTimer.unref?.();
 
     const modal = new ModalBuilder()
-        .setCustomId(customId)
-        .setTitle('👑 吉吉國王聖旨發布台');
-
-    const titleInput = new TextInputBuilder()
-        .setCustomId('announce_title')
-        .setLabel('公告標題')
-        .setPlaceholder('（必填）例如：伺服器維護通知')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true)
-        .setMaxLength(256);
-
-    const contentInput = new TextInputBuilder()
-        .setCustomId('announce_content')
-        .setLabel('公告內容')
-        .setPlaceholder('（必填）支援 Markdown 語法')
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true)
-        .setMaxLength(4000);
-
-    const footerInput = new TextInputBuilder()
-        .setCustomId('announce_footer')
-        .setLabel('頁腳文字 (選填)')
-        .setPlaceholder('顯示在公告底端的小字')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(2048);
-
-    const row1 = new ActionRowBuilder().addComponents(titleInput);
-    const row2 = new ActionRowBuilder().addComponents(contentInput);
-    const row3 = new ActionRowBuilder().addComponents(footerInput);
-
-    modal.addComponents(row1, row2, row3);
+        .setCustomId(`announce_modal_${uuid}`)
+        .setTitle('👑 吉吉國王聖旨發布台')
+        .addLabelComponents(
+            new LabelBuilder().setLabel('公告標題').setTextInputComponent(
+                new TextInputBuilder()
+                    .setCustomId('announce_title')
+                    .setPlaceholder('例如：伺服器維護通知')
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(true)
+                    .setMaxLength(256)
+            ),
+            new LabelBuilder().setLabel('公告內容').setTextInputComponent(
+                new TextInputBuilder()
+                    .setCustomId('announce_content')
+                    .setPlaceholder('支援 Markdown 語法')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setRequired(true)
+                    .setMaxLength(3500)
+            ),
+            new LabelBuilder().setLabel('頁腳文字 (選填)').setTextInputComponent(
+                new TextInputBuilder()
+                    .setCustomId('announce_footer')
+                    .setPlaceholder('顯示在公告底端的小字')
+                    .setStyle(TextInputStyle.Short)
+                    .setRequired(false)
+                    .setMaxLength(256)
+            ),
+            new LabelBuilder().setLabel('圖片附件 (選填，最多 3 張)').setFileUploadComponent(
+                new FileUploadBuilder()
+                    .setCustomId('announce_images')
+                    .setMinValues(0)
+                    .setMaxValues(3)
+                    .setRequired(false)
+            )
+        );
 
     await interaction.showModal(modal);
 }

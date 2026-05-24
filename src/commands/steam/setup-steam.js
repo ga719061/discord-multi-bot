@@ -1,7 +1,9 @@
-import { ChannelType, EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
+import { ChannelType, EmbedBuilder, MessageFlags, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { getGuildSettings, updateGuildSetting } from '../../utils/database.js';
-import { buildSteamDealsEmbeds, fetchSteamSpecialDeals, getSteamFailureMessage, isValidSteamDealTime } from '../../utils/steamDeals.js';
+import { buildSteamDealsPayload, fetchSteamSpecialDeals, getSteamFailureMessage, isValidSteamDealTime } from '../../utils/steamDeals.js';
 import { logger } from '../../utils/logger.js';
+import { embedsToV2Payload, v2EditPayload, v2Notice } from '../../utils/componentsV2.js';
+import { UI_COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
   .setName('設定特價推播')
@@ -55,20 +57,14 @@ async function handleChannel(interaction) {
   const time = interaction.options.getString('時間');
 
   if (!isValidSteamDealTime(time)) {
-    return interaction.reply({
-      content: '時間格式不正確，請使用 `HH:mm`，例如 `20:00`。',
-      flags: ['Ephemeral'],
-    });
+    return interaction.reply(v2Notice('🛒 時間格式不正確', '請使用 `HH:mm`，例如 `20:00`。', UI_COLORS.WARNING));
   }
 
   updateGuildSetting(interaction.guildId, 'steam_deal_channel', channel.id);
   updateGuildSetting(interaction.guildId, 'steam_deal_time', time);
   updateGuildSetting(interaction.guildId, 'steam_deal_enabled', 1);
 
-  await interaction.reply({
-    content: `Steam 每日熱門特價推播已啟用：每天台灣時間 **${time}** 會投放到 ${channel}。`,
-    flags: ['Ephemeral'],
-  });
+  await interaction.reply(v2Notice('🛒 Steam 特價推播已啟用', `每天台灣時間 **${time}** 會投放到 ${channel}。`, UI_COLORS.SUCCESS));
 }
 
 async function handleStatus(interaction) {
@@ -89,54 +85,45 @@ async function handleStatus(interaction) {
     )
     .setFooter({ text: '使用 /設定特價推播 設定頻道 目標頻道:#頻道 時間:20:00 可更新設定' });
 
-  await interaction.reply({ embeds: [embed], flags: ['Ephemeral'] });
+  await interaction.reply(embedsToV2Payload([embed], { ephemeral: true }));
 }
 
 async function handleDisable(interaction) {
   const settings = getGuildSettings(interaction.guildId);
   if (!settings.steam_deal_channel && settings.steam_deal_enabled !== 1) {
-    return interaction.reply({
-      content: '目前尚未設定 Steam 每日特價推播。',
-      flags: ['Ephemeral'],
-    });
+    return interaction.reply(v2Notice('🛒 尚未設定推播', '目前尚未設定 Steam 每日特價推播。', UI_COLORS.MUTED));
   }
 
   updateGuildSetting(interaction.guildId, 'steam_deal_enabled', 0);
 
-  await interaction.reply({
-    content: 'Steam 每日熱門特價自動推播已關閉。',
-    flags: ['Ephemeral'],
-  });
+  await interaction.reply(v2Notice('🛒 Steam 推播已關閉', 'Steam 每日熱門特價自動推播已關閉。', UI_COLORS.MUTED));
 }
 
 async function handleDealList(interaction) {
   const settings = getGuildSettings(interaction.guildId);
   if (!settings.steam_deal_channel) {
-    return interaction.reply({
-      content: '尚未設定投放頻道，請先使用 `/設定特價推播 設定頻道 目標頻道:#頻道 時間:20:00`。',
-      flags: ['Ephemeral'],
-    });
+    return interaction.reply(v2Notice('🛒 尚未設定投放頻道', '請先使用 `/設定特價推播 設定頻道 目標頻道:#頻道 時間:20:00`。', UI_COLORS.WARNING));
   }
 
-  await interaction.deferReply({ flags: ['Ephemeral'] });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 });
 
   const channel = await interaction.guild.channels.fetch(settings.steam_deal_channel).catch(() => null);
   if (!channel || !channel.isTextBased()) {
-    return interaction.editReply('找不到已設定的文字頻道，請重新使用 `/設定特價推播 設定頻道` 設定。');
+    return interaction.editReply(v2EditPayload(v2Notice('🛒 找不到投放頻道', '請重新使用 `/設定特價推播 設定頻道` 設定。', UI_COLORS.WARNING)));
   }
 
   try {
     const deals = await fetchSteamSpecialDeals(10);
-    const embeds = buildSteamDealsEmbeds(deals, {
+    const payload = buildSteamDealsPayload(deals, {
       title: '🐕👑 吉吉王國 Steam 熱門特價榜單',
       intro: `汪！皇家採購廳立即呈上 ${deals.length} 款不重複熱門特價，這份榜單不會更新每日投放紀錄。`,
       footer: '🐕 手動特價列表 | 不會更新每日投放紀錄',
     });
 
-    await channel.send({ embeds });
-    await interaction.editReply(`Steam 特價榜單已送出到 ${channel}。`);
+    await channel.send(payload);
+    await interaction.editReply(v2EditPayload(v2Notice('🛒 特價榜單已送出', `Steam 特價榜單已送出到 ${channel}。`, UI_COLORS.SUCCESS)));
   } catch (err) {
     logger.warn(`[SteamDeals] 手動投放失敗 guild=${interaction.guildId} code=${err.code || 'unavailable'}: ${err.message}`);
-    await interaction.editReply(getSteamFailureMessage(err));
+    await interaction.editReply(v2EditPayload(v2Notice('🛒 Steam 推播失敗', getSteamFailureMessage(err), UI_COLORS.WARNING)));
   }
 }

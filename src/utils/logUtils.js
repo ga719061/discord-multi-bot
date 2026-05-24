@@ -2,6 +2,7 @@ import { EmbedBuilder, AuditLogEvent } from 'discord.js';
 import { getGuildSettings } from './database.js';
 import { logger } from './logger.js';
 import { parseJsonObject } from './jsonUtils.js';
+import { embedsToV2Payload } from './componentsV2.js';
 
 /**
  * 從 Audit Log 中抓特執行者 (現行犯)
@@ -30,10 +31,10 @@ export async function getAuditLogExecutor(guild, type, targetId) {
 /**
  * 傳送日誌到指定頻道
  * @param {Guild} guild - Discord Guild 物件
- * @param {EmbedBuilder} embed - 要發送的 Embed
+ * @param {EmbedBuilder|object|EmbedBuilder[]} report - 要發送的日誌內容或 V2 payload
  * @param {string} category - 日誌類別 (message/member/server/voice/thread)
  */
-export async function sendLog(guild, embed, category = null) {
+export async function sendLog(guild, report, category = null) {
     if (!guild) return;
 
     try {
@@ -62,7 +63,10 @@ export async function sendLog(guild, embed, category = null) {
         const channel = await guild.channels.fetch(settings.log_channel).catch(() => null);
         if (!channel) return;
 
-        await channel.send({ embeds: [embed] }).catch(err => {
+        const payload = report?.components
+            ? report
+            : embedsToV2Payload(Array.isArray(report) ? report : [report]);
+        await channel.send(payload).catch(err => {
             logger.warn(`[Log] 無法發送日誌到 ${channel.name}: ${err.message}`);
         });
     } catch (error) {

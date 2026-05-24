@@ -1,6 +1,6 @@
 import { getDb } from './database.js';
 import { logger } from './logger.js';
-import { buildSteamDealsEmbeds, fetchSteamSpecialDeals, getTaipeiDateTime, isValidSteamDealTime } from './steamDeals.js';
+import { buildSteamDealsPayload, fetchSteamSpecialDeals, getTaipeiDateTime, isValidSteamDealTime } from './steamDeals.js';
 
 let checkInterval = null;
 
@@ -54,13 +54,13 @@ async function postSteamDealsForGuild(client, row, today, db) {
     }
 
     const deals = await fetchSteamSpecialDeals(10);
-    const embeds = buildSteamDealsEmbeds(deals, {
+    const payload = buildSteamDealsPayload(deals, {
       title: '🐕👑 吉吉王國每日 Steam 特價聖旨',
       intro: `汪汪！今日的皇家採購清單送達。本王親自批准這 ${deals.length} 款熱門特價，子民們可以開始盤算荷包了！`,
       footer: `🐕 每日 ${row.steam_deal_time} 御前推播 | Steam 台灣區價格`,
     });
 
-    await channel.send({ embeds });
+    await channel.send(payload);
     db.prepare('UPDATE guild_settings SET steam_deal_last_post_date = ? WHERE guild_id = ?').run(today, row.guild_id);
     logger.info(`[SteamDealManager] 已推播 Steam 特價 guild=${row.guild_id}`);
   } catch (err) {
