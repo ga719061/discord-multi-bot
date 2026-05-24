@@ -1,17 +1,18 @@
 import {
     SlashCommandBuilder,
-    EmbedBuilder,
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
     ComponentType,
-    MessageFlags,
-    PermissionFlagsBits
+    ContainerBuilder,
+    PermissionFlagsBits,
+    SectionBuilder,
 } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { ansiBlock, COLORS } from '../../utils/style.js';
+import { ansiBlock, COLORS, UI_COLORS } from '../../utils/style.js';
+import { ephemeralV2Payload, v2Divider, v2Panel, v2Text } from '../../utils/componentsV2.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -168,11 +169,7 @@ export async function execute(interaction) {
     const homePayload = renderHome(context);
     context.currentComponents = homePayload.components;
 
-    await interaction.reply({
-        embeds: [homePayload.embed],
-        components: homePayload.components,
-        flags: MessageFlags.Ephemeral
-    });
+    await interaction.reply(ephemeralV2Payload(homePayload.components));
 
     const response = await interaction.fetchReply();
     const collector = response.createMessageComponentCollector({
@@ -182,33 +179,31 @@ export async function execute(interaction) {
 
     collector.on('collect', async (buttonInteraction) => {
         if (buttonInteraction.user.id !== context.userId) {
-            await buttonInteraction.reply({
-                content: '汪！這本指令大典是別人召喚出來的，請使用 `/幫助` 開啟你自己的版本。',
-                flags: MessageFlags.Ephemeral
-            });
+            await buttonInteraction.reply(renderNotice(
+                '🛡️ 這份大典不屬於你',
+                '汪！請使用 `/幫助` 開啟屬於你自己的互動選單。'
+            ));
             return;
         }
 
         const nextPayload = routeButton(buttonInteraction.customId, context);
         if (!nextPayload) {
-            await buttonInteraction.reply({
-                content: '這個按鈕已經失效，請重新使用 `/幫助`。',
-                flags: MessageFlags.Ephemeral
-            });
+            await buttonInteraction.reply(renderNotice(
+                '⌛ 按鈕已失效',
+                '請重新使用 `/幫助`，本王會替你翻開新的一本大典。'
+            ));
             return;
         }
 
         context.currentComponents = nextPayload.components;
         await buttonInteraction.update({
-            embeds: [nextPayload.embed],
             components: nextPayload.components
         });
     });
 
     collector.on('end', () => {
         interaction.editReply({
-            content: '這本指令大典已合上，請重新使用 `/幫助` 開啟新的互動選單。',
-            components: disableComponents(context.currentComponents)
+            components: closeHelpBook(context.currentComponents)
         }).catch(() => { });
     });
 }
@@ -330,45 +325,63 @@ function renderHome(context) {
     const commandCount = context.catalog.reduce((total, category) => total + category.commands.length, 0);
     const viewMode = adminCategories.length > 0 ? '管理模式' : '一般模式';
 
-    const embed = new EmbedBuilder()
-        .setColor(0xFFD700)
-        .setTitle('🐕👑 吉吉國王的指令大典')
-        .setDescription('汪！選一個分類，本王立刻翻到那一章給你看。')
-        .addFields({
-            name: '📊 目前視圖',
-            value: ansiBlock([
-                { color: adminCategories.length > 0 ? COLORS.GOLD : COLORS.CYAN, text: `[模式] ${viewMode}` },
-                { color: COLORS.WHITE, text: `[分類] ${context.catalog.length} 個可瀏覽分類` },
-                { color: COLORS.WHITE, text: `[指令] ${commandCount} 個可使用指令` },
-                { color: COLORS.GRAY, text: `[操作] 按分類按鈕可翻頁、查看詳情、返回首頁` }
-            ]),
-            inline: false
-        })
-        .setFooter({ text: '只有你能操作這份 /幫助 選單，5 分鐘後按鈕會自動停用。' });
+    const panel = v2Panel(UI_COLORS.ROYAL)
+        .addTextDisplayComponents(v2Text([
+            '# 🐕👑 吉吉國王的指令大典',
+            '汪！選一個分類，本王立刻翻到那一章給你看。',
+        ].join('\n')))
+        .addSeparatorComponents(v2Divider());
+
+    const statusText = [
+        '## 📊 目前視圖',
+        ansiBlock([
+            { color: adminCategories.length > 0 ? COLORS.GOLD : COLORS.CYAN, text: `[模式] ${viewMode}` },
+            { color: COLORS.WHITE, text: `[分類] ${context.catalog.length} 個可瀏覽分類` },
+            { color: COLORS.WHITE, text: `[指令] ${commandCount} 個可使用指令` },
+            { color: COLORS.GRAY, text: `[操作] 按分類按鈕可翻頁、查看詳情、返回首頁` }
+        ]),
+    ].join('\n');
+    const firstCategory = context.catalog[0];
+    if (firstCategory) {
+        panel.addSectionComponents(
+            new SectionBuilder()
+                .addTextDisplayComponents(v2Text(statusText))
+                .setButtonAccessory(
+                    new ButtonBuilder()
+                        .setCustomId(makeCustomId(context, 'cat', firstCategory.id, 0))
+                        .setLabel('開始瀏覽')
+                        .setEmoji('📖')
+                        .setStyle(ButtonStyle.Primary)
+                )
+        );
+    } else {
+        panel.addTextDisplayComponents(v2Text(statusText));
+    }
 
     if (publicCategories.length > 0) {
-        embed.addFields({
-            name: '📘 一般功能',
-            value: formatCategoryList(publicCategories),
-            inline: false
-        });
+        panel
+            .addSeparatorComponents(v2Divider())
+            .addTextDisplayComponents(v2Text(`## 📘 一般功能\n${formatCategoryList(publicCategories)}`));
     }
 
     if (adminCategories.length > 0) {
-        embed.addFields({
-            name: '🛡️ 管理工具',
-            value: [
+        panel
+            .addSeparatorComponents(v2Divider())
+            .addTextDisplayComponents(v2Text([
+                '## 🛡️ 管理工具',
                 formatCategoryList(adminCategories),
                 '',
-                '只顯示你目前具備權限的管理分類與指令。'
-            ].join('\n'),
-            inline: false
-        });
+                '-# 只顯示你目前具備權限的管理分類與指令。',
+            ].join('\n')));
     }
 
+    panel
+        .addSeparatorComponents(v2Divider())
+        .addTextDisplayComponents(v2Text('-# 只有你能操作這份 `/幫助` 選單，5 分鐘後按鈕會自動停用。'))
+        .addActionRowComponents(...buildCategoryRows(context));
+
     return {
-        embed,
-        components: buildCategoryRows(context)
+        components: [panel]
     };
 }
 
@@ -377,36 +390,39 @@ function renderCategory(context, category, page) {
     const safePage = clamp(page, 0, maxPage);
     const pageCommands = getPageCommands(category, safePage);
 
-    const embed = new EmbedBuilder()
-        .setColor(0xFFD700)
-        .setTitle(`${category.emoji} ${category.label}指令`)
-        .setDescription(category.description)
-        .addFields({
-            name: '📄 分類狀態',
-            value: ansiBlock([
+    const panel = v2Panel(UI_COLORS.ROYAL)
+        .addTextDisplayComponents(v2Text([
+            `# ${category.emoji} ${category.label}指令`,
+            category.description,
+        ].join('\n')))
+        .addSeparatorComponents(v2Divider())
+        .addTextDisplayComponents(v2Text([
+            '## 📄 分類狀態',
+            ansiBlock([
                 { color: COLORS.GOLD, text: `[分類] ${category.label}` },
                 { color: COLORS.CYAN, text: `[頁數] ${safePage + 1} / ${maxPage + 1}` },
                 { color: COLORS.WHITE, text: `[指令] ${category.commands.length} 個可使用指令` }
             ]),
-            inline: false
-        })
-        .setFooter({ text: '藍色 slash command 可直接點擊；按「詳情」可看本頁第一個指令。' });
+        ].join('\n')));
 
     for (const command of pageCommands) {
-        embed.addFields({
-            name: `${command.mention}｜${command.label}`,
-            value: [
+        panel
+            .addSeparatorComponents(v2Divider())
+            .addTextDisplayComponents(v2Text([
+                `### ${command.mention} | ${command.label}`,
                 command.description,
                 `用法：\`${command.usage}\``,
                 command.subcommands.length > 0 ? `子指令：${formatSubcommandMentions(command).join('、')}` : null
-            ].filter(Boolean).join('\n'),
-            inline: false
-        });
+            ].filter(Boolean).join('\n')));
     }
 
+    panel
+        .addSeparatorComponents(v2Divider())
+        .addTextDisplayComponents(v2Text('-# 藍色 slash command 可直接點擊；按「詳情」可看本頁第一個指令。'))
+        .addActionRowComponents(...buildCategoryNavigationRows(context, category, safePage, pageCommands));
+
     return {
-        embed,
-        components: buildCategoryNavigationRows(context, category, safePage, pageCommands)
+        components: [panel]
     };
 }
 
@@ -419,59 +435,61 @@ function renderDetail(context, category, page, commandIndex) {
 
     if (!command) return renderCategory(context, category, safePage);
 
-    const embed = new EmbedBuilder()
-        .setColor(0xFFD700)
-        .setTitle(`${category.emoji} ${command.label}`)
-        .setDescription(command.description)
-        .addFields({
-            name: '📌 指令資訊',
-            value: ansiBlock([
+    const panel = v2Panel(UI_COLORS.ROYAL)
+        .addTextDisplayComponents(v2Text([
+            `# ${category.emoji} ${command.label}`,
+            command.description,
+        ].join('\n')))
+        .addSeparatorComponents(v2Divider())
+        .addTextDisplayComponents(v2Text([
+            '## 📌 指令資訊',
+            ansiBlock([
                 { color: COLORS.GOLD, text: `[指令] ${command.name}` },
                 { color: COLORS.CYAN, text: `[分類] ${category.label}` },
                 { color: COLORS.WHITE, text: `[權限] ${formatPermission(command.permission)}` },
                 { color: COLORS.WHITE, text: `[用法] ${command.usage}` }
             ]),
-            inline: false
-        })
-        .setFooter({ text: `${category.label}分類，第 ${safePage + 1} 頁中的第 ${safeCommandIndex + 1} 個指令。` });
-
-    embed.addFields({
-        name: '🔗 快速使用',
-        value: [
+        ].join('\n')))
+        .addSeparatorComponents(v2Divider())
+        .addTextDisplayComponents(v2Text([
+            '## 🔗 快速使用',
             command.mention,
             command.subcommands.length > 0 ? `子指令：${formatSubcommandMentions(command).join('、')}` : null
-        ].filter(Boolean).join('\n'),
-        inline: false
-    });
+        ].filter(Boolean).join('\n')));
 
     const parameterLines = formatOptions(command.options);
-    embed.addFields({
-        name: '🧾 參數',
-        value: parameterLines.length > 0 ? parameterLines.join('\n') : '這個指令不需要額外參數。',
-        inline: false
-    });
+    panel
+        .addSeparatorComponents(v2Divider())
+        .addTextDisplayComponents(v2Text([
+            '## 🧾 參數',
+            parameterLines.length > 0 ? parameterLines.join('\n') : '這個指令不需要額外參數。',
+        ].join('\n')));
 
     if (command.subcommands.length > 0) {
-        embed.addFields({
-            name: '🧩 子指令',
-            value: command.subcommands.map((subcommand) => {
+        panel
+            .addSeparatorComponents(v2Divider())
+            .addTextDisplayComponents(v2Text([
+                '## 🧩 子指令',
+                command.subcommands.map((subcommand) => {
                 const usage = buildUsage(command.name, subcommand.options ?? [], subcommand.name);
                 const mention = buildMention(command.name, command.appCommandId, subcommand.name);
                 return `${mention}\n${getDescription(subcommand)}\n用法：\`${usage}\``;
-            }).join('\n\n'),
-            inline: false
-        });
+                }).join('\n\n'),
+            ].join('\n')));
     }
 
-    embed.addFields({
-        name: '💡 範例',
-        value: command.examples.map((example) => `\`${example}\``).join('\n'),
-        inline: false
-    });
+    panel
+        .addSeparatorComponents(v2Divider())
+        .addTextDisplayComponents(v2Text([
+            '## 💡 範例',
+            command.examples.map((example) => `\`${example}\``).join('\n'),
+            '',
+            `-# ${category.label}分類，第 ${safePage + 1} 頁中的第 ${safeCommandIndex + 1} 個指令。`,
+        ].join('\n')))
+        .addActionRowComponents(...buildDetailRows(context, category, safePage, pageCommands, safeCommandIndex));
 
     return {
-        embed,
-        components: buildDetailRows(context, category, safePage, pageCommands, safeCommandIndex)
+        components: [panel]
     };
 }
 
@@ -487,7 +505,7 @@ function buildCategoryRows(context) {
             .setCustomId(makeCustomId(context, 'cat', category.id, 0))
             .setLabel(category.label)
             .setEmoji(category.emoji)
-            .setStyle(category.group === 'admin' ? ButtonStyle.Danger : ButtonStyle.Primary)
+            .setStyle(category.group === 'admin' ? ButtonStyle.Secondary : ButtonStyle.Primary)
     );
 
     return chunk(buttons, 5).map((buttonChunk) =>
@@ -558,14 +576,34 @@ function buildDetailRows(context, category, page, pageCommands, activeIndex) {
     return rows;
 }
 
-function disableComponents(rows) {
-    return rows.map((row) => {
-        const disabledRow = new ActionRowBuilder();
-        disabledRow.addComponents(
-            row.components.map((component) => ButtonBuilder.from(component).setDisabled(true))
-        );
-        return disabledRow;
-    });
+function disableComponents(components) {
+    for (const component of components) {
+        if (!(component instanceof ContainerBuilder)) continue;
+        for (const child of component.components) {
+            if (child instanceof ActionRowBuilder) {
+                child.components.forEach((button) => button.setDisabled(true));
+            }
+            if (child instanceof SectionBuilder && child.accessory instanceof ButtonBuilder) {
+                child.accessory.setDisabled(true);
+            }
+        }
+    }
+    return components;
+}
+
+function closeHelpBook(components) {
+    const disabledComponents = disableComponents(components);
+    const panel = disabledComponents.find((component) => component instanceof ContainerBuilder);
+    panel?.addSeparatorComponents(v2Divider())
+        .addTextDisplayComponents(v2Text('## ⌛ 大典已合上\n請重新使用 `/幫助` 開啟新的互動選單。'));
+    return disabledComponents;
+}
+
+function renderNotice(title, message) {
+    return ephemeralV2Payload([
+        v2Panel(UI_COLORS.WARNING)
+            .addTextDisplayComponents(v2Text(`## ${title}\n${message}`))
+    ]);
 }
 
 function makeCustomId(context, view, category = 'home', page = 0, commandIndex = 0) {
@@ -649,3 +687,11 @@ function clamp(value, min, max) {
 function titleCase(value) {
     return value.charAt(0).toUpperCase() + value.slice(1);
 }
+
+export const helpViewTesting = {
+    renderHome,
+    renderCategory,
+    renderDetail,
+    disableComponents,
+    closeHelpBook,
+};

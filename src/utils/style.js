@@ -29,6 +29,17 @@ export const COLORS = {
     BG_SEA: '44',
 };
 
+// Discord card accents, kept semantic so V2 panels do not scatter raw colors.
+export const UI_COLORS = {
+    ROYAL: 0xD6A33D,
+    INFO: 0x3498DB,
+    SUCCESS: 0x2ECC71,
+    WARNING: 0xF1C40F,
+    DANGER: 0xE74C3C,
+    SPECIAL: 0x9B59B6,
+    MUTED: 0x95A5A6,
+};
+
 // 戰鬥傷害類型顏色對應
 export const DAMAGE_COLORS = {
     physical: COLORS.RED,
