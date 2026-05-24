@@ -45,7 +45,10 @@ export function ephemeralV2Payload(components, options = {}) {
 
 export function v2EditPayload(payload) {
     const { flags, ...editable } = payload;
-    return editable;
+    return {
+        ...editable,
+        flags: MessageFlags.IsComponentsV2,
+    };
 }
 
 export function v2Notice(title, message, accentColor = UI_COLORS.INFO, options = {}) {

@@ -24,7 +24,7 @@ test('V2 payloads set flags, default to safe mentions, and reject duplicate ids'
     assert.deepEqual(payload.allowedMentions, { parse: [] });
     assert.equal('embeds' in payload, false);
     assert.equal('content' in payload, false);
-    assert.equal('flags' in v2EditPayload(payload), false);
+    assert.equal(v2EditPayload(payload).flags, MessageFlags.IsComponentsV2);
 
     const duplicateRow = new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('same').setLabel('一').setStyle(ButtonStyle.Secondary),

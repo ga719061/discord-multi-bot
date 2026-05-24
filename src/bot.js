@@ -218,7 +218,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         });
         const previewButtons = buildAnnouncementPreviewButtons(uuid);
         const preview = buildAnnouncementPayload(data, { preview: true, actionRows: [previewButtons] });
-        await interaction.editReply({ components: preview.components, allowedMentions: preview.allowedMentions });
+        await interaction.editReply(v2EditPayload(preview));
       }
     } catch (error) {
       logger.error('彈窗提交失敗:', error);
