@@ -2,6 +2,7 @@ import { EmbedBuilder, AuditLogEvent } from 'discord.js';
 import { sendLog, getAuditLogExecutor } from '../../utils/logUtils.js';
 import { fmt, COLORS } from '../../utils/style.js';
 import { inviteCache } from '../../bot.js';
+import { logger } from '../../utils/logger.js';
 
 export function register(client) {
     // 成員加入 (System Log)
@@ -23,7 +24,7 @@ export function register(client) {
                 cachedInvites.set(usedInvite.code, usedInvite.uses);
             }
         } catch (e) {
-            console.error('[InviteLog] 抓取失敗:', e);
+            logger.warn(`[InviteLog] 抓取失敗 guild=${member.guild.id}: ${e.message}`);
         }
 
         const embed = new EmbedBuilder()

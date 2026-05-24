@@ -92,7 +92,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const settings = getGuildSettings(interaction.guildId);
         let extra = '';
         if (!settings.log_channel) {
-          extra = '\n\n> ⚠️ **提醒：** 您尚未設定日誌頻道！請使用 `/setup-log 頻道:#您的頻道` 來安置史官。';
+          extra = '\n\n> ⚠️ **提醒：** 您尚未設定日誌頻道！請使用 `/設定紀錄 頻道:#您的頻道` 來安置史官。';
         }
 
         await interaction.reply({
@@ -159,7 +159,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
         const { pendingAnnouncements } = await import('./commands/admin/announce.js');
         const data = pendingAnnouncements.get(uuid);
-        if (!data) return interaction.editReply({ content: '公告草稿已過期，請重新執行 `/announce`。' });
+        if (!data) return interaction.editReply({ content: '公告草稿已過期，請重新執行 `/發布公告`。' });
 
         const title = interaction.fields.getTextInputValue('announce_title');
         const content = interaction.fields.getTextInputValue('announce_content');

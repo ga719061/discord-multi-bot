@@ -6,7 +6,7 @@ services:
     restart: unless-stopped
     network_mode: host
     env_file:
-      - BOT.env
+      - .env
     environment:
       - NODE_OPTIONS=--dns-result-order=ipv4first
     volumes:

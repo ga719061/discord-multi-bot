@@ -1,6 +1,8 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { getGuildSettings, getReactionRolesByGuild, getAiSettings } from '../../utils/database.js';
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
+import { DEFAULT_AI_MODEL } from '../../utils/aiConfig.js';
+import { buildGuildDiagnostics } from '../../utils/guildDiagnostics.js';
 
 export const data = new SlashCommandBuilder()
     .setName('伺服器資訊')
@@ -15,8 +17,28 @@ export async function execute(interaction) {
     const aiSettings = getAiSettings(guild.id);
     const reactionRoles = getReactionRolesByGuild(guild.id);
 
-    // Get unique channels for reaction roles
     const rewardChannels = [...new Set(reactionRoles.map(r => r.channel_id))];
+    const configuredChannelIds = new Set([
+        settings.welcome_channel,
+        settings.log_channel,
+        settings.steam_deal_channel,
+        ...rewardChannels,
+    ].filter(Boolean));
+    const availableChannelIds = new Set();
+    await Promise.all([...configuredChannelIds].map(async (channelId) => {
+        const channel = await guild.channels.fetch(channelId).catch(() => null);
+        if (channel) availableChannelIds.add(channelId);
+    }));
+
+    const diagnostics = buildGuildDiagnostics({
+        settings,
+        aiSettings: { ...aiSettings, model: aiSettings.model || DEFAULT_AI_MODEL },
+        reactionRoles,
+        availableChannelIds,
+        hasGoogleAiKey: !!process.env.GOOGLE_AI_KEY,
+        hasAiAdminPassword: !!process.env.AI_ADMIN_PASSWORD,
+    });
+    const repairTips = diagnostics.filter(item => item.fix);
 
     // Channel Counts
     const textChannels = guild.channels.cache.filter(c => c.type === 0).size; // GuildText
@@ -52,8 +74,8 @@ export async function execute(interaction) {
 
             {
                 name: '🧠 AI 核心意識', value: [
-                    `🔋 **主機狀態**: ${getToggle(aiSettings.enabled)}`,
-                    `🤖 **當前機型**: \`${aiSettings.model || 'Gemini 1.5 Pro'}\``,
+                    `🎉 **派對狀態**: ${getToggle(aiSettings.party_channel_id && aiSettings.party_expires_at > Date.now())}`,
+                    `🤖 **當前機型**: \`${aiSettings.model || DEFAULT_AI_MODEL}\``,
                     `🔎 **聯網檢索**: ${getToggle(aiSettings.search_enabled)}`
                 ].join('\n'), inline: true
             },
@@ -61,15 +83,24 @@ export async function execute(interaction) {
             { name: '🛡️ 安全級別', value: `\`\`\`ansi\n${fmt(COLORS.CYAN, '驗證層級:')} ${verificationLevels[guild.verificationLevel]}\n${fmt(COLORS.CYAN, '內容過濾:')} ${explicitContentFilters[guild.explicitContentFilter]}\n\`\`\``, inline: false },
 
             {
-                name: '🏛️ 系統設定整合', value: [
-                    `📈 **升遷公告**: ${getToggle(settings.level_up_announcement_enabled !== 0)}`,
-                    `👋 **新民接待室**: ${settings.welcome_channel ? `<#${settings.welcome_channel}>` : '`尚未設定`'}`,
-                    `📝 **史官日誌筆記**: ${settings.log_channel ? `<#${settings.log_channel}>` : '`尚未設定`'}`,
-                    `🏷️ **角色領取站**: ${rewardChannels.length > 0 ? rewardChannels.map(id => `<#${id}>`).join(', ') : '`尚未設定`'}`
-                ].join('\n'), inline: false
+                name: '🏛️ 功能設定健康檢查',
+                value: diagnostics.map(formatDiagnostic).join('\n'),
+                inline: false
+            },
+            {
+                name: '🛠️ 建議修正',
+                value: repairTips.length > 0
+                    ? repairTips.map(item => `**${item.label}**：${item.fix}`).join('\n')
+                    : '目前沒有需要處理的設定項目。',
+                inline: false
             }
         )
         .setFooter({ text: '🐕👑 本王對自己的領地非常驕傲！汪！' });
 
     await interaction.reply({ embeds: [embed], flags: ['Ephemeral'] });
+}
+
+function formatDiagnostic(item) {
+    const statusIcons = { '正常': '✅', '未設定': '⚪', '設定異常': '⚠️' };
+    return `${statusIcons[item.status] || '•'} **${item.label}** [${item.status}] ${item.detail}`;
 }

@@ -28,7 +28,10 @@ async function checkSteamDeals(client) {
     `).all();
 
     for (const row of settings) {
-      if (!isValidSteamDealTime(row.steam_deal_time)) continue;
+      if (!isValidSteamDealTime(row.steam_deal_time)) {
+        logger.warn(`[SteamDealManager] 推播時間無效 guild=${row.guild_id} time=${row.steam_deal_time}`);
+        continue;
+      }
       if (row.steam_deal_last_post_date === now.date) continue;
       if (now.time < row.steam_deal_time) continue;
 
@@ -61,6 +64,6 @@ async function postSteamDealsForGuild(client, row, today, db) {
     db.prepare('UPDATE guild_settings SET steam_deal_last_post_date = ? WHERE guild_id = ?').run(today, row.guild_id);
     logger.info(`[SteamDealManager] 已推播 Steam 特價 guild=${row.guild_id}`);
   } catch (err) {
-    logger.error(`[SteamDealManager] 推播 Steam 特價失敗 guild=${row.guild_id}:`, err);
+    logger.error(`[SteamDealManager] 推播失敗 guild=${row.guild_id} code=${err.code || 'unavailable'}:`, err);
   }
 }

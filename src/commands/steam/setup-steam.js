@@ -1,6 +1,7 @@
 import { ChannelType, EmbedBuilder, PermissionFlagsBits, SlashCommandBuilder } from 'discord.js';
 import { getGuildSettings, updateGuildSetting } from '../../utils/database.js';
-import { buildSteamDealsEmbeds, fetchSteamSpecialDeals, isValidSteamDealTime } from '../../utils/steamDeals.js';
+import { buildSteamDealsEmbeds, fetchSteamSpecialDeals, getSteamFailureMessage, isValidSteamDealTime } from '../../utils/steamDeals.js';
+import { logger } from '../../utils/logger.js';
 
 export const data = new SlashCommandBuilder()
   .setName('設定特價推播')
@@ -135,7 +136,7 @@ async function handleDealList(interaction) {
     await channel.send({ embeds });
     await interaction.editReply(`Steam 特價榜單已送出到 ${channel}。`);
   } catch (err) {
-    console.error('Steam Deal List Error:', err);
-    await interaction.editReply('讀取 Steam 熱門特價失敗，請稍後再試。');
+    logger.warn(`[SteamDeals] 手動投放失敗 guild=${interaction.guildId} code=${err.code || 'unavailable'}: ${err.message}`);
+    await interaction.editReply(getSteamFailureMessage(err));
   }
 }

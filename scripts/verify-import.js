@@ -1,20 +1,34 @@
-import { pathToFileURL } from 'url';
 import path from 'path';
+import { pathToFileURL } from 'url';
+import { buildCommandManifest, listCommandFiles, validateCommandManifest } from './command-manifest.js';
 
-const commandPath = path.resolve('src/commands/roles/reactionrole.js');
-const commandUrl = pathToFileURL(commandPath).href;
+const commandsDir = path.resolve('src', 'commands');
+const commandFiles = listCommandFiles(commandsDir);
 
-console.log(`Attempting to import: ${commandUrl}`);
+let failures = 0;
 
-try {
-    const command = await import(commandUrl);
-    console.log('Import successful!');
-    console.log('Has data?', !!command.data);
-    console.log('Has execute?', !!command.execute);
+for (const commandPath of commandFiles) {
+    try {
+        const command = await import(pathToFileURL(commandPath).href);
+        if (!command.data || !command.execute) {
+            throw new Error('缺少 data 或 execute export');
+        }
+    } catch (error) {
+        failures += 1;
+        console.error(`指令載入失敗: ${path.relative(commandsDir, commandPath)} - ${error.message}`);
+    }
+}
 
-    // Check database exports if possible, but reactionrole.js already imports them.
-    // If imports inside reactionrole.js failed, this import would throw.
-
-} catch (error) {
-    console.error('Import failed:', error);
+if (failures > 0) {
+    process.exitCode = 1;
+} else {
+    try {
+        const manifest = await buildCommandManifest(commandsDir);
+        const names = validateCommandManifest(manifest);
+        console.log(`指令載入驗證完成：${commandFiles.length} 個模組、${manifest.length} 個註冊入口可正常載入。`);
+        console.log(`允許註冊的入口：${names.map((name) => `/${name}`).join(', ')}`);
+    } catch (error) {
+        console.error(`指令清單驗證失敗: ${error.message}`);
+        process.exitCode = 1;
+    }
 }

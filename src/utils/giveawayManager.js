@@ -18,6 +18,7 @@ export function initGiveawayManager(discordClient) {
 
 function startPolling() {
     if (checkInterval) clearInterval(checkInterval);
+    checkGiveaways();
     // 每 30 秒巡邏一次
     checkInterval = setInterval(() => checkGiveaways(), 30_000);
 }

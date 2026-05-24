@@ -14,6 +14,8 @@ export function initReminderManager(client) {
 
     logger.info('⏰ 提醒管理器已啟動');
 
+    checkReminders(client);
+
     // 每 30 秒檢查一次
     checkInterval = setInterval(() => {
         checkReminders(client);

@@ -1,5 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
+import { fetchSteamJson, getSteamFailureMessage } from '../../utils/steamDeals.js';
+import { logger } from '../../utils/logger.js';
 
 export const data = new SlashCommandBuilder()
     .setName('特價查詢')
@@ -27,8 +29,7 @@ export async function execute(interaction) {
 async function handleSearch(interaction, query) {
     try {
         const searchUrl = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(query)}&l=tchinese&cc=tw`;
-        const searchRes = await fetch(searchUrl);
-        const searchData = await searchRes.json();
+        const searchData = await fetchSteamJson(searchUrl);
 
         if (!searchData.items || searchData.items.length === 0) {
             return interaction.editReply('🐕❓ 汪？本王聞不到這個遊戲的味道... 你確定名字沒打錯嗎？');
@@ -38,11 +39,10 @@ async function handleSearch(interaction, query) {
         const appId = game.id;
 
         const detailUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}&cc=tw&l=tchinese`;
-        const detailRes = await fetch(detailUrl);
-        const detailData = await detailRes.json();
+        const detailData = await fetchSteamJson(detailUrl);
 
         if (!detailData[appId] || !detailData[appId].success) {
-            return interaction.editReply('🐕💔 汪... Steam 好像壞掉了，本王讀不到資料！');
+            return interaction.editReply('🐕📜 汪... Steam 找到了遊戲，但暫時沒有可顯示的詳細資料。');
         }
 
         const details = detailData[appId].data;
@@ -90,7 +90,7 @@ async function handleSearch(interaction, query) {
         await interaction.editReply({ embeds: [embed] });
 
     } catch (error) {
-        console.error('Steam Search Error:', error);
-        await interaction.editReply('🐕💥 汪！搜尋時發生錯誤，本王頭好痛...');
+        logger.warn(`[SteamSearch] 查詢失敗 guild=${interaction.guildId} code=${error.code || 'unavailable'}: ${error.message}`);
+        await interaction.editReply(getSteamFailureMessage(error));
     }
 }

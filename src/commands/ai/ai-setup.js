@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { getAiSettings, updateAiSetting } from '../../utils/database.js';
 import { DEFAULT_AI_PROMPT } from '../../utils/aiChat.js';
+import { DEFAULT_AI_MODEL } from '../../utils/aiConfig.js';
 import { fmt, COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
@@ -80,8 +81,8 @@ export const data = new SlashCommandBuilder()
     )
     .addSubcommand(sub =>
         sub.setName('派對模式')
-            .setDescription('🎉 解放全國：開放全頻道限時免點名的聊天派對')
-            .setDescriptionLocalizations({ 'zh-TW': '🎉 解放全國：開放全頻道限時免點名的聊天派對' })
+            .setDescription('🎉 解放全國：限時開放指定頻道讓所有人可 @國王 聊天')
+            .setDescriptionLocalizations({ 'zh-TW': '🎉 解放全國：限時開放指定頻道讓所有人可 @國王 聊天' })
             .addChannelOption(opt =>
                 opt.setName('目標頻道')
                     .setDescription('要開放的頻道')
@@ -254,7 +255,7 @@ export async function execute(interaction) {
         const whitelistText = settings.whitelist.length > 0
             ? settings.whitelist.map(id => `<@${id}>`).join(', ')
             : '（空空如也，沒人被王受寵）';
-        const currentModel = settings.model || 'gemini-2.5-flash-lite'; // Default fallback
+        const currentModel = settings.model || DEFAULT_AI_MODEL;
         const searchStatus = settings.search_enabled ? '✅ 已開啟 (可查最新時事)' : '❌ 已關閉 (無法聯網)';
         const contextStatus = settings.context_enabled !== false ? '✅ 已開啟 (回覆連貫)' : '❌ 已關閉 (不看前文)';
 

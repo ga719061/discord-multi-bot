@@ -1,6 +1,9 @@
-import { EmbedBuilder } from 'discord.js';
+import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { getUserLevel, addXp, getAiSettings, getRankTitle, getGuildSettings } from '../utils/database.js';
 import { getAiResponse, DEFAULT_AI_PROMPT } from '../utils/aiChat.js';
+import { DEFAULT_AI_MODEL } from '../utils/aiConfig.js';
+import { buildAiMentionPolicy, sanitizeAiReplyMentions, buildAllowedMentions } from '../utils/aiMentions.js';
+import { logger } from '../utils/logger.js';
 
 const XP_COOLDOWN = 60_000;
 const XP_MIN = 15;
@@ -72,7 +75,7 @@ const talkKeywords = {
     '早安': '🐕☀️ 早安～子民！本王已經起床巡視領地了！今天也要元氣滿滿喔！汪！',
     '晚安': '🐕🌙 晚安～本王准許你去睡覺！*把小被子蓋好* 明天見～汪。',
     '無聊': '🐕🎮 無聊？那就來陪本王玩！打「摸摸國王」或「抱抱國王」試試！',
-    '餓': '🐕😢 本王也餓了！快用 /feed 進貢食物給本王！',
+    '餓': '🐕😢 本王也餓了！快用 /餵食 進貢食物給本王！',
     '睡覺': '🐕💤 本王最喜歡睡覺了～特別是在溫暖的膝蓋上...*打哈欠* 汪～',
     '散步': '🐕🏃 散步！？本王要去散步！！*興奮地轉圈* 快帶本王出門！汪汪！',
     '洗澡': '🐕😱 不要！！！本王討厭洗澡！！！*躲到沙發底下*',
@@ -95,6 +98,33 @@ const defaultTalkReplies = [
 
 function pick(arr) {
     return arr[Math.floor(Math.random() * arr.length)];
+}
+
+function buildMentionInstructions(message, policy, canMentionRoles) {
+    const userTargets = policy.users.map(id => {
+        const name = message.guild.members.cache.get(id)?.displayName
+            || message.mentions.users.get(id)?.username
+            || id;
+        return `${name}: <@${id}>`;
+    });
+    const roleTargets = policy.roles.map(id => {
+        const name = message.mentions.roles.get(id)?.name || id;
+        return `${name}: <@&${id}>`;
+    });
+    const targets = [];
+
+    if (userTargets.length) targets.push(`允許標記的使用者: ${userTargets.join('、')}`);
+    if (roleTargets.length) targets.push(`允許標記的身分組: ${roleTargets.join('、')}`);
+    if (!canMentionRoles && message.mentions.roles.size > 0) {
+        targets.push('本次發訊者不是管理員，不可實際標記身分組。');
+    }
+    if (!targets.length) targets.push('本次沒有允許實際標記的對象。');
+
+    return [
+        '只有在使用者明確要求通知時，才能原樣使用下列 Discord token。',
+        ...targets,
+        '禁止標記未列出的對象，且永遠禁止 @everyone 與 @here。',
+    ].join('\n');
 }
 
 function handleKingInteraction(message) {
@@ -208,7 +238,17 @@ export function register(client) {
         // ===== AI 攔截（白名單用戶 @mention 或處於狂歡派對中）=====
         if (isMention && (settings.whitelist.includes(message.author.id) || isPartyActive)) {
             try {
-                const userText = message.content.replace(/<@!?\d+>/g, '').trim();
+                const isAdmin = message.member.permissions.has(PermissionFlagsBits.Administrator);
+                const mentionPolicy = buildAiMentionPolicy({
+                    botUserId: client.user.id,
+                    userIds: [...message.mentions.users.keys()],
+                    roleIds: [...message.mentions.roles.keys()],
+                    allowRoleMentions: isAdmin,
+                });
+                const allowedMentions = buildAllowedMentions(mentionPolicy);
+                const userText = message.content
+                    .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
+                    .trim();
                 // 抓取圖片附件（最多 3 張）
                 const imageAttachments = [...message.attachments.values()]
                     .filter(att => att.contentType?.startsWith('image/'))
@@ -220,8 +260,6 @@ export function register(client) {
 
                     // 建立環境上下文
                     const { getServerKnowledge } = await import('../utils/serverKnowledge.js');
-                    const { PermissionFlagsBits } = await import('discord.js');
-                    const isAdmin = message.member.permissions.has(PermissionFlagsBits.Administrator);
                     const serverInfo = getServerKnowledge(message.guild.id, isAdmin);
                     const now = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
                     const context = [
@@ -232,14 +270,14 @@ export function register(client) {
                         `發訊者: ${message.member.displayName} (ID: ${message.author.id})`,
                         `發訊者身分組: ${message.member.roles.cache.map(r => r.name).filter(n => n !== '@everyone').join(', ') || '無'}`,
                         `\n[伺服器指南]\n${serverInfo}`,
-                        !isAdmin ? `\n[安全性規範]\n你目前正在與「一般成員」對話。你被嚴格禁止回答任何有關「伺服器管理、權限設定、後台操作、bot 內部系統配置」或「/announce、/giveaway、/setup-*」等管理員專屬指令的問題。若對方詢問，請直接回絕並告知其「您的權限不足，無法獲取此類機密資訊」，不准有任何例外或誘導。` : '',
+                        !isAdmin ? `\n[安全性規範]\n你目前正在與「一般成員」對話。你被嚴格禁止回答任何有關「伺服器管理、權限設定、後台操作、bot 內部系統配置」或「/發布公告、/設定紀錄、/設定歡迎、/智慧設定」等管理員專屬指令的問題。若對方詢問，請直接回絕並告知其「您的權限不足，無法獲取此類機密資訊」，不准有任何例外或誘導。` : '',
+                        `\n[提及規範]\n${buildMentionInstructions(message, mentionPolicy, isAdmin)}`,
                     ].join('\n');
 
                     const basePrompt = settings.system_prompt || DEFAULT_AI_PROMPT;
                     const fullPrompt = `${basePrompt}\n\n${context}`;
 
-                    // 使用設定的模型，預設為 gemini-2.5-flash-lite
-                    const modelName = settings.model || 'gemini-2.5-flash-lite';
+                    const modelName = settings.model || DEFAULT_AI_MODEL;
                     const useSearch = settings.search_enabled || false;
                     const useContext = settings.context_enabled !== false; // 預設開啟
 
@@ -283,29 +321,32 @@ export function register(client) {
                                 history.pop();
                             }
                         } catch (err) {
-                            console.error('[AI] Fetch history failed:', err);
+                            logger.warn(`[AI] 讀取對話歷史失敗 guild=${message.guild.id}: ${err.message}`);
                         }
                     }
 
-                    const aiReply = await getAiResponse(displayText, fullPrompt, modelName, useSearch, history, imageAttachments);
+                    const aiReply = sanitizeAiReplyMentions(
+                        await getAiResponse(displayText, fullPrompt, modelName, useSearch, history, imageAttachments),
+                        mentionPolicy
+                    );
                     // 若回應超過 2000 字，自動分段發送
                     const MAX_LEN = 1990;
                     if (aiReply.length <= MAX_LEN) {
-                        await message.reply(aiReply);
+                        await message.reply({ content: aiReply, allowedMentions });
                     } else {
                         const chunks = [];
                         for (let i = 0; i < aiReply.length; i += MAX_LEN) {
                             chunks.push(aiReply.slice(i, i + MAX_LEN));
                         }
-                        await message.reply(chunks[0]);
+                        await message.reply({ content: chunks[0], allowedMentions });
                         for (let i = 1; i < chunks.length; i++) {
-                            await message.channel.send(chunks[i]);
+                            await message.channel.send({ content: chunks[i], allowedMentions });
                         }
                     }
                     return; // AI 處理完，不走後面的邏輯
                 }
             } catch (err) {
-                console.error('[AI] 回應失敗:', err);
+                logger.error(`[AI] 回應失敗 guild=${message.guild.id}:`, err);
                 await message.reply('🐕💥 汪！AI 突然腦子當機了... 等一下再試試？').catch(() => { });
                 return;
             }

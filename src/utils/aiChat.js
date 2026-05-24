@@ -1,4 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import { DEFAULT_AI_MODEL } from './aiConfig.js';
+import { logger } from './logger.js';
 
 let genAI = null;
 
@@ -28,7 +30,7 @@ function getGeminiClient() {
  * @param {number} retryCount - 重試次數 (預設 2)
  * @returns {Promise<string>} AI 回應文字
  */
-export async function getAiResponse(userMessage, systemPrompt, modelName = 'gemini-2.0-flash', useSearch = false, history = null, imageAttachments = [], retryCount = 2) {
+export async function getAiResponse(userMessage, systemPrompt, modelName = DEFAULT_AI_MODEL, useSearch = false, history = null, imageAttachments = [], retryCount = 2) {
     // Google Gemini 模型 (預設)
     const client = getGeminiClient();
 
@@ -59,7 +61,7 @@ export async function getAiResponse(userMessage, systemPrompt, modelName = 'gemi
                 }
             });
         } catch (err) {
-            console.error('[AI] 圖片下載失敗:', err.message);
+            logger.warn(`[AI] 圖片下載失敗: ${err.message}`);
         }
     }
 
@@ -85,7 +87,7 @@ export async function getAiResponse(userMessage, systemPrompt, modelName = 'gemi
 
             if (isRetryable && currentRetry > 0) {
                 const delay = (3 - currentRetry) * 2000; // 指數退避延遲 2s, 4s
-                console.warn(`[AI] Google API 忙碌或暫時不可用 (${err.status || '503'})，${delay}ms 後進行重試... (剩餘次數: ${currentRetry})`);
+                logger.warn(`[AI] Google API 暫時不可用 (${err.status || 'retryable'})，${delay}ms 後重試 (剩餘: ${currentRetry})`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 return performRequest(currentRetry - 1);
             }

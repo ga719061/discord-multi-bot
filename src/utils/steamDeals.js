@@ -4,6 +4,48 @@ import { ansiBlock, COLORS, fmt } from './style.js';
 const STEAM_FEATURED_URL = 'https://store.steampowered.com/api/featuredcategories?l=tchinese&cc=tw';
 const STEAM_SEARCH_SPECIALS_URL = 'https://store.steampowered.com/search/results/?query&start=0&count=50&dynamic_data=&sort_by=_ASC&specials=1&cc=tw&l=tchinese&infinite=1';
 const TAIPEI_TIME_ZONE = 'Asia/Taipei';
+const REQUEST_TIMEOUT_MS = 10_000;
+
+export class SteamServiceError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = 'SteamServiceError';
+    this.code = code;
+  }
+}
+
+export async function fetchSteamJson(url, fetchImpl = fetch) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetchImpl(url, { signal: controller.signal });
+    if (!response.ok) {
+      throw new SteamServiceError('unavailable', `Steam returned HTTP ${response.status}`);
+    }
+
+    try {
+      return await response.json();
+    } catch {
+      throw new SteamServiceError('invalid_data', 'Steam returned invalid JSON');
+    }
+  } catch (error) {
+    if (error instanceof SteamServiceError) throw error;
+    if (error?.name === 'AbortError') {
+      throw new SteamServiceError('unavailable', 'Steam request timed out');
+    }
+    throw new SteamServiceError('unavailable', error?.message || 'Steam request failed');
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export function getSteamFailureMessage(error) {
+  if (error?.code === 'invalid_data') {
+    return '🐕📜 汪... Steam 傳來的資料格式不完整，本王暫時讀不懂，請稍後再試。';
+  }
+  return '🐕💥 汪！Steam 目前無法連線或回應過慢，請稍後再試。';
+}
 
 export function isValidSteamDealTime(time) {
   return /^([01]\d|2[0-3]):[0-5]\d$/.test(time);
@@ -28,15 +70,10 @@ export function getTaipeiDateTime(date = new Date()) {
 }
 
 export async function fetchSteamSpecialDeals(limit = 10) {
-  const res = await fetch(STEAM_FEATURED_URL);
-  if (!res.ok) {
-    throw new Error(`Steam API returned ${res.status}`);
-  }
-
-  const data = await res.json();
+  const data = await fetchSteamJson(STEAM_FEATURED_URL);
   const items = data?.specials?.items;
   if (!Array.isArray(items) || items.length === 0) {
-    throw new Error('Steam API returned no special deals');
+    throw new SteamServiceError('invalid_data', 'Steam returned no special deals');
   }
 
   const unique = uniqueSteamDeals(items, limit);
@@ -113,12 +150,7 @@ function uniqueSteamDeals(items, limit) {
 }
 
 async function fetchSteamSearchSpecialDeals() {
-  const res = await fetch(STEAM_SEARCH_SPECIALS_URL);
-  if (!res.ok) {
-    throw new Error(`Steam search returned ${res.status}`);
-  }
-
-  const data = await res.json();
+  const data = await fetchSteamJson(STEAM_SEARCH_SPECIALS_URL);
   return parseSteamSearchDeals(data?.results_html || '');
 }
 
@@ -166,10 +198,7 @@ async function hydrateSteamDealImages(deals) {
 }
 
 async function fetchSteamAppDetails(appId) {
-  const res = await fetch(`https://store.steampowered.com/api/appdetails?appids=${appId}&cc=tw&l=tchinese`);
-  if (!res.ok) return null;
-
-  const data = await res.json();
+  const data = await fetchSteamJson(`https://store.steampowered.com/api/appdetails?appids=${appId}&cc=tw&l=tchinese`);
   return data?.[appId]?.success ? data[appId].data : null;
 }
 

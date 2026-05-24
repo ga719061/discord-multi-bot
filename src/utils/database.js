@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
 import { parseJsonArray } from './jsonUtils.js';
+import { DEFAULT_AI_MODEL } from './aiConfig.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
@@ -79,7 +80,7 @@ export function initDatabase() {
       expires_at INTEGER DEFAULT NULL,
       system_prompt TEXT DEFAULT NULL,
       whitelist TEXT DEFAULT '[]',
-      model TEXT DEFAULT 'gemini-2.0-flash',
+      model TEXT DEFAULT '${DEFAULT_AI_MODEL}',
       admin_ids TEXT DEFAULT '[]',
       search_enabled INTEGER DEFAULT 0,
       context_enabled INTEGER DEFAULT 1,
@@ -129,7 +130,7 @@ export function initDatabase() {
   const aiColumns = aiSettingsInfo.map(c => c.name);
 
   if (!aiColumns.includes('model')) {
-    db.prepare("ALTER TABLE ai_settings ADD COLUMN model TEXT DEFAULT 'gemini-2.0-flash'").run();
+    db.prepare(`ALTER TABLE ai_settings ADD COLUMN model TEXT DEFAULT '${DEFAULT_AI_MODEL}'`).run();
   }
   if (!aiColumns.includes('admin_ids')) {
     db.prepare("ALTER TABLE ai_settings ADD COLUMN admin_ids TEXT DEFAULT '[]'").run();
@@ -288,7 +289,7 @@ export function getAiSettings(guildId) {
   const db = getDb();
   let row = db.prepare('SELECT * FROM ai_settings WHERE guild_id = ?').get(guildId);
   if (!row) {
-    db.prepare('INSERT INTO ai_settings (guild_id) VALUES (?)').run(guildId);
+    db.prepare('INSERT INTO ai_settings (guild_id, model) VALUES (?, ?)').run(guildId, DEFAULT_AI_MODEL);
     row = db.prepare('SELECT * FROM ai_settings WHERE guild_id = ?').get(guildId);
   }
   return {
