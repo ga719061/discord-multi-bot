@@ -1,4 +1,4 @@
-import { MessageFlags, SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder } from 'discord.js';
 import { cachedStats, buildCacheKey } from './lib/cache.js';
 import { buildStatsReply } from './lib/embed.js';
 import { v2EditPayload } from '../../utils/componentsV2.js';
@@ -54,7 +54,7 @@ export async function execute(interaction) {
   const region = isValorant ? 'ap' : interaction.options.getString('區服') || 'tw';
   const key = buildCacheKey(game, playerName, tag, region);
 
-  await interaction.deferReply({ flags: MessageFlags.IsComponentsV2 });
+  await interaction.deferReply();
 
   const result = await cachedStats(key, () => {
     if (isValorant) return fetchValorantStats(playerName, tag);

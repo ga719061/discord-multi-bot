@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getLeaderboard, getRankTitle } from '../../utils/database.js';
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
 import { embedsToV2Payload, v2EditPayload, v2Notice } from '../../utils/componentsV2.js';
@@ -9,7 +9,7 @@ export const data = new SlashCommandBuilder()
     .setDescription('🏆 皇家封神榜：查看王國內貢獻度最高的十大傑出子民')
 
 export async function execute(interaction) {
-    await interaction.deferReply({ flags: MessageFlags.IsComponentsV2 });
+    await interaction.deferReply();
     const top = getLeaderboard(interaction.guildId, 10);
 
     if (top.length === 0) {

@@ -12,7 +12,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { ansiBlock, COLORS, UI_COLORS } from '../../utils/style.js';
-import { ephemeralV2Payload, v2Divider, v2Panel, v2Text } from '../../utils/componentsV2.js';
+import { ephemeralV2Payload, v2Divider, v2EditPayload, v2Panel, v2Text } from '../../utils/componentsV2.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -202,9 +202,9 @@ export async function execute(interaction) {
     });
 
     collector.on('end', () => {
-        interaction.editReply({
-            components: closeHelpBook(context.currentComponents)
-        }).catch(() => { });
+        interaction.editReply(v2EditPayload(ephemeralV2Payload(
+            closeHelpBook(context.currentComponents)
+        ))).catch(() => { });
     });
 }
 

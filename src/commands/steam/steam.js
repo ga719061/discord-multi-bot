@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
 import { fetchSteamJson, getSteamFailureMessage } from '../../utils/steamDeals.js';
 import { logger } from '../../utils/logger.js';
@@ -23,7 +23,7 @@ export async function execute(interaction) {
 
     if (sub === '搜尋') {
         const query = interaction.options.getString('遊戲名稱');
-        await interaction.deferReply({ flags: MessageFlags.IsComponentsV2 });
+        await interaction.deferReply();
         await handleSearch(interaction, query);
     }
 }

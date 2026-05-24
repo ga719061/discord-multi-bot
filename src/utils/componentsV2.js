@@ -48,6 +48,7 @@ export function v2EditPayload(payload) {
     return {
         ...editable,
         flags: MessageFlags.IsComponentsV2,
+        withComponents: true,
     };
 }
 

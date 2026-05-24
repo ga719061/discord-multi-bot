@@ -102,7 +102,7 @@ async function handleSetup(interaction, channel, pairsStr, customTitle) {
         return interaction.reply(v2Notice('🏷️ 配對過多', '🐕 汪！最多只能設定 20 組反應！', UI_COLORS.WARNING));
     }
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 });
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     // 建立 embed
     const description = pairs
@@ -200,7 +200,7 @@ async function handleDelete(interaction, messageId) {
         const message = choice ? '已取消拆除，本王不會動這座反應站。' : '確認已逾時，反應站維持原狀。';
         const payload = v2Notice('🏷️ 拆除已取消', message, UI_COLORS.MUTED);
         if (choice) await choice.update({ components: payload.components });
-        else await interaction.editReply({ components: payload.components }).catch(() => {});
+        else await interaction.editReply(v2EditPayload(payload)).catch(() => {});
         return;
     }
 

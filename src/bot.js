@@ -53,7 +53,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.isStringSelectMenu()) {
     try {
       if (interaction.customId === 'selfrole_select') {
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
         const roleIds = interaction.values;
         const member = interaction.member;
         const guild = interaction.guild;
@@ -184,7 +184,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
           await targetChannel.send(buildAnnouncementPayload(draft, { files: [stamp] }));
           pendingAnnouncements.delete(uuid);
           const completed = v2Notice('📜 公告已發布', `聖旨已正式張貼至 <#${draft.channelId}>。`, UI_COLORS.SUCCESS);
-          return interaction.editReply({ components: completed.components });
+          return interaction.editReply(v2EditPayload(completed));
         }
       }
     } catch (error) {
@@ -196,7 +196,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
     try {
       if (interaction.customId.startsWith('announce_modal_')) {
         const uuid = interaction.customId.replace('announce_modal_', '');
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 });
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const data = pendingAnnouncements.get(uuid);
         if (!data) return interaction.editReply(v2EditPayload(v2Notice('📜 草稿已失效', '公告草稿已過期，請重新執行 `/發布公告`。', UI_COLORS.WARNING)));

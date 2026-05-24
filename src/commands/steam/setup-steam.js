@@ -105,7 +105,7 @@ async function handleDealList(interaction) {
     return interaction.reply(v2Notice('🛒 尚未設定投放頻道', '請先使用 `/設定特價推播 設定頻道 目標頻道:#頻道 時間:20:00`。', UI_COLORS.WARNING));
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral | MessageFlags.IsComponentsV2 });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const channel = await interaction.guild.channels.fetch(settings.steam_deal_channel).catch(() => null);
   if (!channel || !channel.isTextBased()) {
