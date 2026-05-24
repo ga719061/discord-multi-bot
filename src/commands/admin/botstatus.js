@@ -3,8 +3,7 @@ import os from 'os';
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('botstatus')
-    .setNameLocalizations({ 'zh-TW': '機器人狀態' })
+    .setName('機器人狀態')
     .setDescription('🏥 健康檢查：檢視吉吉國王目前的身體狀況與主機系統負載')
     .setDescriptionLocalizations({ 'zh-TW': '🏥 健康檢查：檢視吉吉國王目前的身體狀況與主機系統負載' })
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);

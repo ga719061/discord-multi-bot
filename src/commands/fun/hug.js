@@ -1,13 +1,11 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('hug')
-    .setNameLocalizations({ 'zh-TW': '抱抱' })
+    .setName('抱抱')
     .setDescription('🤗 討抱抱：上前給吉吉國王一個大大的擁抱')
     .setDescriptionLocalizations({ 'zh-TW': '🤗 討抱抱：上前給吉吉國王一個大大的擁抱' })
     .addUserOption((opt) =>
-        opt.setName('target')
-            .setNameLocalizations({ 'zh-TW': '對象' })
+        opt.setName('對象')
             .setDescription('或者...抱別人？（國王會吃醋喔）')
             .setDescriptionLocalizations({ 'zh-TW': '或者...抱別人？（國王會吃醋喔）' })
             .setRequired(false)
@@ -30,7 +28,7 @@ const jealousReactions = [
 ];
 
 export async function execute(interaction) {
-    const target = interaction.options.getUser('target');
+    const target = interaction.options.getUser('對象');
 
     if (target && target.id !== interaction.client.user.id) {
         // 抱別人 - 國王吃醋

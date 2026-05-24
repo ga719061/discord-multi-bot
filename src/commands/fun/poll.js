@@ -3,43 +3,36 @@ import { getDb } from '../../utils/database.js';
 import { COLORS, ansiBar, ansiBlock, fmt } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('poll')
-    .setNameLocalizations({ 'zh-TW': '投票' })
+    .setName('投票')
     .setDescription('📊 國是會議：發布一場讓全體子民參與表決的正式投票')
     .setDescriptionLocalizations({ 'zh-TW': '📊 國是會議：發布一場讓全體子民參與表決的正式投票' })
     .addStringOption((opt) =>
-        opt.setName('question')
-            .setNameLocalizations({ 'zh-TW': '問題' })
+        opt.setName('問題')
             .setDescription('投票問題')
             .setDescriptionLocalizations({ 'zh-TW': '投票問題' })
             .setRequired(true))
     .addStringOption((opt) =>
-        opt.setName('option1')
-            .setNameLocalizations({ 'zh-TW': '選項1' })
+        opt.setName('選項1')
             .setDescription('選項 1')
             .setDescriptionLocalizations({ 'zh-TW': '選項 1' })
             .setRequired(true))
     .addStringOption((opt) =>
-        opt.setName('option2')
-            .setNameLocalizations({ 'zh-TW': '選項2' })
+        opt.setName('選項2')
             .setDescription('選項 2')
             .setDescriptionLocalizations({ 'zh-TW': '選項 2' })
             .setRequired(true))
     .addStringOption((opt) =>
-        opt.setName('option3')
-            .setNameLocalizations({ 'zh-TW': '選項3' })
+        opt.setName('選項3')
             .setDescription('選項 3')
             .setDescriptionLocalizations({ 'zh-TW': '選項 3' })
             .setRequired(false))
     .addStringOption((opt) =>
-        opt.setName('option4')
-            .setNameLocalizations({ 'zh-TW': '選項4' })
+        opt.setName('選項4')
             .setDescription('選項 4')
             .setDescriptionLocalizations({ 'zh-TW': '選項 4' })
             .setRequired(false))
     .addStringOption((opt) =>
-        opt.setName('option5')
-            .setNameLocalizations({ 'zh-TW': '選項5' })
+        opt.setName('選項5')
             .setDescription('選項 5')
             .setDescriptionLocalizations({ 'zh-TW': '選項 5' })
             .setRequired(false));
@@ -47,10 +40,10 @@ export const data = new SlashCommandBuilder()
 const EMOJIS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
 
 export async function execute(interaction) {
-    const question = interaction.options.getString('question');
+    const question = interaction.options.getString('問題');
     const options = [];
     for (let i = 1; i <= 5; i++) {
-        const opt = interaction.options.getString(`option${i}`);
+        const opt = interaction.options.getString(`選項${i}`);
         if (opt) options.push(opt);
     }
 

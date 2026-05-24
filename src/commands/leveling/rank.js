@@ -3,18 +3,16 @@ import { getUserLevel, getXpForLevel, getRankTitle } from '../../utils/database.
 import { fmt, COLORS, ansiBar, ansiBlock } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('rank')
-    .setNameLocalizations({ 'zh-TW': '等級' })
+    .setName('等級')
     .setDescription('🏅 爵位查詢：檢視自己目前的皇家頭銜與累積的貢獻度')
     .addUserOption((opt) => 
-        opt.setName('user')
-            .setNameLocalizations({ 'zh-TW': '使用者' })
+        opt.setName('使用者')
             .setDescription('查看誰的等級')
             .setRequired(false)
     );
 
 export async function execute(interaction) {
-    const target = interaction.options.getUser('user') || interaction.user;
+    const target = interaction.options.getUser('使用者') || interaction.user;
     const data = getUserLevel(interaction.guildId, target.id);
     const xpNeeded = getXpForLevel(data.level + 1);
     const bar = ansiBar(data.xp, xpNeeded, COLORS.CYAN, 20);

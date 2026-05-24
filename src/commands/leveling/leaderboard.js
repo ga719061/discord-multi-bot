@@ -3,8 +3,7 @@ import { getLeaderboard, getRankTitle } from '../../utils/database.js';
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('leaderboard')
-    .setNameLocalizations({ 'zh-TW': '排行榜' })
+    .setName('排行榜')
     .setDescription('🏆 皇家封神榜：查看王國內貢獻度最高的十大傑出子民')
 
 export async function execute(interaction) {

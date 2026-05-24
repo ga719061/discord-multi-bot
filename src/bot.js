@@ -216,9 +216,11 @@ async function start() {
     const { initReminderManager } = await import('./utils/reminderManager.js');
     const { initGiveawayManager } = await import('./utils/giveawayManager.js');
     const { initPartyManager } = await import('./utils/partyManager.js');
+    const { initSteamDealManager } = await import('./utils/steamDealManager.js');
     initReminderManager(client);
     initGiveawayManager(client);
     initPartyManager(client);
+    initSteamDealManager(client);
     initVoiceXpManager(client);
 
     startHealthServer();

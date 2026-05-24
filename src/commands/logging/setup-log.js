@@ -4,19 +4,17 @@ import { fmt, COLORS } from '../../utils/style.js';
 import { parseJsonObject } from '../../utils/jsonUtils.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('setup-log')
-    .setNameLocalizations({ 'zh-TW': '設定紀錄' })
+    .setName('設定紀錄')
     .setDescription('📝 史官紀錄控制台：設定頻道或切換記錄類別')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addChannelOption((opt) =>
-        opt.setName('channel')
-            .setNameLocalizations({ 'zh-TW': '頻道' })
+        opt.setName('頻道')
             .setDescription('設定日誌記錄的目標頻道（若不填則僅開啟控制面板）')
             .addChannelTypes(ChannelType.GuildText)
     );
 
 export async function execute(interaction) {
-    const channel = interaction.options.getChannel('channel');
+    const channel = interaction.options.getChannel('頻道');
     const settings = getGuildSettings(interaction.guildId);
 
     if (channel) {

@@ -3,8 +3,7 @@ import { getGuildSettings, getReactionRolesByGuild, getAiSettings } from '../../
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('serverinfo')
-    .setNameLocalizations({ 'zh-TW': '伺服器資訊' })
+    .setName('伺服器資訊')
     .setDescription('🏰 領地視察：調閱本伺服器的詳細發展報告與統計資料')
     .setDescriptionLocalizations({ 'zh-TW': '🏰 領地視察：調閱本伺服器的詳細發展報告與統計資料' })
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);

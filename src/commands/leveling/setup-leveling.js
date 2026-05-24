@@ -2,25 +2,23 @@ import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
 import { updateGuildSetting, getGuildSettings } from '../../utils/database.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('setup-leveling')
-    .setNameLocalizations({ 'zh-TW': '設定等級系統' })
+    .setName('設定等級系統')
     .setDescription('📈 皇家晉升：設定伺服器階級系統的各項公告設定')
     .setDescriptionLocalizations({ 'zh-TW': '📈 皇家晉升：設定伺服器階級系統的各項公告設定' })
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addStringOption((opt) =>
-        opt.setName('status')
-            .setNameLocalizations({ 'zh-TW': '狀態' })
+        opt.setName('狀態')
             .setDescription('是否在成員升級時發送公告訊息')
             .setDescriptionLocalizations({ 'zh-TW': '是否在成員升級時發送公告訊息' })
             .setRequired(true)
             .addChoices(
-                { name: '✅ 開啟', name_localizations: { 'zh-TW': '✅ 開啟' }, value: 'on' },
-                { name: '❌ 關閉', name_localizations: { 'zh-TW': '❌ 關閉' }, value: 'off' }
+                { name: '✅ 開啟', value: 'on' },
+                { name: '❌ 關閉', value: 'off' }
             )
     );
 
 export async function execute(interaction) {
-    const status = interaction.options.getString('status');
+    const status = interaction.options.getString('狀態');
     const enabled = status === 'on';
 
     updateGuildSetting(interaction.guildId, 'level_up_announcement_enabled', enabled ? 1 : 0);

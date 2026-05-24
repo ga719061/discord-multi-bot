@@ -2,25 +2,23 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { fmt, COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('feed')
-    .setNameLocalizations({ 'zh-TW': '餵食' })
+    .setName('餵食')
     .setDescription('🍖 進貢食物：挑選美食來餵食國王，小心別餵到有毒的東西！')
     .setDescriptionLocalizations({ 'zh-TW': '🍖 進貢食物：挑選美食來餵食國王，小心別餵到有毒的東西！' })
     .addStringOption((opt) =>
-        opt.setName('food')
-            .setNameLocalizations({ 'zh-TW': '食物' })
+        opt.setName('食物')
             .setDescription('要餵什麼給國王？')
             .setDescriptionLocalizations({ 'zh-TW': '要餵什麼給國王？' })
             .setRequired(true)
             .addChoices(
-                { name: '🥩 頂級牛排', name_localizations: { 'zh-TW': '🥩 頂級牛排' }, value: 'steak' },
-                { name: '🍖 雞腿', name_localizations: { 'zh-TW': '🍖 雞腿' }, value: 'chicken' },
-                { name: '🦴 骨頭', name_localizations: { 'zh-TW': '🦴 骨頭' }, value: 'bone' },
-                { name: '🍕 披薩', name_localizations: { 'zh-TW': '🍕 披薩' }, value: 'pizza' },
-                { name: '🥦 花椰菜', name_localizations: { 'zh-TW': '🥦 花椰菜' }, value: 'broccoli' },
-                { name: '🍫 巧克力', name_localizations: { 'zh-TW': '🍫 巧克力' }, value: 'chocolate' },
-                { name: '🍰 蛋糕', name_localizations: { 'zh-TW': '🍰 蛋糕' }, value: 'cake' },
-                { name: '🍣 壽司', name_localizations: { 'zh-TW': '🍣 壽司' }, value: 'sushi' },
+                { name: '🥩 頂級牛排', value: 'steak' },
+                { name: '🍖 雞腿', value: 'chicken' },
+                { name: '🦴 骨頭', value: 'bone' },
+                { name: '🍕 披薩', value: 'pizza' },
+                { name: '🥦 花椰菜', value: 'broccoli' },
+                { name: '🍫 巧克力', value: 'chocolate' },
+                { name: '🍰 蛋糕', value: 'cake' },
+                { name: '🍣 壽司', value: 'sushi' },
             )
     );
 
@@ -60,7 +58,7 @@ const foodReactions = {
 };
 
 export async function execute(interaction) {
-    const food = interaction.options.getString('food');
+    const food = interaction.options.getString('食物');
     const reaction = foodReactions[food];
 
     const embed = new EmbedBuilder()

@@ -1,8 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('pat')
-    .setNameLocalizations({ 'zh-TW': '摸摸' })
+    .setName('摸摸')
     .setDescription('🐾 摸摸頭：試著摸摸國王，但請承擔被咬的風險')
     .setDescriptionLocalizations({ 'zh-TW': '🐾 摸摸頭：試著摸摸國王，但請承擔被咬的風險' });
 

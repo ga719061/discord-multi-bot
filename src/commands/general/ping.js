@@ -2,8 +2,7 @@ import { SlashCommandBuilder } from 'discord.js';
 import { ansi, COLORS, fmt } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('ping')
-    .setNameLocalizations({ 'zh-TW': '延遲' })
+    .setName('延遲')
     .setDescription('🏓 丟接球：與國王玩丟接球，測試伺服器連線與大腦反應速度')
     .setDescriptionLocalizations({ 'zh-TW': '🏓 丟接球：與國王玩丟接球，測試伺服器連線與大腦反應速度' });
 

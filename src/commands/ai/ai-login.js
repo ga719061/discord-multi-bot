@@ -2,13 +2,11 @@ import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.
 import { getAiSettings, updateAiSetting } from '../../utils/database.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('ai-login')
-    .setNameLocalizations({ 'zh-TW': 'ai登入' })
+    .setName('智慧登入')
     .setDescription('🔐 皇室大內密碼：通往管理 AI 核心的入口')
     .setDescriptionLocalizations({ 'zh-TW': '🔐 皇室大內密碼：通往管理 AI 核心的入口' })
     .addStringOption(option =>
-        option.setName('password')
-            .setNameLocalizations({ 'zh-TW': '密碼' })
+        option.setName('密碼')
             .setDescription('請輸入管理密碼')
             .setDescriptionLocalizations({ 'zh-TW': '請輸入管理密碼' })
             .setRequired(true)
@@ -16,7 +14,7 @@ export const data = new SlashCommandBuilder()
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
 export async function execute(interaction) {
-    const password = interaction.options.getString('password');
+    const password = interaction.options.getString('密碼');
 
     // 從環境變數讀取密碼，增加安全性
     const CORRECT_PASSWORD = process.env.AI_ADMIN_PASSWORD;
@@ -49,7 +47,7 @@ export async function execute(interaction) {
         embeds: [new EmbedBuilder()
             .setColor(0x00FF00)
             .setTitle('🔐 登入成功！')
-            .setDescription('您已成功驗證身份。現在可以使用 `/ai-setup` 指令了。')
+            .setDescription('您已成功驗證身份。現在可以使用 `/智慧設定` 指令了。')
         ],
         flags: ['Ephemeral']
     });

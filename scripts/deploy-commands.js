@@ -21,6 +21,10 @@ for (const category of categories) {
         const command = await import(filePath);
         if (command.data) {
             commands.push(command.data.toJSON());
+            for (const aliasData of command.aliases ?? []) {
+                commands.push(aliasData.toJSON());
+                console.log(`📦載入指令別名: /${aliasData.name} -> /${command.data.name}`);
+            }
             console.log(`✅ 載入指令: /${command.data.name}`);
         }
     }

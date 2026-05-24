@@ -8,52 +8,45 @@ import {
 } from 'discord.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('announce')
-    .setNameLocalizations({ 'zh-TW': '發布公告' })
+    .setName('發布公告')
     .setDescription('📢 頒布聖旨：發布帶有精美排版與提及功能的官方國家級公告')
     .setDescriptionLocalizations({ 'zh-TW': '📢 頒布聖旨：發布帶有精美排版與提及功能的官方國家級公告' })
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addChannelOption(opt =>
-        opt.setName('channel')
-            .setNameLocalizations({ 'zh-TW': '頻道' })
+        opt.setName('頻道')
             .setDescription('要發布公告的指定頻道')
             .setDescriptionLocalizations({ 'zh-TW': '要發布公告的指定頻道' })
             .setRequired(true)
     )
     .addStringOption(opt =>
-        opt.setName('mention')
-            .setNameLocalizations({ 'zh-TW': '提及範圍' })
+        opt.setName('提及範圍')
             .setDescription('是否要在發送時提及身分組？ (選填)')
             .setDescriptionLocalizations({ 'zh-TW': '是否要在發送時提及身分組？ (選填)' })
             .setRequired(false)
             .addChoices(
-                { name: '提及 @everyone (所有人)', name_localizations: { 'zh-TW': '提及 @everyone (所有人)' }, value: '@everyone' },
-                { name: '提及 @here (在線上的人)', name_localizations: { 'zh-TW': '提及 @here (在線上的人)' }, value: '@here' },
-                { name: '不提及任何對象', name_localizations: { 'zh-TW': '不提及任何對象' }, value: 'none' }
+                { name: '提及 @everyone (所有人)', value: '@everyone' },
+                { name: '提及 @here (在線上的人)', value: '@here' },
+                { name: '不提及任何對象', value: 'none' }
             )
     )
     .addRoleOption(opt =>
-        opt.setName('mention_role')
-            .setNameLocalizations({ 'zh-TW': '提及身分組' })
+        opt.setName('提及身分組')
             .setDescription('如果要提及特定身分組，請在此選擇 (選填)')
             .setDescriptionLocalizations({ 'zh-TW': '如果要提及特定身分組，請在此選擇 (選填)' })
             .setRequired(false)
     )
     .addAttachmentOption(opt => 
-        opt.setName('image1')
-            .setNameLocalizations({ 'zh-TW': '圖片1' })
+        opt.setName('圖片1')
             .setDescription('上傳第一張圖片 (作為主圖顯示)')
             .setRequired(false)
     )
     .addAttachmentOption(opt => 
-        opt.setName('image2')
-            .setNameLocalizations({ 'zh-TW': '圖片2' })
+        opt.setName('圖片2')
             .setDescription('上傳第二張圖片 (選填)')
             .setRequired(false)
     )
     .addAttachmentOption(opt => 
-        opt.setName('image3')
-            .setNameLocalizations({ 'zh-TW': '圖片3' })
+        opt.setName('圖片3')
             .setDescription('上傳第三張圖片 (選填)')
             .setRequired(false)
     );
@@ -62,12 +55,12 @@ export const data = new SlashCommandBuilder()
 export const pendingAnnouncements = new Map();
 
 export async function execute(interaction) {
-    const channel = interaction.options.getChannel('channel');
-    const mention = interaction.options.getString('mention');
-    const mentionRole = interaction.options.getRole('mention_role');
-    const img1 = interaction.options.getAttachment('image1');
-    const img2 = interaction.options.getAttachment('image2');
-    const img3 = interaction.options.getAttachment('image3');
+    const channel = interaction.options.getChannel('頻道');
+    const mention = interaction.options.getString('提及範圍');
+    const mentionRole = interaction.options.getRole('提及身分組');
+    const img1 = interaction.options.getAttachment('圖片1');
+    const img2 = interaction.options.getAttachment('圖片2');
+    const img3 = interaction.options.getAttachment('圖片3');
 
     let mentionText = 'none';
     if (mention && mention !== 'none') mentionText = mention;

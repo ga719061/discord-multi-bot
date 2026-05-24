@@ -6,55 +6,47 @@ import {
 } from '../../utils/database.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('reactionrole')
-    .setNameLocalizations({ 'zh-TW': '反應身分組' })
+    .setName('反應身分組')
     .setDescription('🐕🏷️ 按鈕自助身分組建立系統 (管理員專屬)')
     .setDescriptionLocalizations({ 'zh-TW': '🐕🏷️ 按鈕自助身分組建立系統 (管理員專屬)' })
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
     .addSubcommand((sub) =>
         sub
-            .setName('setup')
-            .setNameLocalizations({ 'zh-TW': '建立設定' })
+            .setName('建立設定')
             .setDescription('➕ 建立大廳：綁定表情符號與按鈕生成全新的身分組領取站')
             .setDescriptionLocalizations({ 'zh-TW': '➕ 建立大廳：綁定表情符號與按鈕生成全新的身分組領取站' })
             .addChannelOption((opt) =>
-                opt.setName('channel')
-                    .setNameLocalizations({ 'zh-TW': '頻道' })
+                opt.setName('頻道')
                     .setDescription('要發送身分組選單的頻道')
                     .setDescriptionLocalizations({ 'zh-TW': '要發送身分組選單的頻道' })
                     .addChannelTypes(ChannelType.GuildText)
                     .setRequired(true)
             )
             .addStringOption((opt) =>
-                opt.setName('pairs')
-                    .setNameLocalizations({ 'zh-TW': '配對' })
+                opt.setName('配對')
                     .setDescription('emoji:身分組ID 格式，多組用逗號分隔 (如 🎮:123,🎵:456)')
                     .setDescriptionLocalizations({ 'zh-TW': 'emoji:身分組ID 格式，多組用逗號分隔 (如 🎮:123,🎵:456)' })
                     .setRequired(true)
             )
             .addStringOption((opt) =>
-                opt.setName('title')
-                    .setNameLocalizations({ 'zh-TW': '標題' })
+                opt.setName('標題')
                     .setDescription('自訂標題（選填）')
                     .setDescriptionLocalizations({ 'zh-TW': '自訂標題（選填）' })
                     .setRequired(false)
             )
     )
     .addSubcommand((sub) =>
-        sub.setName('list')
-            .setNameLocalizations({ 'zh-TW': '列表清單' })
+        sub.setName('列表清單')
             .setDescription('📋 點名簿：列舉出目前這座城堡內所有的按鈕身分組')
             .setDescriptionLocalizations({ 'zh-TW': '📋 點名簿：列舉出現在城堡內所有的按鈕身分組' })
     )
     .addSubcommand((sub) =>
         sub
-            .setName('delete')
-            .setNameLocalizations({ 'zh-TW': '刪除設定' })
+            .setName('刪除設定')
             .setDescription('🗑️ 拆除：利用訊息 ID 移除某個已經建立的按鈕反應站')
             .setDescriptionLocalizations({ 'zh-TW': '🗑️ 拆除：利用訊息 ID 移除某個已經建立的按鈕反應站' })
             .addStringOption((opt) =>
-                opt.setName('message_id')
-                    .setNameLocalizations({ 'zh-TW': '訊息id' })
+                opt.setName('訊息編號')
                     .setDescription('要刪除的反應身分組訊息 ID')
                     .setDescriptionLocalizations({ 'zh-TW': '要刪除的反應身分組訊息 ID' })
                     .setRequired(true)
@@ -64,15 +56,15 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const sub = interaction.options.getSubcommand();
 
-    if (sub === 'setup') {
-        const channel = interaction.options.getChannel('channel');
-        const pairsStr = interaction.options.getString('pairs');
-        const customTitle = interaction.options.getString('title');
+    if (sub === '建立設定') {
+        const channel = interaction.options.getChannel('頻道');
+        const pairsStr = interaction.options.getString('配對');
+        const customTitle = interaction.options.getString('標題');
         await handleSetup(interaction, channel, pairsStr, customTitle);
-    } else if (sub === 'list') {
+    } else if (sub === '列表清單') {
         await handleList(interaction);
-    } else if (sub === 'delete') {
-        const messageId = interaction.options.getString('message_id');
+    } else if (sub === '刪除設定') {
+        const messageId = interaction.options.getString('訊息編號');
         await handleDelete(interaction, messageId);
     }
 }

@@ -2,36 +2,25 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('steam')
-    .setNameLocalizations({ 'zh-TW': '特價查詢' })
+    .setName('特價查詢')
     .setDescription('🎮 皇家採購辦公室：查詢 Steam 平台上的遊戲特價與情報')
     .addSubcommand(sub =>
-        sub.setName('search')
-            .setNameLocalizations({ 'zh-TW': '搜尋' })
+        sub.setName('搜尋')
             .setDescription('🐕🔎 替國王尋找遊戲價格與情報！')
             .addStringOption(opt =>
-                opt.setName('game')
-                    .setNameLocalizations({ 'zh-TW': '遊戲名稱' })
+                opt.setName('遊戲名稱')
                     .setDescription('想找什麼遊戲？')
                     .setRequired(true)
             )
-    )
-    .addSubcommand(sub =>
-        sub.setName('sales')
-            .setNameLocalizations({ 'zh-TW': '特價列表' })
-            .setDescription('🐕🔥 查看當前最火熱的皇家折扣清單！')
     );
 
 export async function execute(interaction) {
     const sub = interaction.options.getSubcommand();
 
-    if (sub === 'search') {
-        const query = interaction.options.getString('game');
+    if (sub === '搜尋') {
+        const query = interaction.options.getString('遊戲名稱');
         await interaction.deferReply();
         await handleSearch(interaction, query);
-    } else if (sub === 'sales') {
-        await interaction.deferReply();
-        await handleSales(interaction);
     }
 }
 
@@ -103,45 +92,5 @@ async function handleSearch(interaction, query) {
     } catch (error) {
         console.error('Steam Search Error:', error);
         await interaction.editReply('🐕💥 汪！搜尋時發生錯誤，本王頭好痛...');
-    }
-}
-
-async function handleSales(interaction) {
-    try {
-        const url = 'https://store.steampowered.com/api/featuredcategories?l=tchinese&cc=tw';
-        const res = await fetch(url);
-        const data = await res.json();
-
-        const specials = data.specials?.items;
-        if (!specials || specials.length === 0) {
-            return interaction.editReply('🐕❓ 汪？現在好像沒什麼特別的特價活動耶...');
-        }
-
-        const top8 = specials.slice(0, 8);
-        const embed = new EmbedBuilder()
-            .setColor(0xFFD700)
-            .setTitle('🐕🔥 皇家採購清單：Steam 熱門特價快報！')
-            .setDescription('汪汪！本王精選了最值得放入國庫的特價遊戲！')
-            .setTimestamp()
-            .setFooter({ text: '💸 這些都在大特價！快把錢錢交出來！汪！' });
-
-        const list = top8.map(game => {
-            const final = `$${game.final_price / 100}`;
-            const discount = game.discount_percent;
-            return `**[${game.name}](https://store.steampowered.com/app/${game.id})**\n` +
-                   '```ansi\n' + fmt(COLORS.GOLD, `📉 -${discount}%`) + ' ➔ ' + fmt(COLORS.GREEN, `${final} TWD`) + '\n```';
-        }).join('\n');
-
-        embed.addFields({ name: '🛍️ 今日必買項目', value: list });
-
-        if (top8.length > 0) {
-            embed.setThumbnail(top8[0].large_capsule_image || top8[0].header_image);
-        }
-
-        await interaction.editReply({ embeds: [embed] });
-
-    } catch (error) {
-        console.error('Steam Sales Error:', error);
-        await interaction.editReply('🐕💥 汪！讀取特價列表失敗，Steam 可能在維修？');
     }
 }

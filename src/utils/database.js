@@ -23,7 +23,11 @@ export function initDatabase() {
       log_channel TEXT,
       log_toggles TEXT DEFAULT '{"message":1,"member":1,"server":1,"voice":1,"thread":1}',
       selfrole_roles TEXT DEFAULT '[]',
-      level_up_announcement_enabled INTEGER DEFAULT 1
+      level_up_announcement_enabled INTEGER DEFAULT 1,
+      steam_deal_channel TEXT DEFAULT NULL,
+      steam_deal_time TEXT DEFAULT NULL,
+      steam_deal_enabled INTEGER DEFAULT 0,
+      steam_deal_last_post_date TEXT DEFAULT NULL
     );
 
     CREATE TABLE IF NOT EXISTS user_levels (
@@ -108,6 +112,18 @@ export function initDatabase() {
     db.prepare('ALTER TABLE guild_settings ADD COLUMN log_toggles TEXT DEFAULT \'{"message":1,"member":1,"server":1,"voice":1,"thread":1}\'').run();
     db.prepare('UPDATE guild_settings SET log_toggles = \'{"message":1,"member":1,"server":1,"voice":1,"thread":1}\' WHERE log_toggles IS NULL').run();
   }
+  if (!guildColumns.includes('steam_deal_channel')) {
+    db.prepare('ALTER TABLE guild_settings ADD COLUMN steam_deal_channel TEXT DEFAULT NULL').run();
+  }
+  if (!guildColumns.includes('steam_deal_time')) {
+    db.prepare('ALTER TABLE guild_settings ADD COLUMN steam_deal_time TEXT DEFAULT NULL').run();
+  }
+  if (!guildColumns.includes('steam_deal_enabled')) {
+    db.prepare('ALTER TABLE guild_settings ADD COLUMN steam_deal_enabled INTEGER DEFAULT 0').run();
+  }
+  if (!guildColumns.includes('steam_deal_last_post_date')) {
+    db.prepare('ALTER TABLE guild_settings ADD COLUMN steam_deal_last_post_date TEXT DEFAULT NULL').run();
+  }
 
   const aiSettingsInfo = db.pragma('table_info(ai_settings)');
   const aiColumns = aiSettingsInfo.map(c => c.name);
@@ -155,7 +171,18 @@ export function getGuildSettings(guildId) {
   return row;
 }
 
-const ALLOWED_GUILD_KEYS = ['welcome_channel', 'welcome_message', 'log_channel', 'log_toggles', 'selfrole_roles', 'level_up_announcement_enabled'];
+const ALLOWED_GUILD_KEYS = [
+  'welcome_channel',
+  'welcome_message',
+  'log_channel',
+  'log_toggles',
+  'selfrole_roles',
+  'level_up_announcement_enabled',
+  'steam_deal_channel',
+  'steam_deal_time',
+  'steam_deal_enabled',
+  'steam_deal_last_post_date',
+];
 
 export function updateGuildSetting(guildId, key, value) {
   if (!ALLOWED_GUILD_KEYS.includes(key)) throw new Error(`不可許的欄位名稱: ${key}`);

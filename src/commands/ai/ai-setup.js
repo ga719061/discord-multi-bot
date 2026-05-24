@@ -4,106 +4,92 @@ import { DEFAULT_AI_PROMPT } from '../../utils/aiChat.js';
 import { fmt, COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('ai-setup')
-    .setNameLocalizations({ 'zh-TW': 'ai設定' })
+    .setName('智慧設定')
     .setDescription('🐕🤖 吉吉國王 AI 核心功能設定管理')
     .setDescriptionLocalizations({ 'zh-TW': '🐕🤖 吉吉國王 AI 核心功能設定管理' })
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addSubcommand(sub =>
-        sub.setName('role')
-            .setNameLocalizations({ 'zh-TW': '角色設定' })
+        sub.setName('角色設定')
             .setDescription('🎭 塑造國王的個性：修改 AI 的提示詞')
             .setDescriptionLocalizations({ 'zh-TW': '🎭 塑造國王的個性：修改 AI 的提示詞' })
             .addStringOption(opt =>
-                opt.setName('description')
-                    .setNameLocalizations({ 'zh-TW': '說明' })
+                opt.setName('說明')
                     .setDescription('例如：你是一個冷靜的中文助手。留空則恢復原廠設定。')
                     .setDescriptionLocalizations({ 'zh-TW': '例如：你是一個冷靜的中文助手。留空則恢復原廠設定。' })
                     .setRequired(false)
             )
     )
     .addSubcommand(sub =>
-        sub.setName('whitelist')
-            .setNameLocalizations({ 'zh-TW': '白名單管理' })
+        sub.setName('白名單管理')
             .setDescription('👥受寵子民名冊：管理能無條件對話的白名單')
             .setDescriptionLocalizations({ 'zh-TW': '👥受寵子民名冊：管理能無條件對話的白名單' })
             .addStringOption(opt =>
-                opt.setName('action')
-                    .setNameLocalizations({ 'zh-TW': '動作' })
+                opt.setName('動作')
                     .setDescription('add 加入 / remove 移除')
                     .setDescriptionLocalizations({ 'zh-TW': 'add 加入 / remove 移除' })
                     .setRequired(true)
                     .addChoices(
-                        { name: '加入 (add)', name_localizations: { 'zh-TW': '加入 (add)' }, value: 'add' },
-                        { name: '移除 (remove)', name_localizations: { 'zh-TW': '移除 (remove)' }, value: 'remove' }
+                        { name: '加入 (add)', value: 'add' },
+                        { name: '移除 (remove)', value: 'remove' }
                     )
             )
             .addUserOption(opt =>
-                opt.setName('user')
-                    .setNameLocalizations({ 'zh-TW': '使用者' })
+                opt.setName('使用者')
                     .setDescription('要加入/移除的用戶')
                     .setDescriptionLocalizations({ 'zh-TW': '要加入/移除的用戶' })
                     .setRequired(true)
             )
     )
     .addSubcommand(sub =>
-        sub.setName('model')
-            .setNameLocalizations({ 'zh-TW': '模型切換' })
+        sub.setName('模型切換')
             .setDescription('🧠 切換國王大腦：替換使用的 AI 模型版本')
             .setDescriptionLocalizations({ 'zh-TW': '🧠 切換國王大腦：替換使用的 AI 模型版本' })
             .addStringOption(opt =>
-                opt.setName('name')
-                    .setNameLocalizations({ 'zh-TW': '模型名稱' })
+                opt.setName('模型名稱')
                     .setDescription('選擇要使用的模型')
                     .setDescriptionLocalizations({ 'zh-TW': '選擇要使用的模型' })
                     .setRequired(true)
                     .addChoices(
-                        { name: 'Gemini 2.5 Flash', name_localizations: { 'zh-TW': 'Gemini 2.5 Flash' }, value: 'gemini-2.5-flash' },
-                        { name: 'Gemini 2.5 Flash-Lite', name_localizations: { 'zh-TW': 'Gemini 2.5 Flash-Lite' }, value: 'gemini-2.5-flash-lite' },
-                        { name: 'Gemini 3 Flash Preview (Experimental)', name_localizations: { 'zh-TW': 'Gemini 3 Flash Preview (實驗中)' }, value: 'gemini-3-flash-preview' },
-                        { name: 'Gemini 3.1 Pro Preview', name_localizations: { 'zh-TW': 'Gemini 3.1 Pro Preview' }, value: 'gemini-3.1-pro-preview' },
-                        { name: 'Gemini 3.1 Flash-Lite Preview', name_localizations: { 'zh-TW': 'Gemini 3.1 Flash-Lite Preview' }, value: 'gemini-3.1-flash-lite-preview' }
+                        { name: 'Gemini 2.5 Flash', value: 'gemini-2.5-flash' },
+                        { name: 'Gemini 2.5 Flash-Lite', value: 'gemini-2.5-flash-lite' },
+                        { name: 'Gemini 3 Flash Preview (Experimental)', value: 'gemini-3-flash-preview' },
+                        { name: 'Gemini 3.1 Pro Preview', value: 'gemini-3.1-pro-preview' },
+                        { name: 'Gemini 3.1 Flash-Lite Preview', value: 'gemini-3.1-flash-lite-preview' }
                     )
             )
     )
     .addSubcommand(sub =>
-        sub.setName('search')
-            .setNameLocalizations({ 'zh-TW': '聯網檢索' })
+        sub.setName('聯網檢索')
             .setDescription('🌐 天文地理能力：控制 AI 是否能夠即時上網查詢')
             .setDescriptionLocalizations({ 'zh-TW': '🌐 天文地理能力：控制 AI 是否能夠即時上網查詢' })
             .addStringOption(opt =>
-                opt.setName('switch')
-                    .setNameLocalizations({ 'zh-TW': '開關' })
+                opt.setName('開關')
                     .setDescription('開啟或關閉聯網功能')
                     .setDescriptionLocalizations({ 'zh-TW': '開啟或關閉聯網功能' })
                     .setRequired(true)
                     .addChoices(
-                        { name: '開啟 (enable)', name_localizations: { 'zh-TW': '開啟 (enable)' }, value: 'enable' },
-                        { name: '關閉 (disable)', name_localizations: { 'zh-TW': '關閉 (disable)' }, value: 'disable' }
+                        { name: '開啟 (enable)', value: 'enable' },
+                        { name: '關閉 (disable)', value: 'disable' }
                     )
             )
     )
     .addSubcommand(sub =>
-        sub.setName('status')
-            .setNameLocalizations({ 'zh-TW': '狀態面板' })
+        sub.setName('狀態面板')
             .setDescription('📱 儀表板：監視目前 AI 的狀態與核心配置')
             .setDescriptionLocalizations({ 'zh-TW': '📱 儀表板：監視目前 AI 的狀態與核心配置' })
     )
     .addSubcommand(sub =>
-        sub.setName('party')
-            .setNameLocalizations({ 'zh-TW': '派對模式' })
+        sub.setName('派對模式')
             .setDescription('🎉 解放全國：開放全頻道限時免點名的聊天派對')
             .setDescriptionLocalizations({ 'zh-TW': '🎉 解放全國：開放全頻道限時免點名的聊天派對' })
             .addChannelOption(opt =>
-                opt.setName('channel')
-                    .setNameLocalizations({ 'zh-TW': '目標頻道' })
+                opt.setName('目標頻道')
                     .setDescription('要開放的頻道')
                     .setDescriptionLocalizations({ 'zh-TW': '要開放的頻道' })
                     .setRequired(true)
             )
             .addIntegerOption(opt =>
-                opt.setName('minutes')
-                    .setNameLocalizations({ 'zh-TW': '持續分鐘' })
+                opt.setName('持續分鐘')
                     .setDescription('開放幾分鐘?')
                     .setDescriptionLocalizations({ 'zh-TW': '開放幾分鐘?' })
                     .setMinValue(1)
@@ -111,19 +97,17 @@ export const data = new SlashCommandBuilder()
             )
     )
     .addSubcommand(sub =>
-        sub.setName('context')
-            .setNameLocalizations({ 'zh-TW': '對話記憶' })
+        sub.setName('對話記憶')
             .setDescription('🧠 記憶體升級：控制 AI 是否要記住上下文對話紀錄')
             .setDescriptionLocalizations({ 'zh-TW': '🧠 記憶體升級：控制 AI 是否要記住上下文對話紀錄' })
             .addStringOption(opt =>
-                opt.setName('switch')
-                    .setNameLocalizations({ 'zh-TW': '開關' })
+                opt.setName('開關')
                     .setDescription('開啟或關閉上下文記憶')
                     .setDescriptionLocalizations({ 'zh-TW': '開啟或關閉上下文記憶' })
                     .setRequired(true)
                     .addChoices(
-                        { name: '開啟 (enable)', name_localizations: { 'zh-TW': '開啟 (enable)' }, value: 'enable' },
-                        { name: '關閉 (disable)', name_localizations: { 'zh-TW': '關閉 (disable)' }, value: 'disable' }
+                        { name: '開啟 (enable)', value: 'enable' },
+                        { name: '關閉 (disable)', value: 'disable' }
                     )
             )
     );
@@ -139,13 +123,13 @@ export async function execute(interaction) {
 
     if (!adminIds.includes(userId)) {
         return interaction.reply({
-            content: '❌ 權限不足！請先使用 `/ai-login` 輸入密碼進行驗證。',
+            content: '❌ 權限不足！請先使用 `/智慧登入` 輸入密碼進行驗證。',
             flags: ['Ephemeral']
         });
     }
 
-    if (sub === 'role') {
-        const prompt = interaction.options.getString('description');
+    if (sub === '角色設定') {
+        const prompt = interaction.options.getString('說明');
         const finalPrompt = prompt || DEFAULT_AI_PROMPT;
 
         updateAiSetting(guildId, 'system_prompt', finalPrompt);
@@ -159,9 +143,9 @@ export async function execute(interaction) {
             flags: ['Ephemeral'],
         });
 
-    } else if (sub === 'whitelist') {
-        const action = interaction.options.getString('action');
-        const target = interaction.options.getUser('user');
+    } else if (sub === '白名單管理') {
+        const action = interaction.options.getString('動作');
+        const target = interaction.options.getUser('使用者');
         const settings = getAiSettings(guildId);
         let list = settings.whitelist;
 
@@ -198,8 +182,8 @@ export async function execute(interaction) {
             });
         }
 
-    } else if (sub === 'model') {
-        const modelName = interaction.options.getString('name');
+    } else if (sub === '模型切換') {
+        const modelName = interaction.options.getString('模型名稱');
         updateAiSetting(guildId, 'model', modelName);
         await interaction.reply({
             embeds: [new EmbedBuilder()
@@ -210,8 +194,8 @@ export async function execute(interaction) {
             flags: ['Ephemeral'],
         });
 
-    } else if (sub === 'search') {
-        const switchValue = interaction.options.getString('switch');
+    } else if (sub === '聯網檢索') {
+        const switchValue = interaction.options.getString('開關');
         const isEnabled = switchValue === 'enable';
         updateAiSetting(guildId, 'search_enabled', isEnabled ? 1 : 0);
 
@@ -226,9 +210,9 @@ export async function execute(interaction) {
             flags: ['Ephemeral'],
         });
 
-    } else if (sub === 'party') {
-        const targetChannel = interaction.options.getChannel('channel');
-        const minutes = interaction.options.getInteger('minutes');
+    } else if (sub === '派對模式') {
+        const targetChannel = interaction.options.getChannel('目標頻道');
+        const minutes = interaction.options.getInteger('持續分鐘');
         const expiresAt = Date.now() + minutes * 60 * 1000;
 
         updateAiSetting(guildId, 'party_channel_id', targetChannel.id);
@@ -249,8 +233,8 @@ export async function execute(interaction) {
 
         // 派對到期由 partyManager 輪詢處理（重啟後依然有效）
 
-    } else if (sub === 'context') {
-        const switchValue = interaction.options.getString('switch');
+    } else if (sub === '對話記憶') {
+        const switchValue = interaction.options.getString('開關');
         const isEnabled = switchValue === 'enable';
         updateAiSetting(guildId, 'context_enabled', isEnabled ? 1 : 0);
 
@@ -265,7 +249,7 @@ export async function execute(interaction) {
             flags: ['Ephemeral'],
         });
 
-    } else if (sub === 'status') {
+    } else if (sub === '狀態面板') {
         const settings = getAiSettings(guildId);
         const whitelistText = settings.whitelist.length > 0
             ? settings.whitelist.map(id => `<@${id}>`).join(', ')

@@ -4,39 +4,32 @@ import { parseReminderTime } from '../../utils/reminderManager.js';
 import { fmt, COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('remind')
-    .setNameLocalizations({ 'zh-TW': '提醒' })
+    .setName('提醒')
     .setDescription('⏰ 皇家提醒系統：讓國王為你記住重要的大事！')
     .setDescriptionLocalizations({ 'zh-TW': '⏰ 皇家提醒系統：讓國王為你記住重要的大事！' })
     .addSubcommand(sub =>
-        sub.setName('set')
-            .setNameLocalizations({ 'zh-TW': '設定' })
+        sub.setName('設定')
             .setDescription('設定一個新的提醒')
             .addStringOption(opt =>
-                opt.setName('time')
-                    .setNameLocalizations({ 'zh-TW': '時間' })
+                opt.setName('時間')
                     .setDescription('提醒時間 (如 10m, 1h, 16:00)')
                     .setRequired(true)
             )
             .addStringOption(opt =>
-                opt.setName('content')
-                    .setNameLocalizations({ 'zh-TW': '內容' })
+                opt.setName('內容')
                     .setDescription('提醒的內容')
                     .setRequired(true)
             )
     )
     .addSubcommand(sub =>
-        sub.setName('list')
-            .setNameLocalizations({ 'zh-TW': '清單' })
+        sub.setName('清單')
             .setDescription('查看你目前所有的提醒')
     )
     .addSubcommand(sub =>
-        sub.setName('delete')
-            .setNameLocalizations({ 'zh-TW': '刪除' })
+        sub.setName('刪除')
             .setDescription('刪除指定的提醒')
             .addIntegerOption(opt =>
-                opt.setName('id')
-                    .setNameLocalizations({ 'zh-TW': '編號' })
+                opt.setName('編號')
                     .setDescription('提醒編號 (從清單查看)')
                     .setRequired(true)
             )
@@ -45,9 +38,9 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
 
-    if (subcommand === 'set') {
-        const timeStr = interaction.options.getString('time');
-        const content = interaction.options.getString('content');
+    if (subcommand === '設定') {
+        const timeStr = interaction.options.getString('時間');
+        const content = interaction.options.getString('內容');
         
         const targetTime = parseReminderTime(timeStr);
         if (!targetTime) {
@@ -74,7 +67,7 @@ export async function execute(interaction) {
         });
     }
 
-    if (subcommand === 'list') {
+    if (subcommand === '清單') {
         const reminders = getUserReminders(interaction.user.id);
         
         if (reminders.length === 0) {
@@ -108,8 +101,8 @@ export async function execute(interaction) {
         return interaction.reply({ embeds: [embed], flags: ['Ephemeral'] });
     }
 
-    if (subcommand === 'delete') {
-        const id = interaction.options.getInteger('id');
+    if (subcommand === '刪除') {
+        const id = interaction.options.getInteger('編號');
         const result = deleteReminder(id, interaction.user.id);
 
         if (result.changes === 0) {

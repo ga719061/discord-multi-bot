@@ -3,30 +3,27 @@ import { updateGuildSetting } from '../../utils/database.js';
 import { fmt, COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('setup-welcome')
-    .setNameLocalizations({ 'zh-TW': '設定歡迎' })
+    .setName('設定歡迎')
     .setDescription('🎺 迎賓大廳：設定當新子民加入時的專屬通報頻道與入城詞')
     .setDescriptionLocalizations({ 'zh-TW': '🎺 迎賓大廳：設定當新子民加入時的專屬通報頻道與入城詞' })
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addChannelOption((opt) =>
-        opt.setName('channel')
-            .setNameLocalizations({ 'zh-TW': '頻道' })
+        opt.setName('頻道')
             .setDescription('歡迎訊息傳送的頻道')
             .setDescriptionLocalizations({ 'zh-TW': '歡迎訊息傳送的頻道' })
             .addChannelTypes(ChannelType.GuildText)
             .setRequired(true)
     )
     .addStringOption((opt) =>
-        opt.setName('message')
-            .setNameLocalizations({ 'zh-TW': '訊息' })
+        opt.setName('訊息')
             .setDescription('自訂歡迎訊息 (可用 {user} {server} {count})')
             .setDescriptionLocalizations({ 'zh-TW': '自訂歡迎訊息 (可用 {user} {server} {count})' })
             .setRequired(false)
     );
 
 export async function execute(interaction) {
-    const channel = interaction.options.getChannel('channel');
-    const message = interaction.options.getString('message');
+    const channel = interaction.options.getChannel('頻道');
+    const message = interaction.options.getString('訊息');
 
     updateGuildSetting(interaction.guildId, 'welcome_channel', channel.id);
     if (message) {

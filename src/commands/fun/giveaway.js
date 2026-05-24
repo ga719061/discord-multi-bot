@@ -3,30 +3,26 @@ import { addGiveaway } from '../../utils/database.js';
 import { fmt, COLORS, ansiBlock } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('giveaway')
-    .setNameLocalizations({ 'zh-TW': '抽獎' })
+    .setName('抽獎')
     .setDescription('🎉 皇家賞賜：由國王親自主持並抽出幸運子民的福利活動')
     .setDescriptionLocalizations({ 'zh-TW': '🎉 皇家賞賜：由國王親自主持並抽出幸運子民的福利活動' })
     .addStringOption(option =>
-        option.setName('prize')
-            .setNameLocalizations({ 'zh-TW': '獎品' })
+        option.setName('獎品')
             .setDescription('要抽出的獎品')
             .setRequired(true))
     .addIntegerOption(option =>
-        option.setName('duration')
-            .setNameLocalizations({ 'zh-TW': '時間' })
+        option.setName('時間')
             .setDescription('抽獎持續時間 (分鐘)')
             .setRequired(true))
     .addIntegerOption(option =>
-        option.setName('winners')
-            .setNameLocalizations({ 'zh-TW': '名額' })
+        option.setName('名額')
             .setDescription('中獎人數')
             .setRequired(true));
 
 export async function execute(interaction) {
-    const prize = interaction.options.getString('prize'); 
-    const duration = interaction.options.getInteger('duration');
-    const winnersCount = interaction.options.getInteger('winners');
+    const prize = interaction.options.getString('獎品');
+    const duration = interaction.options.getInteger('時間');
+    const winnersCount = interaction.options.getInteger('名額');
 
     if (duration <= 0 || winnersCount <= 0) {
         return interaction.reply({ content: '🐕 汪！時間和名額都要大於 0 喔！', flags: ['Ephemeral'] });

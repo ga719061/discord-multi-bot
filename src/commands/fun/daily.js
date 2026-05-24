@@ -2,8 +2,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { fmt, COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('daily')
-    .setNameLocalizations({ 'zh-TW': '每日一汪' })
+    .setName('每日一汪')
     .setDescription('📜 每日一汪：領取吉吉國王為你準備的專屬祈福與金句')
     .setDescriptionLocalizations({ 'zh-TW': '📜 每日一汪：領取吉吉國王為你準備的專屬祈福與金句' });
 

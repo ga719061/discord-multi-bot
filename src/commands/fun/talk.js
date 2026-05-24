@@ -2,13 +2,11 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { fmt, COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('talk')
-    .setNameLocalizations({ 'zh-TW': '汪汪' })
+    .setName('汪汪')
     .setDescription('💬 陪王聊天：在純手動模式下與國王進行簡單的罐頭對話互動')
     .setDescriptionLocalizations({ 'zh-TW': '💬 陪王聊天：在純手動模式下與國王進行簡單的罐頭對話互動' })
     .addStringOption((opt) =>
-        opt.setName('content')
-            .setNameLocalizations({ 'zh-TW': '內容' })
+        opt.setName('內容')
             .setDescription('你想對國王說什麼？')
             .setDescriptionLocalizations({ 'zh-TW': '你想對國王說什麼？' })
             .setRequired(true)
@@ -58,7 +56,7 @@ const defaultReplies = [
 ];
 
 export async function execute(interaction) {
-    const content = interaction.options.getString('content') || '(空白)';
+    const content = interaction.options.getString('內容') || '(空白)';
 
     // 尋找關鍵字匹配
     let reply = null;

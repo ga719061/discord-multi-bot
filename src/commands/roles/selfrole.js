@@ -11,63 +11,53 @@ import { fmt, COLORS } from '../../utils/style.js';
 import { parseJsonArray } from '../../utils/jsonUtils.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('selfrole')
-    .setNameLocalizations({ 'zh-TW': '自助身分組' })
+    .setName('自助身分組')
     .setDescription('🐕🏷️ 下拉選單身分組佈告系統 (管理員專屬)')
     .setDescriptionLocalizations({ 'zh-TW': '🐕🏷️ 下拉選單身分組佈告系統 (管理員專屬)' })
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
     .addSubcommand(sub =>
-        sub.setName('add')
-            .setNameLocalizations({ 'zh-TW': '新增選項' })
+        sub.setName('新增選項')
             .setDescription('➕ 新增選項：將特定的身分組加入下拉清單，亦可設定門檻條件')
             .setDescriptionLocalizations({ 'zh-TW': '➕ 新增選項：將特定的身分組加入下拉清單，亦可設定門檻條件' })
             .addRoleOption(opt => 
-                opt.setName('role')
-                    .setNameLocalizations({ 'zh-TW': '身分組' })
+                opt.setName('身分組')
                     .setDescription('要加入的身分組')
                     .setDescriptionLocalizations({ 'zh-TW': '要加入的身分組' })
                     .setRequired(true))
             .addRoleOption(opt => 
-                opt.setName('requirement')
-                    .setNameLocalizations({ 'zh-TW': '門檻' })
+                opt.setName('門檻')
                     .setDescription('領取此身分組所需的先決身分組（選填）')
                     .setDescriptionLocalizations({ 'zh-TW': '領取此身分組所需的先決身分組（選填）' })
                     .setRequired(false))
     )
     .addSubcommand(sub =>
-        sub.setName('remove')
-            .setNameLocalizations({ 'zh-TW': '刪除選項' })
+        sub.setName('刪除選項')
             .setDescription('➖ 刪除選項：將身分組從未來的下拉清單選項中除名')
             .setDescriptionLocalizations({ 'zh-TW': '➖ 刪除選項：將身分組從未來的下拉清單選項中除名' })
             .addRoleOption(opt => 
-                opt.setName('role')
-                    .setNameLocalizations({ 'zh-TW': '身分組' })
+                opt.setName('身分組')
                     .setDescription('要移除的身分組')
                     .setDescriptionLocalizations({ 'zh-TW': '要移除的身分組' })
                     .setRequired(true))
     )
     .addSubcommand(sub =>
-        sub.setName('list')
-            .setNameLocalizations({ 'zh-TW': '列表總覽' })
+        sub.setName('列表總覽')
             .setDescription('📋 清單總覽：檢視目前設定好，準備隨時發布出去的選單內容')
             .setDescriptionLocalizations({ 'zh-TW': '📋 清單總覽：檢視目前設定好，準備隨時發布出去的選單內容' })
     )
     .addSubcommand(sub =>
-        sub.setName('send')
-            .setNameLocalizations({ 'zh-TW': '發布選單' })
+        sub.setName('發布選單')
             .setDescription('🚀 發布選單：在指定頻道正式貼出讓子民選擇的精美下拉佈告')
             .setDescriptionLocalizations({ 'zh-TW': '🚀 發布選單：在指定頻道正式貼出讓子民選擇的精美下拉佈告' })
             .addChannelOption(opt =>
-                opt.setName('channel')
-                    .setNameLocalizations({ 'zh-TW': '頻道' })
+                opt.setName('頻道')
                     .setDescription('發送訊息的頻道')
                     .setDescriptionLocalizations({ 'zh-TW': '發送訊息的頻道' })
                     .addChannelTypes(ChannelType.GuildText)
                     .setRequired(true)
             )
             .addStringOption(opt =>
-                opt.setName('description')
-                    .setNameLocalizations({ 'zh-TW': '描述' })
+                opt.setName('描述')
                     .setDescription('選單訊息的描述文字（選填）')
                     .setDescriptionLocalizations({ 'zh-TW': '選單訊息的描述文字（選填）' })
                     .setRequired(false)
@@ -84,9 +74,9 @@ export async function execute(interaction) {
         roles = roles.map(id => ({ id, requirement: null }));
     }
 
-    if (sub === 'add') {
-        const role = interaction.options.getRole('role');
-        const requirement = interaction.options.getRole('requirement');
+    if (sub === '新增選項') {
+        const role = interaction.options.getRole('身分組');
+        const requirement = interaction.options.getRole('門檻');
 
         // 安全性檢查：禁止具備管理權限的身分組
         const dangerousPermissions = [
@@ -120,8 +110,8 @@ export async function execute(interaction) {
         if (requirement) msg += ` (需備有 ${requirement} 才能領取)`;
         await interaction.reply({ content: msg, flags: ['Ephemeral'] });
 
-    } else if (sub === 'remove') {
-        const role = interaction.options.getRole('role');
+    } else if (sub === '刪除選項') {
+        const role = interaction.options.getRole('身分組');
         if (!roles.some(r => r.id === role.id)) {
             return interaction.reply({ content: '🐕 汪！這個身分組不在清單裡！', flags: ['Ephemeral'] });
         }
@@ -130,7 +120,7 @@ export async function execute(interaction) {
         updateGuildSetting(interaction.guildId, 'selfrole_roles', JSON.stringify(roles));
         await interaction.reply({ content: `🐕✅ 已將 ${role} 從自助清單移除！`, flags: ['Ephemeral'] });
 
-    } else if (sub === 'list') {
+    } else if (sub === '列表總覽') {
         if (roles.length === 0) {
             return interaction.reply({ content: '🐕 目前沒有設定任何自助身分組。', flags: ['Ephemeral'] });
         }
@@ -150,17 +140,17 @@ export async function execute(interaction) {
             .setColor(0xFFD700)
             .setTitle('🐕📋 自助身分組清單')
             .setDescription('```ansi\n' + (roleLines || '尚無設定') + '\n```')
-            .setFooter({ text: '🐕 使用 /selfrole send 發送到頻道供成員領取！' });
+            .setFooter({ text: '🐕 使用 /自助身分組 發布選單 發送到頻道供成員領取！' });
 
         await interaction.reply({ embeds: [embed], flags: ['Ephemeral'] });
 
-    } else if (sub === 'send') {
+    } else if (sub === '發布選單') {
         if (roles.length === 0) {
-            return interaction.reply({ content: '🐕 汪！請先使用 `/selfrole add` 加入身分組！', flags: ['Ephemeral'] });
+            return interaction.reply({ content: '🐕 汪！請先使用 `/自助身分組 新增選項` 加入身分組！', flags: ['Ephemeral'] });
         }
 
-        const channel = interaction.options.getChannel('channel');
-        const description = interaction.options.getString('description') || '請在下方下拉選單挑選你想要的身分組，勾選後即可自動領取，點擊已領取的可以取消～汪！';
+        const channel = interaction.options.getChannel('頻道');
+        const description = interaction.options.getString('描述') || '請在下方下拉選單挑選你想要的身分組，勾選後即可自動領取，點擊已領取的可以取消～汪！';
 
         const menuOptions = roles.map(r => {
             const role = interaction.guild.roles.cache.get(r.id);

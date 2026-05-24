@@ -2,21 +2,19 @@ import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.
 import { getUserLevel, getRankTitle } from '../../utils/database.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('userinfo')
-    .setNameLocalizations({ 'zh-TW': '查身家' })
+    .setName('查身家')
     .setDescription('🔍 身分調查：查看特定子民的詳細背景資料與入國註冊時間')
     .setDescriptionLocalizations({ 'zh-TW': '🔍 身分調查：查看特定子民的詳細背景資料與入國註冊時間' })
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addUserOption((opt) => 
-        opt.setName('user')
-            .setNameLocalizations({ 'zh-TW': '使用者' })
+        opt.setName('使用者')
             .setDescription('要調查的子民')
             .setDescriptionLocalizations({ 'zh-TW': '要調查的子民' })
             .setRequired(false)
     );
 
 export async function execute(interaction) {
-    const target = interaction.options.getUser('user') || interaction.user;
+    const target = interaction.options.getUser('使用者') || interaction.user;
     const member = await interaction.guild.members.fetch(target.id);
     const guildId = interaction.guildId;
 

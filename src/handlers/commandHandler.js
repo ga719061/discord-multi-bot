@@ -24,6 +24,9 @@ export async function loadCommands(client) {
 
                 if (command.data && command.execute) {
                     client.commands.set(command.data.name, command);
+                    for (const aliasData of command.aliases ?? []) {
+                        client.commands.set(aliasData.name, command);
+                    }
                     logger.debug(`  ✅ 指令載入: /${command.data.name} [${category}]`);
                 } else {
                     logger.warn(`  ⚠️ 指令跳過: ${file} (缺少 data 或 execute)`);

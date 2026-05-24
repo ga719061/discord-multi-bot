@@ -2,13 +2,11 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { fmt, COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
-    .setName('fortune')
-    .setNameLocalizations({ 'zh-TW': '占卜' })
+    .setName('占卜')
     .setDescription('🔮 皇家占卜：讓國王透過神秘的狗骨頭為你卜算吉凶')
     .setDescriptionLocalizations({ 'zh-TW': '🔮 皇家占卜：讓國王透過神秘的狗骨頭為你卜算吉凶' })
     .addStringOption((opt) =>
-        opt.setName('question')
-            .setNameLocalizations({ 'zh-TW': '問題' })
+        opt.setName('問題')
             .setDescription('想問國王什麼？（選填）')
             .setDescriptionLocalizations({ 'zh-TW': '想問國王什麼？（選填）' })
             .setRequired(false)
@@ -39,7 +37,7 @@ const yesNoAnswers = [
 ];
 
 export async function execute(interaction) {
-    const question = interaction.options.getString('question');
+    const question = interaction.options.getString('問題');
     const fortune = fortunes[Math.floor(Math.random() * fortunes.length)];
 
     const embed = new EmbedBuilder()
