@@ -2,19 +2,28 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'disc
 import { ansiBlock, COLORS } from '../../../utils/style.js';
 import { embedsToV2Payload } from '../../../utils/componentsV2.js';
 
-export function buildStatsReply(result, playerName, tag) {
+export function buildStatsReply(result, playerName, tag, options = {}) {
   const playerId = `${playerName}#${tag}`;
   const embed = result.status === 'ok'
     ? buildSuccessEmbed(result)
     : buildFailureEmbed(result, playerId);
-
-  const sourceButton = new ButtonBuilder()
-    .setLabel(`查看完整 ${result.source} 頁面`)
+  const buttons = [new ButtonBuilder()
+    .setLabel(`前往 ${result.source} 查看完整戰報`)
     .setStyle(ButtonStyle.Link)
-    .setURL(result.sourceUrl);
+    .setURL(result.sourceUrl)];
+  if (result.status === 'ok' && options.publishCustomId) {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(options.publishCustomId)
+        .setLabel(options.published ? '戰報已頒布' : options.expired ? '頒布期限已過' : '頒布至目前頻道')
+        .setStyle(options.published ? ButtonStyle.Success : ButtonStyle.Primary)
+        .setDisabled(Boolean(options.published || options.expired))
+    );
+  }
 
   return embedsToV2Payload([embed], {
-    actionRows: [new ActionRowBuilder().addComponents(sourceButton)],
+    actionRows: [new ActionRowBuilder().addComponents(buttons)],
+    ephemeral: options.ephemeral === true,
   });
 }
 
@@ -41,7 +50,7 @@ function buildValorantEmbed(result) {
     : [{ name: '🗺️ 近期亮點', value: recentLines, inline: false }];
   const embed = new EmbedBuilder()
     .setColor(0xFA4454)
-    .setAuthor({ name: `VALORANT | ${result.source} All Modes 公開戰績總覽` })
+    .setAuthor({ name: `皇家戰報廳 | VALORANT · ${result.source} All Modes` })
     .setTitle(`🎯 ${stats.playerId}`)
     .setURL(result.sourceUrl)
     .setDescription(ansiBlock([
@@ -69,12 +78,12 @@ function buildValorantEmbed(result) {
       { name: '🧩 特務表現', value: agentLines, inline: false },
       ...supplementaryFields,
     )
-    .setFooter({ text: `來源：${result.source} | 統計範圍：目前 Act · All Modes 公開資料` });
+    .setFooter({ text: `🐕 皇家戰報 | 來源：${result.source} | 目前 Act · All Modes 公開資料` });
 
   if (result.isFallback) {
     embed.addFields({
-      name: '資料備援',
-      value: 'OP.GG 無可顯示的公開資料，本次改以 ValoCheck All Modes 呈現。',
+      name: '皇家備援情報',
+      value: 'OP.GG 未呈上可顯示的公開資料，本王本次改由 ValoCheck All Modes 呈報。',
       inline: false,
     });
   }
@@ -92,7 +101,7 @@ function buildLolEmbed(result) {
     : '網站未呈報';
   const embed = new EmbedBuilder()
     .setColor(0x0AC8B9)
-    .setAuthor({ name: 'LEAGUE OF LEGENDS | 公開戰績總覽' })
+    .setAuthor({ name: '皇家戰報廳 | LEAGUE OF LEGENDS 公開戰績' })
     .setTitle(`⚔️ ${stats.playerId}`)
     .setURL(result.sourceUrl)
     .setDescription(ansiBlock([
@@ -107,7 +116,7 @@ function buildLolEmbed(result) {
       { name: '🏅 彈性積分', value: flexText, inline: false },
       { name: '🌟 常用英雄表現', value: formatLolChampions(stats.topChampions), inline: false },
     )
-    .setFooter({ text: `來源：${result.source} | 統計範圍：目前賽季公開資料` });
+    .setFooter({ text: `🐕 皇家戰報 | 來源：${result.source} | 目前賽季公開資料` });
 
   if (stats.avatarUrl) embed.setThumbnail(stats.avatarUrl);
 
@@ -117,22 +126,22 @@ function buildLolEmbed(result) {
 function buildFailureEmbed(result, playerId) {
   const copy = {
     not_found: {
-      title: '找不到公開戰績',
+      title: '皇家史冊找不到公開戰績',
       color: 0x99AAB5,
-      description: '可能是 Riot ID 輸入錯誤、帳號未公開，或來源網站尚未收錄資料。',
+      description: '可能是 Riot ID 輸入錯誤、帳號未公開，或情報來源尚未收錄資料。',
     },
     blocked: {
-      title: '來源網站暫時拒絕查詢',
+      title: '情報使者暫時被來源網站擋下',
       color: 0xF1C40F,
-      description: '公開戰績來源目前限制了自動查詢，請使用下方按鈕直接開啟網站查看。',
+      description: '公開戰績來源目前限制自動查詢，仍可使用下方按鈕親自前往查看。',
     },
     unavailable: {
-      title: '戰績來源暫時無法連線',
+      title: '皇家戰報線路暫時不通',
       color: 0xE67E22,
-      description: '來源網站可能維護中或連線逾時，稍後再查即可。',
+      description: '來源網站可能維護中或連線逾時，請稍後再向本王查詢。',
     },
     parse_error: {
-      title: '公開頁面格式已變更',
+      title: '公開戰報卷宗格式已變更',
       color: 0xE67E22,
       description: '本王暫時讀不懂網站的新排版，但仍可由下方按鈕前往查看。',
     },
@@ -144,7 +153,7 @@ function buildFailureEmbed(result, playerId) {
     .setTitle(`🐕 ${state.title}`)
     .setDescription(`**${playerId}**\n${state.description}`)
     .addFields({ name: '資料來源', value: result.source, inline: true })
-    .setFooter({ text: '本功能只讀取第三方網站公開顯示的資料，不使用 API Key。' });
+    .setFooter({ text: '🐕 本王只閱覽第三方網站公開資料，不使用 API Key。' });
 }
 
 function value(content) {

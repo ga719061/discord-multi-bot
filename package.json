@@ -5,19 +5,19 @@
   "main": "src/bot.js",
   "type": "module",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "scripts": {
     "start": "node src/bot.js",
     "deploy": "node scripts/deploy-commands.js",
     "dev": "node --watch src/bot.js",
-    "test": "node --test tests/jsonUtils.test.js tests/guildDiagnostics.test.js tests/steamDeals.test.js tests/commandManifest.test.js tests/commandSync.test.js tests/aiMentions.test.js tests/helpComponentsV2.test.js tests/componentsV2Migration.test.js tests/settingsPanel.test.js src/commands/esports/__tests__/embed.test.js src/commands/esports/__tests__/providers.test.js",
+    "test": "node --test tests/jsonUtils.test.js tests/guildDiagnostics.test.js tests/steamDeals.test.js tests/steamSearch.test.js tests/commandManifest.test.js tests/commandSync.test.js tests/aiMentions.test.js tests/aiChat.test.js tests/helpComponentsV2.test.js tests/componentsV2Migration.test.js tests/settingsPanel.test.js src/commands/esports/__tests__/embed.test.js src/commands/esports/__tests__/providers.test.js",
     "verify:commands": "node scripts/verify-import.js",
     "check": "npm run test && npm run verify:commands",
     "postinstall": "npm rebuild better-sqlite3"
   },
   "dependencies": {
-    "@google/generative-ai": "^0.24.0",
+    "@google/genai": "^2.6.0",
     "better-sqlite3": "^12.6.2",
     "cheerio": "^1.0.0",
     "discord.js": "^14.25.1",

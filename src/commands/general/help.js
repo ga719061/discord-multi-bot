@@ -25,49 +25,49 @@ const CATEGORY_META = {
     general: {
         label: '一般',
         emoji: '📘',
-        description: '基礎工具、提醒與連線測試。',
+        description: '御前基礎工具、提醒委託與連線測試。',
         order: 10,
         group: 'public'
     },
     fun: {
         label: '娛樂',
         emoji: '🎲',
-        description: '互動、小遊戲、投票與每日運勢。',
+        description: '陪伴本王互動、小遊戲、投票與每日運勢。',
         order: 20,
         group: 'public'
     },
     leveling: {
         label: '等級',
         emoji: '🏅',
-        description: '查看等級與排行榜。',
+        description: '查看子民爵位與王國排行榜。',
         order: 30,
         group: 'public'
     },
     steam: {
         label: 'Steam',
         emoji: '🎮',
-        description: '查詢遊戲情報。',
+        description: '開啟皇家採購簿，私下查詢 Steam 情報。',
         order: 40,
         group: 'public'
     },
     esports: {
         label: '戰績',
         emoji: '📊',
-        description: '查詢特戰英豪與英雄聯盟公開賽季戰績。',
+        description: '進入皇家戰報廳，私下查詢公開賽季戰績。',
         order: 45,
         group: 'public'
     },
     welcome: {
         label: '歡迎',
         emoji: '🎺',
-        description: '新成員歡迎訊息設定。',
+        description: '皇家迎賓佈告與新成員禮遇設定。',
         order: 50,
         group: 'public'
     },
     admin: {
         label: '管理',
         emoji: '🛡️',
-        description: '集中設定、公告、伺服器資訊與成員管理工具。',
+        description: '皇家設定、頒布聖旨、領地視察與子民名冊工具。',
         order: 60,
         group: 'admin',
         permission: PermissionFlagsBits.ManageGuild
@@ -75,7 +75,7 @@ const CATEGORY_META = {
     logging: {
         label: '日誌',
         emoji: '📝',
-        description: '伺服器事件紀錄與日誌頻道設定。',
+        description: '史官事件紀錄與日誌頻道設定。',
         order: 80,
         group: 'admin',
         permission: PermissionFlagsBits.ManageGuild
@@ -83,7 +83,7 @@ const CATEGORY_META = {
     roles: {
         label: '身分組',
         emoji: '🏷️',
-        description: '自助身分組與按鈕身分組設定。',
+        description: '皇家自助身分領取與反應身分站設定。',
         order: 90,
         group: 'admin',
         permission: PermissionFlagsBits.ManageRoles
@@ -104,9 +104,9 @@ const COMMAND_META = {
     汪汪: { label: '陪王聊天', examples: ['/汪汪 內容:國王今天心情如何'] },
     等級: { label: '爵位查詢', examples: ['/等級', '/等級 使用者:@朋友'] },
     排行榜: { label: '排行榜', examples: ['/排行榜'] },
-    特價查詢: { label: '特價查詢', examples: ['/特價查詢 搜尋 遊戲名稱:Stardew Valley'] },
-    戰績: { label: '公開戰績查詢', examples: ['/戰績 特戰英豪 玩家名稱:SEN TenZ 標籤:2906', '/戰績 英雄聯盟 玩家名稱:Hide on bush 標籤:KR1 區服:kr'] },
-    設定: { label: '集中設定面板', examples: ['/設定'] },
+    特價查詢: { label: '皇家採購查詢', examples: ['/特價查詢（開啟彈窗後輸入 Stardew Valley）'] },
+    戰績: { label: '皇家戰報查詢', examples: ['/戰績（選擇遊戲後於彈窗輸入 Riot ID）'] },
+    設定: { label: '皇家管理控制台', examples: ['/設定'] },
 };
 
 const OPTION_TYPE_NAMES = {
@@ -383,8 +383,8 @@ function renderHome(context) {
             .addSeparatorComponents(v2Divider())
             .addTextDisplayComponents(v2Text([
                 '-# ADMINISTRATOR ACCESS  /  CONTROL CENTER',
-                '## ⚙️ 皇家管理控制台',
-                '集中查看設定健康度、服務狀態與公開管理操作。',
+                '## 🐕👑 皇家管理控制台',
+                '集中巡視領地健康度、服務狀態與公開管理操作。',
                 '',
                 ansiBlock([
                     { color: COLORS.GOLD, text: '[ ACCESS ] Administrator 專用' },
@@ -420,7 +420,7 @@ function renderCategory(context, category, page) {
         ].join('\n')))
         .addSeparatorComponents(v2Divider())
         .addTextDisplayComponents(v2Text([
-            '## 📄 分類狀態',
+            '## 📄 皇家分類卷宗',
             ansiBlock([
                 { color: COLORS.GOLD, text: `[分類] ${category.label}` },
                 { color: COLORS.CYAN, text: `[頁數] ${safePage + 1} / ${maxPage + 1}` },
@@ -465,7 +465,7 @@ function renderDetail(context, category, page, commandIndex) {
         ].join('\n')))
         .addSeparatorComponents(v2Divider())
         .addTextDisplayComponents(v2Text([
-            '## 📌 指令資訊',
+            '## 📌 御前指令資訊',
             ansiBlock([
                 { color: COLORS.GOLD, text: `[指令] ${command.name}` },
                 { color: COLORS.CYAN, text: `[分類] ${category.label}` },

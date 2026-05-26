@@ -3,7 +3,7 @@ import { fileURLToPath } from 'url';
 import path from 'path';
 import fs from 'fs';
 import { parseJsonArray } from './jsonUtils.js';
-import { DEFAULT_AI_MODEL } from './aiConfig.js';
+import { DEFAULT_AI_MODEL, normalizeAiModel } from './aiConfig.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
@@ -297,8 +297,13 @@ export function getAiSettings(guildId) {
     db.prepare('INSERT INTO ai_settings (guild_id, model) VALUES (?, ?)').run(guildId, DEFAULT_AI_MODEL);
     row = db.prepare('SELECT * FROM ai_settings WHERE guild_id = ?').get(guildId);
   }
+  const model = normalizeAiModel(row.model);
+  if (model !== row.model) {
+    db.prepare('UPDATE ai_settings SET model = ? WHERE guild_id = ?').run(model, guildId);
+  }
   return {
     ...row,
+    model,
     whitelist: parseJsonArray(row.whitelist, []),
     admin_ids: parseJsonArray(row.admin_ids, []),
     search_enabled: !!row.search_enabled,
@@ -312,7 +317,8 @@ export function updateAiSetting(guildId, key, value) {
   if (!ALLOWED_AI_KEYS.includes(key)) throw new Error(`不可許的欄位名稱: ${key}`);
   const db = getDb();
   getAiSettings(guildId);
-  db.prepare(`UPDATE ai_settings SET ${key} = ? WHERE guild_id = ?`).run(value, guildId);
+  const normalizedValue = key === 'model' ? normalizeAiModel(value) : value;
+  db.prepare(`UPDATE ai_settings SET ${key} = ? WHERE guild_id = ?`).run(normalizedValue, guildId);
 }
 
 export function isAiEnabled(guildId) {

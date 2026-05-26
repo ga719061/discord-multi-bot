@@ -31,7 +31,7 @@ import {
 } from '../../utils/database.js';
 import { openAnnouncementComposer } from '../../utils/announcementTools.js';
 import { DEFAULT_AI_PROMPT } from '../../utils/aiChat.js';
-import { DEFAULT_AI_MODEL } from '../../utils/aiConfig.js';
+import { AI_MODELS, DEFAULT_AI_MODEL } from '../../utils/aiConfig.js';
 import { buildGuildDiagnostics } from '../../utils/guildDiagnostics.js';
 import { parseJsonObject } from '../../utils/jsonUtils.js';
 import { normalizeSelfRoleSettings, validateAssignableRole } from '../../utils/roleSettings.js';
@@ -47,13 +47,6 @@ const LOG_TYPES = [
   { value: 'voice', label: '語音狀態' },
   { value: 'thread', label: '討論串監控' },
 ];
-const AI_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
-  'gemini-3-flash-preview',
-  'gemini-3.1-pro-preview',
-  'gemini-3.1-flash-lite-preview',
-];
 const MODULE_STYLE = {
   '歡迎訊息': { section: 'CONFIGURATION / WELCOME', color: UI_COLORS.ROYAL },
   '紀錄設定': { section: 'CONFIGURATION / LOGGING', color: UI_COLORS.INFO },
@@ -68,6 +61,20 @@ const MODULE_STYLE = {
   '發布公告': { section: 'OPERATIONS / ANNOUNCEMENT', color: UI_COLORS.ROYAL },
   '成員查詢': { section: 'OPERATIONS / MEMBER', color: UI_COLORS.INFO },
 };
+const MODULE_TITLES = {
+  '歡迎訊息': '🎺 皇家迎賓佈告 | 歡迎訊息',
+  '紀錄設定': '📜 皇家史官簿 | 紀錄設定',
+  '等級系統': '🏅 爵位晉升公告 | 等級系統',
+  'Steam 推播': '🛒 皇家採購推播 | Steam',
+  '自助身分組': '🏷️ 皇家自助身分領取 | 自助身分組',
+  '反應身分組': '🎭 皇家反應身分站 | 反應身分組',
+  'AI 設定': '🧠 國王智慧核心 | AI 設定',
+  'AI 存取驗證': '🔐 御前智慧驗證 | AI 存取驗證',
+  '伺服器資訊': '🏰 領地視察 | 伺服器資訊',
+  '機器人狀態': '🏥 大內健康報告 | 機器人狀態',
+  '發布公告': '📜 頒布聖旨 | 發布公告',
+  '成員查詢': '🔎 子民名冊 | 成員查詢',
+};
 
 export const data = new SlashCommandBuilder()
   .setName('設定')
@@ -76,7 +83,7 @@ export const data = new SlashCommandBuilder()
 
 export async function execute(interaction) {
   if (!isAdministrator(interaction)) {
-    return interaction.reply(v2Notice('權限不足', '只有具有 Administrator 權限的管理員可以使用 `/設定`。', UI_COLORS.DANGER));
+    return interaction.reply(v2Notice('🛡️ 御前通行證不足', '只有具有 Administrator 權限的管理員可以進入皇家管理控制台。', UI_COLORS.DANGER));
   }
   const context = createPanelContext(interaction);
   const home = await renderView(context);
@@ -90,7 +97,7 @@ export async function execute(interaction) {
 
 export async function openSettingsPanelFromHelp(interaction, onReturnToHelp) {
   if (!isAdministrator(interaction)) {
-    return interaction.reply(v2Notice('權限不足', '只有具有 Administrator 權限的管理員可以開啟設定中心。', UI_COLORS.DANGER));
+    return interaction.reply(v2Notice('🛡️ 御前通行證不足', '只有具有 Administrator 權限的管理員可以開啟皇家管理控制台。', UI_COLORS.DANGER));
   }
   const context = createPanelContext(interaction, { onReturnToHelp });
   const home = await renderView(context);
@@ -123,16 +130,16 @@ function attachPanelCollector(message, context) {
   collector.on('collect', async (component) => {
     try {
       if (component.user.id !== context.userId) {
-        await component.reply(v2Notice('無法操作此面板', '請使用 `/設定` 開啟自己的管理面板。', UI_COLORS.WARNING));
+        await component.reply(v2Notice('🐕 這份御前面板不屬於你', '請使用 `/設定` 開啟自己的皇家管理控制台。', UI_COLORS.WARNING));
         return;
       }
       if (!isAdministrator(component)) {
-        await component.reply(v2Notice('管理權限已失效', '你目前沒有 Administrator 權限，無法繼續修改設定。', UI_COLORS.DANGER));
+        await component.reply(v2Notice('🛡️ 御前權限已失效', '你目前沒有 Administrator 權限，無法繼續修改皇家設定。', UI_COLORS.DANGER));
         return;
       }
       await routeComponent(component, context);
     } catch (error) {
-      const payload = v2Notice('設定操作失敗', `無法完成此次操作：${error.message}`, UI_COLORS.DANGER);
+      const payload = v2Notice('🐕💥 皇家設定操作失敗', `本王無法完成此次操作：${error.message}`, UI_COLORS.DANGER);
       if (component.replied || component.deferred) await component.followUp(payload).catch(() => {});
       else await component.reply(payload).catch(() => {});
     }
@@ -199,15 +206,15 @@ async function handleChannelSelect(component, context, action) {
   const channelId = component.values[0];
   if (action === 'welcome_channel') {
     updateGuildSetting(context.guild.id, 'welcome_channel', channelId);
-    context.notice = '歡迎頻道已更新。';
+    context.notice = '皇家迎賓頻道已更新。';
   }
   if (action === 'log_channel') {
     updateGuildSetting(context.guild.id, 'log_channel', channelId);
-    context.notice = '日誌頻道已更新。';
+    context.notice = '史官日誌頻道已更新。';
   }
   if (action === 'steam_channel') {
     updateGuildSetting(context.guild.id, 'steam_deal_channel', channelId);
-    context.notice = 'Steam 推播頻道已更新。';
+    context.notice = '皇家採購推播頻道已更新。';
   }
   if (action === 'self_publish_channel') context.pending.selfPublishChannel = channelId;
   if (action === 'reaction_channel') context.pending.reactionChannel = channelId;
@@ -220,12 +227,12 @@ async function handleStringSelect(component, context, action) {
   if (action === 'log_types') {
     const toggles = Object.fromEntries(LOG_TYPES.map((type) => [type.value, component.values.includes(type.value) ? 1 : 0]));
     updateGuildSetting(context.guild.id, 'log_toggles', JSON.stringify(toggles));
-    context.notice = '紀錄類別已更新。';
+    context.notice = '史官紀錄類別已更新。';
   }
   if (action === 'ai_model') {
     if (!requireAiUnlock(component, context)) return;
     updateAiSetting(context.guild.id, 'model', component.values[0]);
-    context.notice = 'AI 模型已更新。';
+    context.notice = '國王智慧核心模型已更新。';
   }
   if (action === 'reaction_delete_target') context.pending.reactionDeleteMessage = component.values[0];
   if (action === 'announce_mention') {
@@ -239,7 +246,7 @@ async function handleRoleSelect(component, context, action) {
   const role = context.guild.roles.cache.get(component.values[0]);
   if (action === 'self_target') {
     const error = validateAssignableRole(context.guild, role);
-    if (error) return component.reply(v2Notice('無法加入身分組', error, UI_COLORS.WARNING));
+    if (error) return component.reply(v2Notice('🏷️ 無法列入皇家領取名冊', error, UI_COLORS.WARNING));
     context.pending.selfTarget = role.id;
     context.pending.selfRequirement = null;
   }
@@ -247,7 +254,7 @@ async function handleRoleSelect(component, context, action) {
   if (action === 'self_remove') {
     const roles = getSelfRoles(context.guild.id).filter((entry) => entry.id !== role?.id);
     updateGuildSetting(context.guild.id, 'selfrole_roles', JSON.stringify(roles));
-    context.notice = '自助身分組選項已移除。';
+    context.notice = '皇家自助身分領取選項已移除。';
   }
   if (action === 'announce_role') {
     context.pending.announceRole = role?.id || null;
@@ -268,11 +275,11 @@ async function handleUserSelect(component, context, action) {
 async function handleButton(component, context, action, value) {
   if (action === 'announce_compose') {
     if (!context.pending.announceChannel) {
-      return component.reply(v2Notice('尚未選擇公告頻道', '請先選擇公告要發布到哪個文字頻道。', UI_COLORS.WARNING));
+      return component.reply(v2Notice('📜 尚未選擇頒旨頻道', '請先選擇公告要張貼到哪個文字頻道。', UI_COLORS.WARNING));
     }
     const mention = context.pending.announceMention || 'none';
     if (mention === 'role' && !context.pending.announceRole) {
-      return component.reply(v2Notice('尚未選擇提及身分組', '請先選擇公告要提及的身分組，或改選其他提及模式。', UI_COLORS.WARNING));
+      return component.reply(v2Notice('📜 尚未選擇召見身分組', '請先選擇公告要提及的身分組，或改選其他提及模式。', UI_COLORS.WARNING));
     }
     const mentionText = mention === 'role'
       ? `<@&${context.pending.announceRole}>`
@@ -284,26 +291,26 @@ async function handleButton(component, context, action, value) {
   }
   if (action === 'level') {
     updateGuildSetting(context.guild.id, 'level_up_announcement_enabled', value === 'on' ? 1 : 0);
-    context.notice = '等級公告狀態已更新。';
+    context.notice = '爵位晉升公告狀態已更新。';
   }
   if (action === 'steam_toggle') {
     updateGuildSetting(context.guild.id, 'steam_deal_enabled', value === 'on' ? 1 : 0);
-    context.notice = 'Steam 推播狀態已更新。';
+    context.notice = '皇家採購推播狀態已更新。';
   }
   if (action === 'self_add') {
     if (!context.pending.selfTarget) {
-      return component.reply(v2Notice('尚未選取身分組', '請先從選單選取要加入的身分組。', UI_COLORS.WARNING));
+      return component.reply(v2Notice('🏷️ 尚未挑選可領取身分', '請先從選單挑選要加入皇家自助領取頁的身分組。', UI_COLORS.WARNING));
     }
     const roles = getSelfRoles(context.guild.id);
     if (roles.some((entry) => entry.id === context.pending.selfTarget)) {
-      return component.reply(v2Notice('清單未變更', '選取的身分組已在自助清單中。', UI_COLORS.WARNING));
+      return component.reply(v2Notice('🏷️ 名冊未變更', '選取的身分組已在皇家自助領取名冊中。', UI_COLORS.WARNING));
     }
     if (roles.length >= 25) {
-      return component.reply(v2Notice('選單已滿', '自助身分組最多只能提供 25 個選項。', UI_COLORS.WARNING));
+      return component.reply(v2Notice('🏷️ 領取名冊已滿', '皇家自助身分領取頁最多只能提供 25 個選項。', UI_COLORS.WARNING));
     }
     roles.push({ id: context.pending.selfTarget, requirement: context.pending.selfRequirement || null });
     updateGuildSetting(context.guild.id, 'selfrole_roles', JSON.stringify(roles));
-    context.notice = '自助身分組選項已新增。';
+    context.notice = '皇家自助身分領取選項已新增。';
     context.pending.selfTarget = null;
     context.pending.selfRequirement = null;
   }
@@ -311,17 +318,17 @@ async function handleButton(component, context, action, value) {
   if (action === 'ai_toggle') {
     if (!requireAiUnlock(component, context)) return;
     updateAiSetting(context.guild.id, value, getAiSettings(context.guild.id)[value] ? 0 : 1);
-    context.notice = 'AI 開關已更新。';
+    context.notice = '國王智慧核心開關已更新。';
   }
   if (action === 'ai_user_add' || action === 'ai_user_remove') {
     if (!requireAiUnlock(component, context)) return;
-    if (!context.pending.aiUser) return component.reply(v2Notice('尚未選取使用者', '請先選擇白名單使用者。', UI_COLORS.WARNING));
+    if (!context.pending.aiUser) return component.reply(v2Notice('🧠 尚未選取子民', '請先選擇要調整的御准白名單成員。', UI_COLORS.WARNING));
     const settings = getAiSettings(context.guild.id);
     const whitelist = new Set(settings.whitelist);
     if (action === 'ai_user_add') whitelist.add(context.pending.aiUser);
     else whitelist.delete(context.pending.aiUser);
     updateAiSetting(context.guild.id, 'whitelist', JSON.stringify([...whitelist]));
-    context.notice = 'AI 白名單已更新。';
+    context.notice = 'AI 御准白名單已更新。';
   }
   if (action === 'prepare_confirm') {
     context.pending.confirmReturnView = context.view;
@@ -341,53 +348,53 @@ async function openModal(component, context, type) {
   }).catch(() => null);
   if (!submit) return;
   if (!isAdministrator(submit)) {
-    return submit.reply(v2Notice('管理權限已失效', '你目前沒有 Administrator 權限。', UI_COLORS.DANGER));
+    return submit.reply(v2Notice('🛡️ 御前權限已失效', '你目前沒有 Administrator 權限。', UI_COLORS.DANGER));
   }
 
   if (type === 'ai_unlock') {
     const configuredPassword = process.env.AI_ADMIN_PASSWORD;
     const suppliedPassword = submit.fields.getTextInputValue('password');
     if (!configuredPassword) {
-      context.notice = { label: 'SETUP', color: COLORS.GOLD, text: '尚未配置 AI 管理密碼，請先設定環境變數。' };
+      context.notice = { label: 'SETUP', color: COLORS.GOLD, text: '尚未配置御前 AI 管理密碼，請先設定環境變數。' };
     } else if (suppliedPassword !== configuredPassword) {
-      context.notice = { label: 'DENIED', color: COLORS.RED, text: '管理密碼錯誤，AI 設定仍處於鎖定狀態。' };
+      context.notice = { label: 'DENIED', color: COLORS.RED, text: '御前管理密碼錯誤，AI 設定仍處於鎖定狀態。' };
     } else {
       const settings = getAiSettings(context.guild.id);
       const adminIds = new Set(settings.admin_ids);
       adminIds.add(context.userId);
       updateAiSetting(context.guild.id, 'admin_ids', JSON.stringify([...adminIds]));
-      context.notice = { label: 'ACCESS', color: COLORS.GREEN, text: '身分驗證成功，AI 管理權限已解鎖。' };
+      context.notice = { label: 'ACCESS', color: COLORS.GREEN, text: '御前身分驗證成功，AI 管理權限已解鎖。' };
     }
   }
   if (type === 'welcome_message') {
     updateGuildSetting(context.guild.id, 'welcome_message', submit.fields.getTextInputValue('value').trim() || null);
-    context.notice = '歡迎訊息已更新。';
+    context.notice = '皇家迎賓訊息已更新。';
   }
   if (type === 'steam_time') {
     const time = submit.fields.getTextInputValue('value').trim();
     if (!isValidSteamDealTime(time)) {
-      return submit.reply(v2Notice('時間格式錯誤', '請使用 `HH:mm` 格式，例如 `20:00`。', UI_COLORS.WARNING));
+      return submit.reply(v2Notice('🛒 投放時辰格式錯誤', '請使用 `HH:mm` 格式，例如 `20:00`。', UI_COLORS.WARNING));
     }
     updateGuildSetting(context.guild.id, 'steam_deal_time', time);
-    context.notice = '每日推播時間已更新。';
+    context.notice = '皇家每日採購推播時間已更新。';
   }
   if (type === 'self_description') context.pending.selfDescription = submit.fields.getTextInputValue('value').trim();
   if (type === 'reaction_create') {
     if (!context.pending.reactionChannel) {
-      return submit.reply(v2Notice('尚未選擇頻道', '請先在反應身分組頁面選擇發布頻道。', UI_COLORS.WARNING));
+      return submit.reply(v2Notice('🎭 尚未選擇發布頻道', '請先在皇家反應身分站頁面選擇發布頻道。', UI_COLORS.WARNING));
     }
     const result = parseReactionPairs(context.guild, submit.fields.getTextInputValue('pairs'));
-    if (result.error) return submit.reply(v2Notice('反應站設定無效', result.error, UI_COLORS.WARNING));
+    if (result.error) return submit.reply(v2Notice('🎭 皇家反應站設定無效', result.error, UI_COLORS.WARNING));
     context.pending.reactionPairs = result.pairs;
     context.pending.reactionTitle = submit.fields.getTextInputValue('title').trim();
   }
   if (type === 'ai_prompt') {
     updateAiSetting(context.guild.id, 'system_prompt', submit.fields.getTextInputValue('value').trim() || DEFAULT_AI_PROMPT);
-    context.notice = 'AI 角色提示詞已更新。';
+    context.notice = '國王智慧人格設定已更新。';
   }
   if (type === 'ai_party') {
     if (!context.pending.aiPartyChannel) {
-      return submit.reply(v2Notice('尚未選擇頻道', '請先選擇派對模式的目標頻道。', UI_COLORS.WARNING));
+      return submit.reply(v2Notice('🎉 尚未選擇宴會廳', '請先選擇 AI 派對模式的目標頻道。', UI_COLORS.WARNING));
     }
     const minutes = Number.parseInt(submit.fields.getTextInputValue('minutes'), 10);
     if (!Number.isSafeInteger(minutes) || minutes < 1) {
@@ -402,55 +409,55 @@ function buildModal(context, type) {
   const modal = new ModalBuilder().setCustomId(id(context, `modal_submit_${type}`));
   if (type === 'welcome_message') {
     const current = getGuildSettings(context.guild.id).welcome_message || '';
-    return modal.setTitle('編輯歡迎訊息').addComponents(textRow('value', '歡迎訊息（可留空恢復預設）', current, TextInputStyle.Paragraph, false));
+    return modal.setTitle('編輯皇家迎賓佈告').addComponents(textRow('value', '迎賓內容（可留空恢復預設）', current, TextInputStyle.Paragraph, false));
   }
   if (type === 'steam_time') {
     const current = getGuildSettings(context.guild.id).steam_deal_time || '20:00';
     return modal.setTitle('設定每日推播時間').addComponents(textRow('value', '台灣時間 HH:mm', current, TextInputStyle.Short));
   }
   if (type === 'self_description') {
-    return modal.setTitle('發布選單文字').addComponents(textRow('value', '選單介紹', context.pending.selfDescription || '請在下方選擇你想領取的身分組。', TextInputStyle.Paragraph));
+    return modal.setTitle('皇家自助身分領取佈告').addComponents(textRow('value', '領取頁介紹', context.pending.selfDescription || '子民請從下方選單選擇想領取或取消的身分組。', TextInputStyle.Paragraph));
   }
   if (type === 'reaction_create') {
-    return modal.setTitle('建立反應身分組站').addComponents(
+    return modal.setTitle('建立皇家反應身分站').addComponents(
       textRow('pairs', 'emoji:身分組ID，多組以逗號分隔', '', TextInputStyle.Paragraph),
       textRow('title', '標題（選填）', '', TextInputStyle.Short, false)
     );
   }
   if (type === 'ai_unlock') {
-    return modal.setTitle('AI 管理身分驗證').addComponents(textRow('password', '管理密碼', '', TextInputStyle.Short));
+    return modal.setTitle('御前 AI 管理身分驗證').addComponents(textRow('password', '御前管理密碼', '', TextInputStyle.Short));
   }
   if (type === 'ai_prompt') {
-    return modal.setTitle('編輯 AI 角色設定').addComponents(textRow('value', '提示詞（留空恢復預設）', '', TextInputStyle.Paragraph, false));
+    return modal.setTitle('編輯國王智慧人格').addComponents(textRow('value', '提示詞（留空恢復預設）', '', TextInputStyle.Paragraph, false));
   }
-  return modal.setTitle('啟動 AI 派對模式').addComponents(textRow('minutes', '持續分鐘', '30', TextInputStyle.Short));
+  return modal.setTitle('啟動皇家 AI 宴會').addComponents(textRow('minutes', '持續分鐘', '30', TextInputStyle.Short));
 }
 
 async function executeConfirmation(component, context) {
   const type = context.pending.confirm;
   if (!type) return updateView(component, context);
   if (type === 'ai_party' && !aiUnlocked(context)) {
-    return component.reply(v2Notice('AI 設定已鎖定', '請回到控制台的 AI 頁完成管理身分驗證。', UI_COLORS.DANGER));
+    return component.reply(v2Notice('🔐 國王智慧核心已鎖定', '請回到皇家管理控制台的 AI 頁完成御前身分驗證。', UI_COLORS.DANGER));
   }
 
   if (type === 'self_publish') {
-    if (!context.pending.selfPublishChannel) return component.reply(v2Notice('尚未選擇頻道', '請先選擇發布頻道。', UI_COLORS.WARNING));
+    if (!context.pending.selfPublishChannel) return component.reply(v2Notice('🏷️ 尚未選擇張貼頻道', '請先選擇皇家領取佈告的發布頻道。', UI_COLORS.WARNING));
     const channel = await context.guild.channels.fetch(context.pending.selfPublishChannel).catch(() => null);
-    if (!channel?.isTextBased()) return component.reply(v2Notice('頻道無效', '選取的頻道無法發布訊息。', UI_COLORS.WARNING));
+    if (!channel?.isTextBased()) return component.reply(v2Notice('🏷️ 張貼頻道無效', '選取的頻道無法發布皇家領取佈告。', UI_COLORS.WARNING));
     await component.deferUpdate();
     await publishSelfRoleMenu(context.guild, channel, getSelfRoles(context.guild.id), context.pending.selfDescription);
   }
   if (type === 'reaction_create') {
     if (!context.pending.reactionChannel || !context.pending.reactionPairs) {
-      return component.reply(v2Notice('設定尚未完成', '請選擇頻道並填寫反應配對。', UI_COLORS.WARNING));
+      return component.reply(v2Notice('🎭 皇家站點尚未完成', '請選擇頻道並填寫反應配對。', UI_COLORS.WARNING));
     }
     const channel = await context.guild.channels.fetch(context.pending.reactionChannel).catch(() => null);
-    if (!channel?.isTextBased()) return component.reply(v2Notice('頻道無效', '選取的頻道無法發布訊息。', UI_COLORS.WARNING));
+    if (!channel?.isTextBased()) return component.reply(v2Notice('🎭 站點頻道無效', '選取的頻道無法發布皇家反應身分站。', UI_COLORS.WARNING));
     await component.deferUpdate();
     await createReactionStation(context.guild, channel, context.pending.reactionPairs, context.pending.reactionTitle);
   }
   if (type === 'reaction_delete') {
-    if (!context.pending.reactionDeleteMessage) return component.reply(v2Notice('尚未選擇站點', '請先選取要刪除的反應站。', UI_COLORS.WARNING));
+    if (!context.pending.reactionDeleteMessage) return component.reply(v2Notice('🎭 尚未選擇站點', '請先選取要撤除的皇家反應身分站。', UI_COLORS.WARNING));
     await component.deferUpdate();
     await deleteReactionStation(context.guild, context.pending.reactionDeleteMessage);
   }
@@ -459,7 +466,7 @@ async function executeConfirmation(component, context) {
     try {
       await publishSteamDeals(context.guild);
     } catch (error) {
-      await component.followUp(v2Notice('Steam 投放失敗', getSteamFailureMessage(error), UI_COLORS.WARNING));
+      await component.followUp(v2Notice('🛒 皇家採購榜投放失敗', getSteamFailureMessage(error), UI_COLORS.WARNING));
     }
     context.pending.confirm = null;
     context.view = 'steam';
@@ -470,7 +477,7 @@ async function executeConfirmation(component, context) {
   }
   if (type === 'ai_party') {
     if (!context.pending.aiPartyChannel || !context.pending.aiPartyMinutes) {
-      return component.reply(v2Notice('設定尚未完成', '請先選擇派對頻道與持續時間。', UI_COLORS.WARNING));
+      return component.reply(v2Notice('🎉 皇家宴會設定尚未完成', '請先選擇派對頻道與持續時間。', UI_COLORS.WARNING));
     }
     await component.deferUpdate();
     await startAiParty(context.guild, context.pending.aiPartyChannel, context.pending.aiPartyMinutes);
@@ -509,15 +516,15 @@ async function renderView(context) {
 async function renderHome(context) {
   const diagnostics = await getDiagnostics(context.guild);
   const accessDiagnostic = {
-    label: 'AI 管理授權',
+    label: '御前 AI 管理授權',
     status: aiUnlocked(context) ? '正常' : '未設定',
-    detail: aiUnlocked(context) ? '已通過管理身分驗證' : '請進入 AI 頁完成管理身分驗證',
+    detail: aiUnlocked(context) ? '已通過御前管理身分驗證' : '請進入 AI 頁完成御前管理身分驗證',
   };
   const statusItems = [...diagnostics, accessDiagnostic];
   const readyCount = statusItems.filter((item) => item.status === '正常').length;
   const pendingCount = statusItems.filter((item) => item.status === '未設定').length;
   const alertCount = statusItems.filter((item) => item.status === '設定異常').length;
-  const overallLabel = alertCount ? '需要處理' : pendingCount ? '待完成設定' : '全系統正常';
+  const overallLabel = alertCount ? '領地有異常待處理' : pendingCount ? '領地待完成配置' : '王國運作安穩';
   const overview = ansiBlock([
     { color: alertCount ? COLORS.RED : pendingCount ? COLORS.GOLD : COLORS.GREEN, text: `[ CONTROL ] ${overallLabel}` },
     { color: COLORS.GREEN, text: `[ READY   ] ${readyCount} 個模組運作正常` },
@@ -528,19 +535,19 @@ async function renderHome(context) {
   const fixes = diagnostics.filter((item) => item.fix).map((item) => `- **${item.label}**：${item.fix}`).join('\n');
   const panel = v2Panel(alertCount ? UI_COLORS.WARNING : UI_COLORS.ROYAL)
     .addTextDisplayComponents(v2Text(
-      `-# ADMINISTRATOR CONTROL CENTER  /  OVERVIEW\n# ${context.guild.name} 管理控制台\n` +
-      '集中管理伺服器設定、公開操作與系統狀態。所有操作僅限 Administrator。'
+      `-# ROYAL ADMINISTRATOR CONTROL CENTER  /  OVERVIEW\n# 🐕👑 ${context.guild.name} 皇家管理控制台\n` +
+      '本王在此統籌領地設定、公開頒布與服務狀態。所有操作僅限 Administrator。'
     ))
     .addSeparatorComponents(v2Divider())
-    .addTextDisplayComponents(v2Text(`## 設定健康總覽\n${overview}${fixes ? `\n### 修正建議\n${fixes}` : '\n> 所有必要設定均已就緒。'}`))
+    .addTextDisplayComponents(v2Text(`## 🏰 領地健康總覽\n${overview}${fixes ? `\n### 御前修正建議\n${fixes}` : '\n> 所有必要設定均已就緒，本王巡視無虞。'}`))
     .addSeparatorComponents(v2Divider())
-    .addTextDisplayComponents(v2Text('## CONFIGURATION | 功能設定\n調整成員體驗、自動化推播、身分組與 AI 行為。'))
+    .addTextDisplayComponents(v2Text('## CONFIGURATION | 皇家功能配置\n調整子民體驗、自動化推播、身分領取與國王智慧行為。'))
     .addActionRowComponents(
       buttonRow(context, [['welcome', '歡迎'], ['logging', '紀錄'], ['leveling', '等級'], ['steam', 'Steam']]),
       buttonRow(context, [['selfrole', '自助身分組'], ['reaction', '反應身分組'], ['ai', aiUnlocked(context) ? 'AI 設定' : 'AI 驗證', aiUnlocked(context) ? ButtonStyle.Secondary : ButtonStyle.Primary]])
     )
     .addSeparatorComponents(v2Divider())
-    .addTextDisplayComponents(v2Text('## OPERATIONS | 管理工具\n查看核心狀態，或執行會影響伺服器的管理工作。'))
+    .addTextDisplayComponents(v2Text('## OPERATIONS | 御前管理工具\n巡視領地與核心狀態，或執行會影響伺服器的公開管理工作。'))
     .addActionRowComponents(
       buttonRow(context, [['serverinfo', '伺服器資訊'], ['botstatus', '機器人狀態'], ['announcement', '發布公告'], ['member', '成員查詢']])
     );
@@ -552,7 +559,7 @@ async function renderHome(context) {
 
 function renderWelcome(context) {
   const settings = getGuildSettings(context.guild.id);
-  const panel = modulePanel(context, '歡迎訊息', `頻道：${settings.welcome_channel ? `<#${settings.welcome_channel}>` : '尚未設定'}\n訊息：${settings.welcome_message || '使用預設歡迎內容'}`)
+  const panel = modulePanel(context, '歡迎訊息', `迎賓頻道：${settings.welcome_channel ? `<#${settings.welcome_channel}>` : '尚未設定'}\n迎賓佈告：${settings.welcome_message || '使用皇家預設歡迎內容'}`)
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder().setCustomId(id(context, 'welcome_channel')).setPlaceholder('選擇歡迎頻道').addChannelTypes(ChannelType.GuildText)
     ))
@@ -563,7 +570,7 @@ function renderWelcome(context) {
 function renderLogging(context) {
   const settings = getGuildSettings(context.guild.id);
   const toggles = parseJsonObject(settings.log_toggles, {});
-  const panel = modulePanel(context, '紀錄設定', `日誌頻道：${settings.log_channel ? `<#${settings.log_channel}>` : '尚未設定'}\n選擇要啟用的紀錄類型。`)
+  const panel = modulePanel(context, '紀錄設定', `史官頻道：${settings.log_channel ? `<#${settings.log_channel}>` : '尚未設定'}\n選擇史官要記錄的事件類型。`)
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder().setCustomId(id(context, 'log_channel')).setPlaceholder('選擇日誌頻道').addChannelTypes(ChannelType.GuildText)
     ))
@@ -576,7 +583,7 @@ function renderLogging(context) {
 
 function renderLeveling(context) {
   const enabled = getGuildSettings(context.guild.id).level_up_announcement_enabled !== 0;
-  const panel = modulePanel(context, '等級系統', `升級公告目前為：**${enabled ? '開啟' : '關閉'}**`)
+  const panel = modulePanel(context, '等級系統', `爵位晉升公告目前為：**${enabled ? '開啟' : '關閉'}**`)
     .addActionRowComponents(actionButtons(context, [
       ['level:on', '開啟公告', ButtonStyle.Success],
       ['level:off', '關閉公告', ButtonStyle.Secondary],
@@ -587,7 +594,7 @@ function renderLeveling(context) {
 function renderSteam(context) {
   const settings = getGuildSettings(context.guild.id);
   const status = settings.steam_deal_enabled === 1 ? '開啟' : '關閉';
-  const panel = modulePanel(context, 'Steam 推播', `狀態：**${status}**\n頻道：${settings.steam_deal_channel ? `<#${settings.steam_deal_channel}>` : '尚未設定'}\n每日時間：${settings.steam_deal_time || '尚未設定'} (Asia/Taipei)`)
+  const panel = modulePanel(context, 'Steam 推播', `皇家採購聖旨：**${status}**\n投放頻道：${settings.steam_deal_channel ? `<#${settings.steam_deal_channel}>` : '尚未設定'}\n每日投放時辰：${settings.steam_deal_time || '尚未設定'} (Asia/Taipei)`)
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder().setCustomId(id(context, 'steam_channel')).setPlaceholder('選擇推播頻道').addChannelTypes(ChannelType.GuildText)
     ))
@@ -606,36 +613,36 @@ function renderSelfRole(context) {
     const role = context.guild.roles.cache.get(entry.id);
     const required = entry.requirement ? context.guild.roles.cache.get(entry.requirement) : null;
     return `- ${role ? `<@&${role.id}>` : `已刪除 (${entry.id})`}${required ? `，需 <@&${required.id}>` : ''}`;
-  }).join('\n') : '尚未建立選項';
+  }).join('\n') : '尚未建立可供子民領取的身分選項';
   const pending = context.pending.selfTarget
     ? `\n待新增：<@&${context.pending.selfTarget}>${context.pending.selfRequirement ? `，需 <@&${context.pending.selfRequirement}>` : '，無門檻'}`
     : '';
-  const panel = modulePanel(context, '自助身分組', `${listing}${pending}`)
+  const panel = modulePanel(context, '自助身分組', `管理子民可自行領取或取消的身分名冊。\n${listing}${pending}`)
     .addActionRowComponents(new ActionRowBuilder().addComponents(
-      new RoleSelectMenuBuilder().setCustomId(id(context, 'self_target')).setPlaceholder('選擇要新增的身分組')
+      new RoleSelectMenuBuilder().setCustomId(id(context, 'self_target')).setPlaceholder('挑選要開放領取的身分組')
     ))
     .addActionRowComponents(new ActionRowBuilder().addComponents(
-      new RoleSelectMenuBuilder().setCustomId(id(context, 'self_requirement')).setPlaceholder('選擇門檻身分組（選填）')
+      new RoleSelectMenuBuilder().setCustomId(id(context, 'self_requirement')).setPlaceholder('設定領取資格身分組（選填）')
     ))
     .addActionRowComponents(actionButtons(context, [
-      ['self_add', '加入選項', ButtonStyle.Success],
-      ['self_clear_requirement', '清除門檻', ButtonStyle.Secondary],
-      ['modal:self_description', '編輯發布文字', ButtonStyle.Secondary],
+      ['self_add', '加入領取名冊', ButtonStyle.Success],
+      ['self_clear_requirement', '清除領取門檻', ButtonStyle.Secondary],
+      ['modal:self_description', '編輯領取佈告', ButtonStyle.Secondary],
     ]))
     .addActionRowComponents(new ActionRowBuilder().addComponents(
-      new RoleSelectMenuBuilder().setCustomId(id(context, 'self_remove')).setPlaceholder('移除自助選項')
+      new RoleSelectMenuBuilder().setCustomId(id(context, 'self_remove')).setPlaceholder('從領取名冊移除選項')
     ))
     .addActionRowComponents(new ActionRowBuilder().addComponents(
-      new ChannelSelectMenuBuilder().setCustomId(id(context, 'self_publish_channel')).setPlaceholder('選擇發布頻道').addChannelTypes(ChannelType.GuildText)
+      new ChannelSelectMenuBuilder().setCustomId(id(context, 'self_publish_channel')).setPlaceholder('選擇張貼領取佈告的頻道').addChannelTypes(ChannelType.GuildText)
     ))
-    .addActionRowComponents(actionButtons(context, [['prepare_confirm:self_publish', '發布選單', ButtonStyle.Danger]]));
+    .addActionRowComponents(actionButtons(context, [['prepare_confirm:self_publish', '張貼領取佈告', ButtonStyle.Danger]]));
   return { components: [finishPanel(panel, context)] };
 }
 
 function renderReaction(context) {
   const roles = getReactionRolesByGuild(context.guild.id);
   const stationIds = [...new Set(roles.map((item) => item.message_id))];
-  const summary = stationIds.length ? `目前共有 ${stationIds.length} 個站點、${roles.length} 組配對。` : '尚未建立反應身分組站。';
+  const summary = stationIds.length ? `王國目前共有 ${stationIds.length} 個站點、${roles.length} 組配對。` : '尚未建立皇家反應身分站。';
   const panel = modulePanel(context, '反應身分組', `${summary}\n建立站點需先選擇頻道，再填寫 emoji 與身分組配對。`)
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder().setCustomId(id(context, 'reaction_channel')).setPlaceholder('選擇新站點頻道').addChannelTypes(ChannelType.GuildText)
@@ -659,9 +666,9 @@ function renderAi(context) {
     const passwordStatus = process.env.AI_ADMIN_PASSWORD
       ? { color: COLORS.GOLD, text: '[ LOCKED ] 尚未驗證管理身分' }
       : { color: COLORS.RED, text: '[ SETUP  ] 尚未配置 AI_ADMIN_PASSWORD' };
-    const panel = modulePanel(context, 'AI 存取驗證', 'AI 管理設定目前為鎖定狀態。驗證成功後，此帳號將持續保有本伺服器的 AI 管理權限。')
+    const panel = modulePanel(context, 'AI 存取驗證', '國王智慧核心目前封存於御前鎖櫃。驗證成功後，此帳號將持續保有本伺服器的 AI 管理權限。')
       .addTextDisplayComponents(v2Text([
-        '## ACCESS STATUS | 授權狀態',
+        '## ACCESS STATUS | 御前授權狀態',
         ansiBlock([
           passwordStatus,
           { color: COLORS.CYAN, text: '[ SCOPE  ] 模型 / 聯網 / 記憶 / 白名單 / 派對模式' },
@@ -672,7 +679,8 @@ function renderAi(context) {
     return { components: [finishPanel(panel, context)] };
   }
   const settings = getAiSettings(context.guild.id);
-  const panel = modulePanel(context, 'AI 設定', `模型：\`${settings.model || DEFAULT_AI_MODEL}\`\n聯網：**${settings.search_enabled ? '開啟' : '關閉'}** | 對話記憶：**${settings.context_enabled ? '開啟' : '關閉'}**\n白名單：${settings.whitelist.length} 人`)
+  const whitelistCount = new Set(settings.whitelist.filter(Boolean).map(String)).size;
+  const panel = modulePanel(context, 'AI 設定', `國王大腦：\`${settings.model || DEFAULT_AI_MODEL}\`\n天文地理聯網：**${settings.search_enabled ? '開啟' : '關閉'}** | 御前對話記憶：**${settings.context_enabled ? '開啟' : '關閉'}**\n御准白名單：${whitelistCount} 人`)
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder().setCustomId(id(context, 'ai_model')).setPlaceholder('選擇 AI 模型')
         .addOptions(AI_MODELS.map((model) => ({ label: model, value: model, default: model === settings.model })))
@@ -682,6 +690,7 @@ function renderAi(context) {
       ['ai_toggle:context_enabled', settings.context_enabled ? '關閉記憶' : '開啟記憶', settings.context_enabled ? ButtonStyle.Secondary : ButtonStyle.Success],
       ['modal:ai_prompt', '編輯提示詞', ButtonStyle.Secondary],
     ]))
+    .addTextDisplayComponents(v2Text(renderAiWhitelist(settings.whitelist, context.pending.aiUser)))
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new UserSelectMenuBuilder().setCustomId(id(context, 'ai_user')).setPlaceholder('選擇白名單使用者')
     ))
@@ -697,6 +706,15 @@ function renderAi(context) {
       ['prepare_confirm:ai_party', '啟動派對', ButtonStyle.Danger],
     ]));
   return { components: [finishPanel(panel, context)] };
+}
+
+function renderAiWhitelist(whitelist, selectedUserId = null) {
+  const userIds = [...new Set(whitelist.filter(Boolean).map(String))];
+  const visibleUsers = userIds.slice(0, 20).map((userId) => `<@${userId}>`).join('  ');
+  const listing = visibleUsers || '尚未有子民列入御准白名單。';
+  const remaining = userIds.length > 20 ? `\n-# 另有 ${userIds.length - 20} 人未展開顯示。` : '';
+  const selected = selectedUserId ? `\n-# 目前選取：<@${selectedUserId}>` : '';
+  return `## ACCESS LIST | 御准白名單成員\n${listing}${remaining}${selected}`;
 }
 
 async function renderServerInfo(context) {
@@ -715,18 +733,18 @@ async function renderServerInfo(context) {
   const panel = modulePanel(
     context,
     '伺服器資訊',
-    `**${guild.name}** 的管理摘要、安全狀態與設定覆蓋情形。`,
+    `本王巡視 **${guild.name}** 後呈上的領地摘要、安全狀態與設定覆蓋情形。`,
     { thumbnail: guild.iconURL?.({ size: 256, extension: 'png' }) }
   )
     .addTextDisplayComponents(v2Text([
-      '## SERVER HEALTH | 管理健康度',
+      '## SERVER HEALTH | 領地健康度',
       ansiBlock([
         { color: alertCount ? COLORS.RED : pendingCount ? COLORS.GOLD : COLORS.GREEN, text: `[ STATUS ] ${alertCount ? '需要處理異常' : pendingCount ? '尚有功能待設定' : '所有設定正常'}` },
         { color: COLORS.GREEN, text: `[ READY  ] ${readyCount} 個模組正常` },
         { color: COLORS.GOLD, text: `[ SETUP  ] ${pendingCount} 個模組待設定` },
         { color: COLORS.RED, text: `[ ALERT  ] ${alertCount} 個模組異常` },
       ]),
-      '## SERVER PROFILE | 基本資料',
+      '## SERVER PROFILE | 領地基本資料',
       ansiBlock([
         { color: COLORS.GOLD, text: `[ MEMBERS  ] ${guild.memberCount} 位成員` },
         { color: COLORS.CYAN, text: `[ CHANNELS ] ${textChannels} 文字 / ${voiceChannels} 語音 / ${categories} 分類` },
@@ -739,13 +757,13 @@ async function renderServerInfo(context) {
     ].join('\n')))
     .addSeparatorComponents(v2Divider())
     .addTextDisplayComponents(v2Text([
-      '## SECURITY & AI | 安全與 AI',
+      '## SECURITY & AI | 城防與國王智慧',
       `驗證層級：**${verificationLevels[guild.verificationLevel] || '未知'}** | 內容過濾：**${filters[guild.explicitContentFilter] || '未知'}**`,
       `AI 模型：\`${aiSettings.model || DEFAULT_AI_MODEL}\` | 聯網檢索：**${aiSettings.search_enabled ? '開啟' : '關閉'}**`,
       `派對模式：**${aiSettings.party_channel_id && aiSettings.party_expires_at > Date.now() ? '進行中' : '未啟用'}**`,
     ].join('\n')))
     .addSeparatorComponents(v2Divider())
-    .addTextDisplayComponents(v2Text(`## CONFIG SNAPSHOT | 設定摘要\n${diagnostics.map((item) => `${statusMarker(item.status)} **${item.label}**：${item.detail}`).join('\n')}`));
+      .addTextDisplayComponents(v2Text(`## CONFIG SNAPSHOT | 皇家設定摘要\n${diagnostics.map((item) => `${statusMarker(item.status)} **${item.label}**：${item.detail}`).join('\n')}`));
   return { components: [finishPanel(panel, context)] };
 }
 
@@ -761,9 +779,9 @@ function renderBotStatus(context) {
   const load = os.loadavg().map((amount) => amount.toFixed(2)).join(', ');
   const guildCount = context.client?.guilds?.cache?.size ?? 0;
   const memberCount = context.client?.guilds?.cache?.reduce?.((total, guild) => total + guild.memberCount, 0) ?? 0;
-  const panel = modulePanel(context, '機器人狀態', '檢視目前程序、主機與連線狀況。')
+  const panel = modulePanel(context, '機器人狀態', '本王的大內健康報告：檢視目前程序、主機與連線狀況。')
     .addTextDisplayComponents(v2Text([
-      '## SERVICE CORE | 核心服務',
+      '## SERVICE CORE | 國王核心服務',
       ansiBlock([
         { color: COLORS.CYAN, text: `[系統] Node ${process.version} | discord.js v${discordJsVersion}` },
         { color: COLORS.WHITE, text: `[運行] ${days}d ${hours}h ${minutes}m` },
@@ -772,7 +790,7 @@ function renderBotStatus(context) {
     ].join('\n')))
     .addSeparatorComponents(v2Divider())
     .addTextDisplayComponents(v2Text([
-      '## HOST LOAD | 主機負載',
+      '## HOST LOAD | 大內主機負載',
       ansiBlock([
         { color: COLORS.GREEN, text: `[ MEMORY ] ${heapUsed} / ${heapTotal} MB` },
         { color: COLORS.CYAN, text: `[ LOAD   ] ${load}` },
@@ -793,7 +811,7 @@ function renderAnnouncement(context) {
     role: context.pending.announceRole ? `提及 <@&${context.pending.announceRole}>` : '提及指定身分組 (尚未選擇)',
   }[mode];
   const panel = modulePanel(context, '發布公告', [
-    '公告在預覽確認前不會公開發布；附件僅接受圖片，最多 3 張。',
+    '聖旨在御前預覽確認前不會公開頒布；附件僅接受圖片，最多 3 張。',
     ansiBlock([
       { color: context.pending.announceChannel ? COLORS.GREEN : COLORS.GOLD, text: `[ CHANNEL ] ${context.pending.announceChannel ? `#${context.pending.announceChannel}` : '尚未選擇目標頻道'}` },
       { color: mode === 'everyone' ? COLORS.RED : mode === 'none' ? COLORS.CYAN : COLORS.GOLD, text: `[ MENTION ] ${modeText}` },
@@ -801,7 +819,7 @@ function renderAnnouncement(context) {
     ]),
     `目前目標：${context.pending.announceChannel ? `<#${context.pending.announceChannel}>` : '**尚未選擇**'}`,
   ].join('\n'))
-    .addTextDisplayComponents(v2Text('## COMPOSER | 發布目標\n先選擇頻道與互斥的提及模式，再開啟公告編輯器。'))
+    .addTextDisplayComponents(v2Text('## COMPOSER | 頒旨目標\n先選擇頻道與互斥的召見模式，再開啟聖旨編輯器。'))
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder().setCustomId(id(context, 'announce_channel')).setPlaceholder('選擇公告發布頻道').addChannelTypes(ChannelType.GuildText)
     ))
@@ -833,8 +851,8 @@ async function renderMemberLookup(context) {
     context,
     '成員查詢',
     member
-      ? `已載入 **${member.displayName}** 的私人管理檔案。`
-      : '選擇成員後查看帳號、活動、權限與等級紀錄。查詢內容僅顯示於此私人面板。',
+      ? `已從皇家名冊調閱 **${member.displayName}** 的私人管理檔案。`
+      : '選擇子民後查看帳號、活動、權限與爵位紀錄。查詢內容僅顯示於此私人面板。',
     { thumbnail: avatar }
   )
     .addActionRowComponents(new ActionRowBuilder().addComponents(
@@ -901,19 +919,19 @@ async function renderMemberLookup(context) {
 
 function renderConfirm(context) {
   const labels = {
-    self_publish: `將在 ${context.pending.selfPublishChannel ? `<#${context.pending.selfPublishChannel}>` : '選取的頻道'} 發布新的自助身分組選單。`,
-    reaction_create: `將在 ${context.pending.reactionChannel ? `<#${context.pending.reactionChannel}>` : '選取的頻道'} 建立新的反應身分組站。`,
-    reaction_delete: `將刪除反應身分組公開訊息 \`${context.pending.reactionDeleteMessage || '尚未選取'}\` 與其設定。`,
-    steam_publish: '將立即在已設定的推播頻道發布 Steam 特價列表。',
+    self_publish: `將在 ${context.pending.selfPublishChannel ? `<#${context.pending.selfPublishChannel}>` : '選取的頻道'} 張貼新的皇家自助身分領取佈告。`,
+    reaction_create: `將在 ${context.pending.reactionChannel ? `<#${context.pending.reactionChannel}>` : '選取的頻道'} 建立新的皇家反應身分站。`,
+    reaction_delete: `將撤除皇家反應身分站公開訊息 \`${context.pending.reactionDeleteMessage || '尚未選取'}\` 與其設定。`,
+    steam_publish: '將立即在已設定的推播頻道頒布 Steam 皇家特價榜。',
     ai_party: `將在 ${context.pending.aiPartyChannel ? `<#${context.pending.aiPartyChannel}>` : '選取頻道'} 啟動 AI 派對模式並公開發送通知。`,
   };
   const message = labels[context.pending.confirm] || '此操作會產生公開變更。';
   const panel = v2Panel(UI_COLORS.DANGER)
     .addTextDisplayComponents(v2Text(
-      '-# ADMINISTRATOR CONTROL CENTER  /  CONFIRMATION\n# 確認公開操作\n這項動作會對伺服器產生公開影響，請再次核對。'
+      '-# ROYAL ADMINISTRATOR CONTROL CENTER  /  CONFIRMATION\n# 📜 確認御前公開操作\n這項動作會對領地產生公開影響，請再次核對。'
     ))
     .addSeparatorComponents(v2Divider())
-    .addTextDisplayComponents(v2Text(`## 動作影響\n${message}\n\n> 按下確認後會立即執行，無法由此面板復原。`))
+    .addTextDisplayComponents(v2Text(`## 頒令影響\n${message}\n\n> 按下確認後會立即執行，無法由此面板復原。`))
     .addActionRowComponents(actionButtons(context, [
       ['confirm', '確認執行', ButtonStyle.Danger],
       ['cancel', '取消', ButtonStyle.Secondary],
@@ -929,7 +947,7 @@ function modulePanel(context, title, description, { thumbnail = null } = {}) {
   const feedback = context.notice
     ? `\n\n${ansiBlock([{ color: notice.color, text: `[ ${notice.label} ] ${notice.text}` }])}`
     : '';
-  const heading = `-# ADMINISTRATOR CONTROL CENTER  /  ${meta.section}\n# ${title}\n${description}${feedback}`;
+  const heading = `-# ROYAL ADMINISTRATOR CONTROL CENTER  /  ${meta.section}\n# ${MODULE_TITLES[title] || title}\n${description}${feedback}`;
   const panel = v2Panel(meta.color);
   if (thumbnail) {
     panel.addSectionComponents(
@@ -950,7 +968,7 @@ function finishPanel(panel, context) {
 }
 
 function basePanel(title, description) {
-  return v2Panel(UI_COLORS.ROYAL).addTextDisplayComponents(v2Text(`# ${title}\n${description}`));
+  return v2Panel(UI_COLORS.ROYAL).addTextDisplayComponents(v2Text(`# 🐕👑 ${title}\n${description}`));
 }
 
 function buttonRow(context, pages) {
@@ -986,7 +1004,7 @@ function aiUnlocked(context) {
 
 function requireAiUnlock(component, context) {
   if (aiUnlocked(context)) return true;
-  component.reply(v2Notice('AI 設定已鎖定', '請回到控制台的 AI 頁完成管理身分驗證。', UI_COLORS.DANGER)).catch(() => {});
+  component.reply(v2Notice('🔐 國王智慧核心已鎖定', '請回到皇家管理控制台的 AI 頁完成御前身分驗證。', UI_COLORS.DANGER)).catch(() => {});
   return false;
 }
 
@@ -1045,29 +1063,33 @@ function parseReactionPairs(guild, source) {
     pairs.push({ emoji, role });
   }
   if (!pairs.length) return { error: '至少需要一組 emoji 與身分組配對。' };
-  if (pairs.length > 20) return { error: '反應身分組最多只能建立 20 組配對。' };
+  if (pairs.length > 20) return { error: '皇家反應身分站最多只能建立 20 組配對。' };
   return { pairs };
 }
 
-async function publishSelfRoleMenu(guild, channel, roles, description) {
+function buildSelfRoleMenuPayload(guild, roles, description) {
   const valid = roles
     .map((entry) => ({ entry, role: guild.roles.cache.get(entry.id) }))
     .filter(({ role }) => role && !validateAssignableRole(guild, role));
-  if (!valid.length) throw new Error('沒有可發布的自助身分組選項。');
-  const select = new StringSelectMenuBuilder().setCustomId('selfrole_select').setPlaceholder('選擇你的身分組').setMinValues(0).setMaxValues(valid.length)
+  if (!valid.length) throw new Error('沒有可張貼的皇家自助身分領取選項。');
+  const select = new StringSelectMenuBuilder().setCustomId('selfrole_select').setPlaceholder('挑選你要領取或取消的皇家身分').setMinValues(0).setMaxValues(valid.length)
     .addOptions(valid.map(({ entry, role }) => ({
       label: role.name,
       value: role.id,
-      description: entry.requirement ? `需先擁有 ${guild.roles.cache.get(entry.requirement)?.name || '指定身分組'}` : `領取或取消 ${role.name}`,
+      description: entry.requirement ? `需先擁有 ${guild.roles.cache.get(entry.requirement)?.name || '指定身分組'}` : `領取或交還 ${role.name}`,
     })));
-  const panel = basePanel('自助身分組', description || '請從下方選單選擇要領取或取消的身分組。')
+  const panel = basePanel('皇家自助身分領取處', description || '子民請從下方選單挑選要領取或交還的身分組。')
     .addActionRowComponents(new ActionRowBuilder().addComponents(select));
-  await channel.send(v2Payload([panel]));
+  return v2Payload([panel]);
+}
+
+async function publishSelfRoleMenu(guild, channel, roles, description) {
+  await channel.send(buildSelfRoleMenuPayload(guild, roles, description));
 }
 
 async function createReactionStation(guild, channel, pairs, title) {
   const text = pairs.map(({ emoji, role }) => `${emoji} -> <@&${role.id}>`).join('\n');
-  const message = await channel.send(v2Payload([basePanel(title || '反應身分組', `點擊反應即可領取或取消身分組。\n\n${text}`)]));
+  const message = await channel.send(v2Payload([basePanel(title || '皇家反應身分站', `子民點擊反應即可領取或交還身分組。\n\n${text}`)]));
   try {
     for (const { emoji, role } of pairs) {
       await message.react(emoji);
@@ -1076,13 +1098,13 @@ async function createReactionStation(guild, channel, pairs, title) {
   } catch (error) {
     deleteReactionRolesByMessage(message.id);
     await message.delete().catch(() => {});
-    throw new Error('無法建立反應站，請確認 emoji 可供機器人使用。', { cause: error });
+    throw new Error('本王無法建立皇家反應站，請確認 emoji 可供機器人使用。', { cause: error });
   }
 }
 
 async function deleteReactionStation(guild, messageId) {
   const entry = getReactionRolesByGuild(guild.id).find((item) => item.message_id === messageId);
-  if (!entry) throw new Error('找不到選取的反應身分組站。');
+  if (!entry) throw new Error('找不到選取的皇家反應身分站。');
   const channel = await guild.channels.fetch(entry.channel_id).catch(() => null);
   if (channel?.isTextBased()) {
     const message = await channel.messages.fetch(messageId).catch(() => null);
@@ -1105,7 +1127,7 @@ async function startAiParty(guild, channelId, minutes) {
   updateAiSetting(guild.id, 'party_channel_id', channelId);
   updateAiSetting(guild.id, 'party_expires_at', Date.now() + minutes * 60_000);
   updateAiSetting(guild.id, 'enabled', 1);
-  await channel.send(v2Notice('AI 派對模式已開啟', `接下來 ${minutes} 分鐘內，任何成員都可在此頻道提及本王進行聊天。`, UI_COLORS.ROYAL, { ephemeral: false }));
+  await channel.send(v2Notice('🎉 皇家 AI 宴會開席', `接下來 ${minutes} 分鐘內，任何子民都可在此頻道提及本王進行聊天。`, UI_COLORS.ROYAL, { ephemeral: false }));
 }
 
 function closePanel(components) {
@@ -1113,13 +1135,14 @@ function closePanel(components) {
   for (const child of panel.components ?? []) {
     if (child.components) child.components.forEach((component) => component.setDisabled?.(true));
   }
-  panel.addSeparatorComponents(v2Divider()).addTextDisplayComponents(v2Text('設定面板已逾時，請重新使用 `/設定`。'));
+  panel.addSeparatorComponents(v2Divider()).addTextDisplayComponents(v2Text('## ⌛ 御前面板已闔上\n皇家設定面板已逾時，請重新使用 `/設定`。'));
   return components;
 }
 
 export const settingsViewTesting = {
   renderHome,
   renderWelcome,
+  renderSelfRole,
   renderAi,
   renderServerInfo,
   renderBotStatus,
@@ -1129,4 +1152,5 @@ export const settingsViewTesting = {
   buildModal,
   openModal,
   closePanel,
+  buildSelfRoleMenuPayload,
 };

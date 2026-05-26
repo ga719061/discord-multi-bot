@@ -45,7 +45,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
       await command.execute(interaction);
     } catch (error) {
       logger.error(`執行指令 ${interaction.commandName} 時發生錯誤:`, error);
-      const reply = v2Notice('⚠️ 指令執行失敗', '執行此指令時發生錯誤，請稍後再試。', UI_COLORS.DANGER);
+      const reply = v2Notice('🐕💥 御前指令執行失敗', '本王執行這道命令時遇到問題，請稍後再試。', UI_COLORS.DANGER);
       if (interaction.replied || interaction.deferred) await interaction.followUp(reply);
       else await interaction.reply(reply);
     }
@@ -59,8 +59,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const appId = Number(interaction.values[0]);
         if (!Number.isSafeInteger(appId) || appId <= 0) {
           return interaction.editReply(v2EditPayload(v2Notice(
-            '🛒 遊戲資料已失效',
-            '這筆 Steam 遊戲資料無法辨識，請查看最新發布的特價榜單。',
+            '🛒 皇家採購資料已失效',
+            '這筆 Steam 遊戲情報無法辨識，請查看最新頒布的特價榜單。',
             UI_COLORS.WARNING
           )));
         }
@@ -69,8 +69,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
           const details = await fetchSteamAppDetails(appId);
           if (!details) {
             return interaction.editReply(v2EditPayload(v2Notice(
-              '🛒 詳情暫不可用',
-              'Steam 暫時沒有提供這款遊戲的完整情報，請稍後再試。',
+              '🛒 皇家卷宗暫不可用',
+              'Steam 暫時沒有提供這款遊戲的完整情報，本王請你稍後再試。',
               UI_COLORS.WARNING
             )));
           }
@@ -78,7 +78,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         } catch (error) {
           logger.warn(`[SteamDeals] 互動詳情查詢失敗 app=${appId} code=${error.code || 'unavailable'}: ${error.message}`);
           return interaction.editReply(v2EditPayload(v2Notice(
-            '🛒 Steam 查詢失敗',
+            '🛒 皇家 Steam 查詢失敗',
             getSteamFailureMessage(error),
             UI_COLORS.WARNING
           )));
@@ -98,8 +98,8 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const blocked = selectedEntries.find((entry) => entry.requirement && !member.roles.cache.has(entry.requirement));
         if (blocked) {
           return interaction.editReply(v2EditPayload(v2Notice(
-            '🏷️ 尚未符合領取資格',
-            `你需要先擁有 <@&${blocked.requirement}>，才能領取 <@&${blocked.id}>。`,
+            '🏷️ 尚未符合皇家領取資格',
+            `子民需先擁有 <@&${blocked.requirement}>，才能領取 <@&${blocked.id}>。`,
             UI_COLORS.WARNING
           )));
         }
@@ -110,10 +110,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
         try {
           if (toAdd.length > 0) await member.roles.add(toAdd);
           if (toRemove.length > 0) await member.roles.remove(toRemove);
-          await interaction.editReply(v2EditPayload(v2Notice('🏷️ 身分組已更新', '身份組已更新成功！', UI_COLORS.SUCCESS)));
+          await interaction.editReply(v2EditPayload(v2Notice('🏷️ 皇家身分名冊已更新', '本王已完成你的身分領取與交還登記。', UI_COLORS.SUCCESS)));
         } catch (err) {
           logger.error('更新身份組失敗:', err);
-          await interaction.editReply(v2EditPayload(v2Notice('🏷️ 身分組更新失敗', '更新身份組失敗，請檢查機器人權限。', UI_COLORS.DANGER)));
+          await interaction.editReply(v2EditPayload(v2Notice('🏷️ 皇家身分登記失敗', '本王無法更新身分組，請管理員檢查機器人權限。', UI_COLORS.DANGER)));
         }
       }
 
@@ -138,12 +138,12 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const settings = getGuildSettings(interaction.guildId);
         let extra = '';
         if (!settings.log_channel) {
-          extra = '\n\n> ⚠️ **提醒：** 您尚未設定日誌頻道！請使用 `/設定` 開啟面板後完成設定。';
+          extra = '\n\n> ⚠️ **御前提醒：** 尚未指定史官日誌頻道，請使用 `/設定` 開啟皇家控制台完成設定。';
         }
 
         await interaction.reply(v2Notice(
-          '🐕⚙️ 紀錄設定更新完成',
-          `當前狀態：${statusText}${extra}`,
+          '🐕⚙️ 史官紀錄設定更新完成',
+          `皇家紀錄狀態：${statusText}${extra}`,
           settings.log_channel ? UI_COLORS.SUCCESS : UI_COLORS.WARNING
         ));
       }

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { ButtonStyle, ComponentType, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { data, settingsViewTesting } from '../src/commands/admin/settings.js';
 import { ephemeralV2Payload } from '../src/utils/componentsV2.js';
-import { getAiSettings, initDatabase, updateAiSetting } from '../src/utils/database.js';
+import { getAiSettings, getDb, initDatabase, updateAiSetting } from '../src/utils/database.js';
+import { AI_MODELS, DEFAULT_AI_MODEL } from '../src/utils/aiConfig.js';
 import { normalizeSelfRoleSettings } from '../src/utils/roleSettings.js';
 
 test('/設定 is restricted to Administrator by command metadata', () => {
@@ -113,6 +114,93 @@ test('AI unlock modal grants persistent access and renders state-aware button co
     if (previousPassword === undefined) delete process.env.AI_ADMIN_PASSWORD;
     else process.env.AI_ADMIN_PASSWORD = previousPassword;
   }
+});
+
+test('AI model selector uses approved models and migrates previous preview choices', () => {
+  initDatabase();
+  const guildId = `settings-ai-models-${process.pid}`;
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
+
+  getDb().prepare('UPDATE ai_settings SET model = ? WHERE guild_id = ?').run('gemini-3-flash-preview', guildId);
+  assert.equal(getAiSettings(guildId).model, DEFAULT_AI_MODEL);
+
+  getDb().prepare('UPDATE ai_settings SET model = ? WHERE guild_id = ?').run('gemini-3.1-flash-lite-preview', guildId);
+  assert.equal(getAiSettings(guildId).model, 'gemini-3.1-flash-lite');
+
+  const context = { userId: 'admin', guild: { id: guildId }, view: 'ai', pending: {}, notice: null };
+  const panelText = JSON.stringify(settingsViewTesting.renderAi(context).components[0].toJSON());
+
+  for (const model of AI_MODELS) {
+    assert.equal(panelText.includes(`"value":"${model}"`), true);
+  }
+  assert.equal(panelText.includes('"value":"gemini-3-flash-preview"'), false);
+  assert.equal(panelText.includes('"value":"gemini-3.1-flash-lite-preview"'), false);
+});
+
+test('AI panel displays whitelist members beside its whitelist controls', () => {
+  initDatabase();
+  const guildId = `settings-ai-whitelist-${process.pid}`;
+  const whitelist = [...Array.from({ length: 21 }, (_, index) => String(1000 + index)), '1000'];
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
+  updateAiSetting(guildId, 'whitelist', JSON.stringify(whitelist));
+
+  const context = {
+    userId: 'admin',
+    guild: { id: guildId },
+    view: 'ai',
+    pending: { aiUser: '2000' },
+    notice: null,
+  };
+  const panelText = JSON.stringify(settingsViewTesting.renderAi(context).components[0].toJSON());
+
+  assert.match(panelText, /ACCESS LIST \| 御准白名單成員/);
+  assert.match(panelText, /御准白名單：21 人/);
+  assert.match(panelText, /<@1000>/);
+  assert.match(panelText, /<@1019>/);
+  assert.equal(panelText.includes('<@1020>'), false);
+  assert.match(panelText, /另有 1 人未展開顯示/);
+  assert.match(panelText, /目前選取：<@2000>/);
+});
+
+test('self-role panel presents a royal publishing flow for member-facing role selection', () => {
+  initDatabase();
+  const guildId = `settings-self-role-${process.pid}`;
+  const guild = {
+    id: guildId,
+    roles: { cache: new Map([['games', { id: 'games' }]]) },
+  };
+  const context = { userId: 'admin', guild, view: 'selfrole', pending: {}, notice: null };
+  const text = JSON.stringify(settingsViewTesting.renderSelfRole(context).components[0].toJSON());
+
+  assert.match(text, /皇家自助身分領取/);
+  assert.match(text, /可供子民領取/);
+  assert.match(text, /張貼領取佈告/);
+});
+
+test('published self-role menu speaks to members as the royal receiving office', () => {
+  const role = {
+    id: 'games',
+    name: '遊戲子民',
+    managed: false,
+    position: 1,
+    permissions: { has: () => false },
+  };
+  const guild = {
+    id: 'guild',
+    roles: { cache: new Map([[role.id, role]]) },
+    members: {
+      me: {
+        permissions: { has: () => true },
+        roles: { highest: { position: 10 } },
+      },
+    },
+  };
+  const payload = settingsViewTesting.buildSelfRoleMenuPayload(guild, [{ id: role.id, requirement: null }], null);
+  const text = JSON.stringify(payload.components[0].toJSON());
+
+  assert.match(text, /皇家自助身分領取處/);
+  assert.match(text, /子民請從下方選單挑選/);
+  assert.match(text, /領取或交還 遊戲子民/);
 });
 
 test('AI unlock modal keeps invalid credentials locked and presents a denied status', async () => {

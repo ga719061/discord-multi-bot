@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenAI } from '@google/genai';
 import { DEFAULT_AI_MODEL } from './aiConfig.js';
 import { logger } from './logger.js';
 
@@ -14,9 +14,18 @@ export const DEFAULT_AI_PROMPT = `你被加冕為「吉吉國王」，是一隻�
 function getGeminiClient() {
     if (!genAI) {
         if (!process.env.GOOGLE_AI_KEY) throw new Error('GOOGLE_AI_KEY 未設定！');
-        genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_KEY);
+        genAI = new GoogleGenAI({ apiKey: process.env.GOOGLE_AI_KEY });
     }
     return genAI;
+}
+
+function summarizeAiError(err) {
+    const status = err?.status || err?.statusCode || err?.code || 'unknown';
+    const message = String(err?.message || err || 'Unknown error')
+        .replace(/key=[^&\s]+/gi, 'key=[REDACTED]')
+        .replace(/\s+/g, ' ')
+        .slice(0, 500);
+    return { status, message };
 }
 
 /**
@@ -31,19 +40,13 @@ function getGeminiClient() {
  * @returns {Promise<string>} AI 回應文字
  */
 export async function getAiResponse(userMessage, systemPrompt, modelName = DEFAULT_AI_MODEL, useSearch = false, history = null, imageAttachments = [], retryCount = 2) {
-    // Google Gemini 模型 (預設)
     const client = getGeminiClient();
-
-    const tools = [];
-    if (useSearch) {
-        tools.push({ googleSearch: {} });
-    }
-
-    const model = client.getGenerativeModel({
-        model: modelName,
+    const config = {
         systemInstruction: systemPrompt || DEFAULT_AI_PROMPT,
-        tools: tools,
-    });
+    };
+    if (useSearch) {
+        config.tools = [{ googleSearch: {} }];
+    }
 
     // 建立 multimodal parts
     const parts = [{ text: userMessage }];
@@ -68,29 +71,34 @@ export async function getAiResponse(userMessage, systemPrompt, modelName = DEFAU
     const performRequest = async (currentRetry) => {
         try {
             if (history && history.length > 0) {
-                const chat = model.startChat({ history });
-                const result = await chat.sendMessage(parts);
-                return result.response.text();
+                const chat = client.chats.create({ model: modelName, config, history });
+                const response = await chat.sendMessage({ message: parts });
+                return response.text || '';
             } else {
-                const result = await model.generateContent(parts);
-                return result.response.text();
+                const response = await client.models.generateContent({
+                    model: modelName,
+                    contents: [{ role: 'user', parts }],
+                    config,
+                });
+                return response.text || '';
             }
         } catch (err) {
-            // 處理 503 Service Unavailable 或其他可重試的錯誤
-            const isRetryable = err.status === 503 ||
-                err.message?.includes('503') ||
-                err.message?.includes('Service Unavailable') ||
-                err.message?.includes('finishReason: RECITATIONS') ||
-                err.message?.includes('fetch failed') ||
+            const { status, message } = summarizeAiError(err);
+            const isRetryable = [429, 500, 502, 503, 504].includes(Number(status)) ||
+                message.includes('503') ||
+                message.includes('Service Unavailable') ||
+                message.includes('finishReason: RECITATIONS') ||
+                message.includes('fetch failed') ||
                 err.code === 'ECONNRESET' ||
                 err.code === 'ETIMEDOUT'; // 有時觸發引用攔截也可以重試
 
             if (isRetryable && currentRetry > 0) {
                 const delay = (3 - currentRetry) * 2000; // 指數退避延遲 2s, 4s
-                logger.warn(`[AI] Google API 暫時不可用 (${err.status || 'retryable'})，${delay}ms 後重試 (剩餘: ${currentRetry})`);
+                logger.warn(`[AI] Google API 暫時不可用 (${status})，${delay}ms 後重試 (剩餘: ${currentRetry})`);
                 await new Promise(resolve => setTimeout(resolve, delay));
                 return performRequest(currentRetry - 1);
             }
+            logger.error(`[AI] Gemini 請求失敗 model=${modelName} search=${useSearch} history=${history?.length || 0} status=${status}: ${message}`);
             throw err;
         }
     };
