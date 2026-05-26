@@ -1,4 +1,4 @@
-import { parseJsonArray } from './jsonUtils.js';
+import { parseJsonArray, parseJsonObject } from './jsonUtils.js';
 import { isValidSteamDealTime } from './steamDeals.js';
 
 export function buildGuildDiagnostics({
@@ -6,14 +6,28 @@ export function buildGuildDiagnostics({
   aiSettings,
   reactionRoles = [],
   availableChannelIds = new Set(),
+  hasDiscordToken = false,
   hasGoogleAiKey = false,
   hasAiAdminPassword = false,
 }) {
   const diagnostics = [];
+  const environment = [
+    ['DISCORD_TOKEN', hasDiscordToken],
+    ['GOOGLE_AI_KEY', hasGoogleAiKey],
+    ['AI_ADMIN_PASSWORD', hasAiAdminPassword],
+  ];
+  const missingEnvironment = environment.filter(([, configured]) => !configured).map(([name]) => name);
   const missingAiEnv = [
     !hasGoogleAiKey ? 'GOOGLE_AI_KEY' : null,
     !hasAiAdminPassword ? 'AI_ADMIN_PASSWORD' : null,
   ].filter(Boolean);
+
+  diagnostics.push({
+    label: '環境配置',
+    status: missingEnvironment.length ? '設定異常' : '正常',
+    detail: environment.map(([name, configured]) => `${name} ${configured ? '已配置' : '未配置'}`).join(' | '),
+    fix: missingEnvironment.length ? '在 `.env` 補齊未配置的必要環境變數後重新啟動。' : null,
+  });
 
   diagnostics.push({
     label: 'AI 核心',
@@ -24,18 +38,29 @@ export function buildGuildDiagnostics({
     fix: missingAiEnv.length ? '在 `.env` 補齊 AI 必要環境變數後重新啟動。' : null,
   });
 
-  diagnostics.push(channelDiagnostic(
+  const logDiagnostic = channelDiagnostic(
     '史官日誌',
     settings.log_channel,
     availableChannelIds,
-    '/設定紀錄 頻道:#伺服器日誌'
-  ));
-  diagnostics.push(channelDiagnostic(
+    '在 `/設定` 的「紀錄」頁選擇日誌頻道'
+  );
+  if (logDiagnostic.status === '正常') {
+    const labels = { message: '訊息', member: '成員', server: '伺服器', voice: '語音', thread: '討論串' };
+    const toggles = parseJsonObject(settings.log_toggles, {});
+    const enabled = Object.entries(labels).filter(([key]) => toggles[key] === 1).map(([, label]) => label);
+    logDiagnostic.detail += ` | 類別 ${enabled.length ? enabled.join('、') : '全數關閉'}`;
+  }
+  diagnostics.push(logDiagnostic);
+  const welcomeDiagnostic = channelDiagnostic(
     '歡迎訊息',
     settings.welcome_channel,
     availableChannelIds,
-    '/設定歡迎 頻道:#歡迎'
-  ));
+    '在 `/設定` 的「歡迎」頁選擇歡迎頻道'
+  );
+  if (welcomeDiagnostic.status === '正常') {
+    welcomeDiagnostic.detail += settings.welcome_message ? ' | 自訂內容' : ' | 預設內容';
+  }
+  diagnostics.push(welcomeDiagnostic);
 
   diagnostics.push({
     label: '等級公告',
@@ -45,27 +70,34 @@ export function buildGuildDiagnostics({
   });
 
   const selfRoleCount = parseJsonArray(settings.selfrole_roles, []).length;
+  diagnostics.push({
+    label: '自助身分組',
+    status: selfRoleCount > 0 ? '正常' : '未設定',
+    detail: selfRoleCount > 0 ? `已建立 ${selfRoleCount} 個下拉選項` : '尚未建立下拉選項',
+    fix: selfRoleCount > 0 ? null : '在 `/設定` 的「自助身分組」頁建立領取選項。',
+  });
+
   const reactionChannelIds = [...new Set(reactionRoles.map((item) => item.channel_id))];
   const missingReactionChannel = reactionChannelIds.some((id) => !availableChannelIds.has(id));
   if (missingReactionChannel) {
     diagnostics.push({
-      label: '自助身分組',
+      label: '反應身分組',
       status: '設定異常',
       detail: '反應身分組使用的頻道已不存在',
-      fix: '使用 `/反應身分組 列表清單` 檢查並刪除失效設定。',
+      fix: '在 `/設定` 的「反應角色」頁檢查並刪除失效設定。',
     });
-  } else if (selfRoleCount === 0 && reactionRoles.length === 0) {
+  } else if (reactionRoles.length === 0) {
     diagnostics.push({
-      label: '自助身分組',
+      label: '反應身分組',
       status: '未設定',
-      detail: '尚未建立領取選項',
-      fix: '使用 `/自助身分組 新增選項` 或 `/反應身分組 建立設定`。',
+      detail: '尚未建立反應站',
+      fix: '在 `/設定` 的「反應身分組」頁建立站點。',
     });
   } else {
     diagnostics.push({
-      label: '自助身分組',
+      label: '反應身分組',
       status: '正常',
-      detail: `下拉選項 ${selfRoleCount} 個，按鈕配對 ${reactionRoles.length} 個`,
+      detail: `已建立 ${reactionRoles.length} 組配對`,
       fix: null,
     });
   }
@@ -80,7 +112,7 @@ function channelDiagnostic(label, channelId, channelIds, command) {
       label,
       status: '未設定',
       detail: '尚未指定頻道',
-      fix: `使用 \`${command}\` 設定。`,
+      fix: `${command}。`,
     };
   }
   if (!channelIds.has(channelId)) {
@@ -88,7 +120,7 @@ function channelDiagnostic(label, channelId, channelIds, command) {
       label,
       status: '設定異常',
       detail: '已設定的頻道不存在或無法存取',
-      fix: `重新使用 \`${command}\` 設定。`,
+      fix: `重新${command}。`,
     };
   }
   return { label, status: '正常', detail: `<#${channelId}>`, fix: null };
@@ -100,7 +132,7 @@ function steamDiagnostic(settings, channelIds) {
       label: 'Steam 推播',
       status: '未設定',
       detail: settings.steam_deal_channel ? '目前已關閉' : '尚未啟用',
-      fix: '使用 `/設定特價推播 設定頻道` 啟用每日推播。',
+      fix: '在 `/設定` 的「Steam」頁啟用每日推播。',
     };
   }
   if (!settings.steam_deal_channel || !channelIds.has(settings.steam_deal_channel)) {
@@ -108,7 +140,7 @@ function steamDiagnostic(settings, channelIds) {
       label: 'Steam 推播',
       status: '設定異常',
       detail: '推播頻道不存在或無法存取',
-      fix: '重新使用 `/設定特價推播 設定頻道` 設定。',
+      fix: '在 `/設定` 的「Steam」頁重新選擇推播頻道。',
     };
   }
   if (!isValidSteamDealTime(settings.steam_deal_time)) {
@@ -116,7 +148,7 @@ function steamDiagnostic(settings, channelIds) {
       label: 'Steam 推播',
       status: '設定異常',
       detail: '每日投放時間格式無效',
-      fix: '使用 `/設定特價推播 設定頻道` 設為 `HH:mm` 格式。',
+      fix: '在 `/設定` 的「Steam」頁將時間設為 `HH:mm` 格式。',
     };
   }
   return {

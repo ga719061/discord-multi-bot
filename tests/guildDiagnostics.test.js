@@ -25,6 +25,7 @@ test('buildGuildDiagnostics reports healthy configured features', () => {
     aiSettings: { model: 'gemini-2.5-flash-lite' },
     reactionRoles: [{ channel_id: 'roles' }],
     availableChannelIds: new Set(['welcome', 'logs', 'deals', 'roles']),
+    hasDiscordToken: true,
     hasGoogleAiKey: true,
     hasAiAdminPassword: true,
   });
@@ -42,7 +43,8 @@ test('buildGuildDiagnostics identifies missing channels and AI environment setti
 
   assert.equal(byLabel(diagnostics, 'AI 核心').status, '設定異常');
   assert.equal(byLabel(diagnostics, '史官日誌').status, '設定異常');
-  assert.equal(byLabel(diagnostics, '自助身分組').status, '設定異常');
+  assert.equal(byLabel(diagnostics, '環境配置').status, '設定異常');
+  assert.equal(byLabel(diagnostics, '反應身分組').status, '設定異常');
   assert.equal(byLabel(diagnostics, 'Steam 推播').status, '設定異常');
 });
 
@@ -56,6 +58,7 @@ test('buildGuildDiagnostics distinguishes optional features that are not configu
       steam_deal_enabled: 0,
     }),
     aiSettings: { model: 'gemini-2.5-flash-lite' },
+    hasDiscordToken: true,
     hasGoogleAiKey: true,
     hasAiAdminPassword: true,
   });
@@ -63,5 +66,6 @@ test('buildGuildDiagnostics distinguishes optional features that are not configu
   assert.equal(byLabel(diagnostics, '史官日誌').status, '未設定');
   assert.equal(byLabel(diagnostics, '歡迎訊息').status, '未設定');
   assert.equal(byLabel(diagnostics, '自助身分組').status, '未設定');
+  assert.equal(byLabel(diagnostics, '反應身分組').status, '未設定');
   assert.equal(byLabel(diagnostics, 'Steam 推播').status, '未設定');
 });

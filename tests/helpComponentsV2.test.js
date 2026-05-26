@@ -21,6 +21,7 @@ function createCommand(name, label = name) {
 function createContext() {
     return {
         userId: 'viewer',
+        canOpenSettings: true,
         catalog: [
             {
                 id: 'general',
@@ -29,14 +30,6 @@ function createContext() {
                 description: '基礎工具。',
                 group: 'public',
                 commands: [createCommand('幫助', '指令大典')],
-            },
-            {
-                id: 'admin',
-                label: '管理',
-                emoji: '🛡️',
-                description: '管理工具。',
-                group: 'admin',
-                commands: [createCommand('發布公告')],
             },
         ],
     };
@@ -61,9 +54,9 @@ test('help home renders a Components V2 payload with navigational admin styling'
         ...sectionButtons,
         ...actionRows.flatMap((row) => row.components),
     ];
-    const adminButton = actionRows
+    const settingsButton = actionRows
         .flatMap((row) => row.components)
-        .find((button) => button.label === '管理');
+        .find((button) => button.label === '進入皇家管理控制台');
     const customIds = buttons.map((button) => button.custom_id);
 
     assert.equal(container.type, ComponentType.Container);
@@ -71,9 +64,16 @@ test('help home renders a Components V2 payload with navigational admin styling'
     assert.equal((payload.flags & MessageFlags.IsComponentsV2) !== 0, true);
     assert.equal('embeds' in payload, false);
     assert.equal('content' in payload, false);
-    assert.equal(adminButton.style, ButtonStyle.Secondary);
+    assert.equal(settingsButton.style, ButtonStyle.Primary);
+    assert.equal(JSON.stringify(container).includes('智慧登入'), false);
     assert.equal(new Set(customIds).size, customIds.length);
     assert.equal(countComponents(container) <= 40, true);
+});
+
+test('help home omits management console shortcut for non-administrators', () => {
+    const context = { ...createContext(), canOpenSettings: false };
+    const text = JSON.stringify(helpViewTesting.renderHome(context).components[0].toJSON());
+    assert.equal(text.includes('管理控制台'), false);
 });
 
 test('help category and detail pages serialize within the V2 component limit', () => {

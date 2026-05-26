@@ -2,18 +2,61 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fetchLolStats, parseLolHtml } from '../lib/providers/lol.js';
-import { buildValorantProfileUrl, fetchValorantStats, parseValorantHtml } from '../lib/providers/valorant.js';
+import {
+  buildValorantProfileUrl,
+  buildValocheckProfileUrl,
+  fetchValorantStats,
+  parseOpggActionPayload,
+  parseOpggValorantData,
+  parseValorantHtml,
+} from '../lib/providers/valorant.js';
 
 const fixture = (file) => readFile(new URL(`./fixtures/${file}`, import.meta.url), 'utf8');
 
-test('Valorant uses the all modes public profile view', () => {
+test('Valorant uses OP.GG as the primary public profile view and keeps ValoCheck fallback', () => {
   assert.equal(
     buildValorantProfileUrl('SEN TenZ', '2906'),
+    'https://op.gg/valorant/profile/SEN%20TenZ-2906'
+  );
+  assert.equal(
+    buildValocheckProfileUrl('SEN TenZ', '2906'),
     'https://www.valocheck.com/player/SEN%20TenZ/2906/?mode=all'
   );
 });
 
-test('parseValorantHtml extracts current Act all modes public stats', async () => {
+test('parseOpggValorantData extracts detailed All Modes stats, player card and top performance', async () => {
+  const profile = parseOpggActionPayload(await fixture('valorant-opgg-profile.rsc'));
+  const statistics = parseOpggActionPayload(await fixture('valorant-opgg-stats.rsc'));
+  const stats = parseOpggValorantData(profile, statistics, await fixture('valorant-opgg-page.html'));
+
+  assert.equal(stats.playerId, 'SEN TenZ#2906');
+  assert.equal(stats.avatarUrl, 'https://c-valorant-api.op.gg/Assets/PlayerCards/CARD-ONE_small.png');
+  assert.equal(stats.rank, 'Radiant');
+  assert.equal(stats.matches, '10');
+  assert.equal(stats.winRate, '70.0%');
+  assert.equal(stats.kd, '1.80');
+  assert.equal(stats.kad, '2.30');
+  assert.equal(stats.acs, '250.0');
+  assert.equal(stats.adr, '150.0');
+  assert.equal(stats.timePlayed, '10 小時 20 分鐘');
+  assert.equal(stats.highestKills, '41');
+  assert.deepEqual(stats.topAgents[0], {
+    name: 'Jett',
+    games: '5',
+    winRate: '80.0%',
+    kda: '2.50',
+    averageScore: '233.3',
+  });
+  assert.deepEqual(stats.weapons[0], { name: 'Vandal', kills: '98', headshot: '40.0%' });
+  assert.deepEqual(stats.maps[0], {
+    name: 'Split',
+    games: '4',
+    record: '3勝 0和 1敗',
+    winRate: '75.0%',
+  });
+});
+
+test('parseValorantHtml preserves the ValoCheck All Modes fallback parser', async () => {
   const stats = parseValorantHtml(await fixture('valorant.html'), 'SEN Tenz', '2906');
 
   assert.deepEqual(stats, {
@@ -45,6 +88,48 @@ test('parseValorantHtml extracts current Act all modes public stats', async () =
       { map: 'Haven', score: '6—1', agent: 'Phoenix', kda: '12/2/1', rrChange: '+10' },
     ],
   });
+});
+
+test('provider selects OP.GG All Modes data when public statistics are available', async () => {
+  const responses = [
+    await fixture('valorant-opgg-page.html'),
+    await fixture('valorant-opgg-route.js'),
+    await fixture('valorant-opgg-profile.rsc'),
+    await fixture('valorant-opgg-stats.rsc'),
+  ];
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push({ url: String(url), options });
+    return new Response(responses.shift(), { status: 200 });
+  };
+
+  const result = await fetchValorantStats('SEN TenZ', '2906', fetchImpl);
+
+  assert.equal(result.status, 'ok');
+  assert.equal(result.source, 'OP.GG');
+  assert.equal(result.isFallback, false);
+  assert.equal(result.stats.topAgent, 'Jett');
+  assert.equal(calls[3].options.headers['next-action'], 'statistics-action-fixture');
+  assert.match(calls[3].options.body, /"queueId":"all"/);
+});
+
+test('provider falls back to ValoCheck when OP.GG profile is not public', async () => {
+  const privateProfile = '0:{"a":"$@1"}\n1:{"gameName":"SEN TenZ","tagLine":"2906","policy":"PRIVATE"}';
+  const responses = [
+    await fixture('valorant-opgg-page.html'),
+    await fixture('valorant-opgg-route.js'),
+    privateProfile,
+    await fixture('valorant.html'),
+  ];
+  const fetchImpl = async () => new Response(responses.shift(), { status: 200 });
+
+  const result = await fetchValorantStats('SEN Tenz', '2906', fetchImpl);
+
+  assert.equal(result.status, 'ok');
+  assert.equal(result.source, 'ValoCheck');
+  assert.equal(result.isFallback, true);
+  assert.equal(result.fallbackReason, 'not_found');
+  assert.equal(result.stats.kd, '0.72');
 });
 
 test('parseLolHtml extracts ranked and champion season summary', async () => {

@@ -10,8 +10,9 @@ import { initVoiceXpManager } from './utils/voiceXpManager.js';
 import { normalizePollVotes, parseJsonArray } from './utils/jsonUtils.js';
 import { isV2Message, v2EditPayload, v2Notice } from './utils/componentsV2.js';
 import { UI_COLORS } from './utils/style.js';
+import { normalizeSelfRoleSettings } from './utils/roleSettings.js';
 import { buildPollPayload } from './commands/fun/poll.js';
-import { buildAnnouncementPayload, buildAnnouncementPreviewButtons, pendingAnnouncements } from './commands/admin/announce.js';
+import { buildAnnouncementPayload, buildAnnouncementPreviewButtons, pendingAnnouncements } from './utils/announcementTools.js';
 import { buildSteamDealDetailPayload, fetchSteamAppDetails, getSteamFailureMessage } from './utils/steamDeals.js';
 
 dns.setDefaultResultOrder('ipv4first');
@@ -90,12 +91,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const member = interaction.member;
         const guild = interaction.guild;
 
-        const db = getDb();
-        const settings = db.prepare('SELECT selfrole_roles FROM guild_settings WHERE guild_id = ?').get(guild.id);
-        const allowedRoles = settings ? parseJsonArray(settings.selfrole_roles, []) : [];
+        const settings = getGuildSettings(guild.id);
+        const allowedRoles = normalizeSelfRoleSettings(settings.selfrole_roles);
+        const allowedRoleIds = allowedRoles.map((entry) => entry.id);
+        const selectedEntries = allowedRoles.filter((entry) => roleIds.includes(entry.id));
+        const blocked = selectedEntries.find((entry) => entry.requirement && !member.roles.cache.has(entry.requirement));
+        if (blocked) {
+          return interaction.editReply(v2EditPayload(v2Notice(
+            '🏷️ 尚未符合領取資格',
+            `你需要先擁有 <@&${blocked.requirement}>，才能領取 <@&${blocked.id}>。`,
+            UI_COLORS.WARNING
+          )));
+        }
 
-        const toAdd = roleIds.filter(id => allowedRoles.includes(id));
-        const toRemove = allowedRoles.filter(id => !roleIds.includes(id));
+        const toAdd = roleIds.filter(id => allowedRoleIds.includes(id));
+        const toRemove = allowedRoleIds.filter(id => !roleIds.includes(id));
 
         try {
           if (toAdd.length > 0) await member.roles.add(toAdd);
@@ -128,7 +138,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const settings = getGuildSettings(interaction.guildId);
         let extra = '';
         if (!settings.log_channel) {
-          extra = '\n\n> ⚠️ **提醒：** 您尚未設定日誌頻道！請使用 `/設定紀錄 頻道:#您的頻道` 來安置史官。';
+          extra = '\n\n> ⚠️ **提醒：** 您尚未設定日誌頻道！請使用 `/設定` 開啟面板後完成設定。';
         }
 
         await interaction.reply(v2Notice(
@@ -199,7 +209,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const draft = pendingAnnouncements.get(uuid);
         if (!draft || Date.now() - draft.timestamp > 5 * 60_000) {
           pendingAnnouncements.delete(uuid);
-          return interaction.reply(v2Notice('📜 草稿已失效', '公告預覽已逾時，請重新執行 `/發布公告`。', UI_COLORS.WARNING));
+          return interaction.reply(v2Notice('📜 草稿已失效', '公告預覽已逾時，請回到 `/設定` 的「發布公告」頁重新建立草稿。', UI_COLORS.WARNING));
         }
         if (draft.userId !== interaction.user.id) {
           return interaction.reply(v2Notice('📜 無法代為頒布', '只有建立草稿的管理員能發布或取消這份公告。', UI_COLORS.WARNING));
@@ -231,7 +241,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
         const data = pendingAnnouncements.get(uuid);
-        if (!data) return interaction.editReply(v2EditPayload(v2Notice('📜 草稿已失效', '公告草稿已過期，請重新執行 `/發布公告`。', UI_COLORS.WARNING)));
+        if (!data) return interaction.editReply(v2EditPayload(v2Notice('📜 草稿已失效', '公告草稿已過期，請回到 `/設定` 的「發布公告」頁重新建立草稿。', UI_COLORS.WARNING)));
 
         const title = interaction.fields.getTextInputValue('announce_title');
         const content = interaction.fields.getTextInputValue('announce_content');

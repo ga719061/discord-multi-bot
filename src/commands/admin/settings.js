@@ -1,0 +1,1132 @@
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ChannelSelectMenuBuilder,
+  ChannelType,
+  ModalBuilder,
+  PermissionFlagsBits,
+  RoleSelectMenuBuilder,
+  SectionBuilder,
+  SlashCommandBuilder,
+  StringSelectMenuBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+  ThumbnailBuilder,
+  UserSelectMenuBuilder,
+  version as discordJsVersion,
+} from 'discord.js';
+import os from 'node:os';
+import {
+  addReactionRole,
+  deleteReactionRolesByMessage,
+  getAiSettings,
+  getGuildSettings,
+  getReactionRolesByGuild,
+  getRankTitle,
+  getUserLevel,
+  getXpForLevel,
+  updateAiSetting,
+  updateGuildSetting,
+} from '../../utils/database.js';
+import { openAnnouncementComposer } from '../../utils/announcementTools.js';
+import { DEFAULT_AI_PROMPT } from '../../utils/aiChat.js';
+import { DEFAULT_AI_MODEL } from '../../utils/aiConfig.js';
+import { buildGuildDiagnostics } from '../../utils/guildDiagnostics.js';
+import { parseJsonObject } from '../../utils/jsonUtils.js';
+import { normalizeSelfRoleSettings, validateAssignableRole } from '../../utils/roleSettings.js';
+import { buildSteamDealsPayload, fetchSteamSpecialDeals, getSteamFailureMessage, isValidSteamDealTime } from '../../utils/steamDeals.js';
+import { ansiBlock, COLORS, UI_COLORS } from '../../utils/style.js';
+import { ephemeralV2Payload, v2Divider, v2EditPayload, v2Notice, v2Panel, v2Payload, v2Text } from '../../utils/componentsV2.js';
+
+const PANEL_TIMEOUT = 10 * 60_000;
+const LOG_TYPES = [
+  { value: 'message', label: '訊息紀錄' },
+  { value: 'member', label: '成員變動' },
+  { value: 'server', label: '伺服器改動' },
+  { value: 'voice', label: '語音狀態' },
+  { value: 'thread', label: '討論串監控' },
+];
+const AI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-3-flash-preview',
+  'gemini-3.1-pro-preview',
+  'gemini-3.1-flash-lite-preview',
+];
+const MODULE_STYLE = {
+  '歡迎訊息': { section: 'CONFIGURATION / WELCOME', color: UI_COLORS.ROYAL },
+  '紀錄設定': { section: 'CONFIGURATION / LOGGING', color: UI_COLORS.INFO },
+  '等級系統': { section: 'CONFIGURATION / LEVELING', color: UI_COLORS.SUCCESS },
+  'Steam 推播': { section: 'CONFIGURATION / STEAM', color: UI_COLORS.INFO },
+  '自助身分組': { section: 'CONFIGURATION / SELF ROLES', color: UI_COLORS.ROYAL },
+  '反應身分組': { section: 'CONFIGURATION / REACTION ROLES', color: UI_COLORS.SPECIAL },
+  'AI 設定': { section: 'CONFIGURATION / AI', color: UI_COLORS.SPECIAL },
+  'AI 存取驗證': { section: 'CONFIGURATION / AI ACCESS', color: UI_COLORS.MUTED },
+  '伺服器資訊': { section: 'OPERATIONS / SERVER', color: UI_COLORS.INFO },
+  '機器人狀態': { section: 'OPERATIONS / SYSTEM', color: UI_COLORS.SUCCESS },
+  '發布公告': { section: 'OPERATIONS / ANNOUNCEMENT', color: UI_COLORS.ROYAL },
+  '成員查詢': { section: 'OPERATIONS / MEMBER', color: UI_COLORS.INFO },
+};
+
+export const data = new SlashCommandBuilder()
+  .setName('設定')
+  .setDescription('集中管理伺服器中的吉吉國王功能設定')
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
+
+export async function execute(interaction) {
+  if (!isAdministrator(interaction)) {
+    return interaction.reply(v2Notice('權限不足', '只有具有 Administrator 權限的管理員可以使用 `/設定`。', UI_COLORS.DANGER));
+  }
+  const context = createPanelContext(interaction);
+  const home = await renderView(context);
+  context.currentComponents = home.components;
+  await interaction.reply(ephemeralV2Payload(home.components));
+  const response = await interaction.fetchReply();
+  context.message = response;
+  context.editResponse = (payload) => interaction.editReply(payload);
+  attachPanelCollector(response, context);
+}
+
+export async function openSettingsPanelFromHelp(interaction, onReturnToHelp) {
+  if (!isAdministrator(interaction)) {
+    return interaction.reply(v2Notice('權限不足', '只有具有 Administrator 權限的管理員可以開啟設定中心。', UI_COLORS.DANGER));
+  }
+  const context = createPanelContext(interaction, { onReturnToHelp });
+  const home = await renderView(context);
+  context.currentComponents = home.components;
+  context.message = interaction.message;
+  context.editResponse = (payload) => interaction.editReply(payload);
+  await interaction.update({ components: home.components });
+  attachPanelCollector(interaction.message, context);
+}
+
+function createPanelContext(interaction, { onReturnToHelp = null } = {}) {
+  return {
+    guild: interaction.guild,
+    client: interaction.client,
+    userId: interaction.user.id,
+    view: 'home',
+    pending: {},
+    currentComponents: [],
+    message: null,
+    editResponse: null,
+    onReturnToHelp,
+    stopPanel: null,
+    notice: null,
+  };
+}
+
+function attachPanelCollector(message, context) {
+  const collector = message.createMessageComponentCollector({ time: PANEL_TIMEOUT });
+  context.stopPanel = (reason) => collector.stop(reason);
+  collector.on('collect', async (component) => {
+    try {
+      if (component.user.id !== context.userId) {
+        await component.reply(v2Notice('無法操作此面板', '請使用 `/設定` 開啟自己的管理面板。', UI_COLORS.WARNING));
+        return;
+      }
+      if (!isAdministrator(component)) {
+        await component.reply(v2Notice('管理權限已失效', '你目前沒有 Administrator 權限，無法繼續修改設定。', UI_COLORS.DANGER));
+        return;
+      }
+      await routeComponent(component, context);
+    } catch (error) {
+      const payload = v2Notice('設定操作失敗', `無法完成此次操作：${error.message}`, UI_COLORS.DANGER);
+      if (component.replied || component.deferred) await component.followUp(payload).catch(() => {});
+      else await component.reply(payload).catch(() => {});
+    }
+  });
+
+  collector.on('end', (_, reason) => {
+    if (reason === 'help') return;
+    context.editResponse(v2EditPayload(ephemeralV2Payload(closePanel(context.currentComponents)))).catch(() => {});
+  });
+}
+
+async function routeComponent(component, context) {
+  const parts = component.customId.split(':');
+  if (parts[0] !== 'settings' || parts[1] !== context.userId) return;
+  const action = parts[2];
+
+  if (action === 'help_home' && context.onReturnToHelp) {
+    context.stopPanel?.('help');
+    return context.onReturnToHelp(component);
+  }
+  if (action === 'view') {
+    context.view = parts[3];
+    context.pending.confirm = null;
+    context.notice = null;
+    return updateView(component, context);
+  }
+  if (action === 'back') {
+    context.view = 'home';
+    context.pending.confirm = null;
+    context.notice = null;
+    return updateView(component, context);
+  }
+  if (action === 'cancel') {
+    context.view = context.pending.confirmReturnView || 'home';
+    context.pending.confirm = null;
+    context.pending.confirmReturnView = null;
+    return updateView(component, context);
+  }
+  if (action === 'confirm') {
+    return executeConfirmation(component, context);
+  }
+  if (action === 'modal') {
+    return openModal(component, context, parts[3]);
+  }
+
+  if (component.isChannelSelectMenu()) {
+    return handleChannelSelect(component, context, action);
+  }
+  if (component.isStringSelectMenu()) {
+    return handleStringSelect(component, context, action);
+  }
+  if (component.isRoleSelectMenu()) {
+    return handleRoleSelect(component, context, action);
+  }
+  if (component.isUserSelectMenu()) {
+    return handleUserSelect(component, context, action);
+  }
+  if (component.isButton()) {
+    return handleButton(component, context, action, parts[3]);
+  }
+}
+
+async function handleChannelSelect(component, context, action) {
+  const channelId = component.values[0];
+  if (action === 'welcome_channel') {
+    updateGuildSetting(context.guild.id, 'welcome_channel', channelId);
+    context.notice = '歡迎頻道已更新。';
+  }
+  if (action === 'log_channel') {
+    updateGuildSetting(context.guild.id, 'log_channel', channelId);
+    context.notice = '日誌頻道已更新。';
+  }
+  if (action === 'steam_channel') {
+    updateGuildSetting(context.guild.id, 'steam_deal_channel', channelId);
+    context.notice = 'Steam 推播頻道已更新。';
+  }
+  if (action === 'self_publish_channel') context.pending.selfPublishChannel = channelId;
+  if (action === 'reaction_channel') context.pending.reactionChannel = channelId;
+  if (action === 'ai_party_channel') context.pending.aiPartyChannel = channelId;
+  if (action === 'announce_channel') context.pending.announceChannel = channelId;
+  await updateView(component, context);
+}
+
+async function handleStringSelect(component, context, action) {
+  if (action === 'log_types') {
+    const toggles = Object.fromEntries(LOG_TYPES.map((type) => [type.value, component.values.includes(type.value) ? 1 : 0]));
+    updateGuildSetting(context.guild.id, 'log_toggles', JSON.stringify(toggles));
+    context.notice = '紀錄類別已更新。';
+  }
+  if (action === 'ai_model') {
+    if (!requireAiUnlock(component, context)) return;
+    updateAiSetting(context.guild.id, 'model', component.values[0]);
+    context.notice = 'AI 模型已更新。';
+  }
+  if (action === 'reaction_delete_target') context.pending.reactionDeleteMessage = component.values[0];
+  if (action === 'announce_mention') {
+    context.pending.announceMention = component.values[0];
+    if (context.pending.announceMention !== 'role') context.pending.announceRole = null;
+  }
+  await updateView(component, context);
+}
+
+async function handleRoleSelect(component, context, action) {
+  const role = context.guild.roles.cache.get(component.values[0]);
+  if (action === 'self_target') {
+    const error = validateAssignableRole(context.guild, role);
+    if (error) return component.reply(v2Notice('無法加入身分組', error, UI_COLORS.WARNING));
+    context.pending.selfTarget = role.id;
+    context.pending.selfRequirement = null;
+  }
+  if (action === 'self_requirement') context.pending.selfRequirement = role?.id || null;
+  if (action === 'self_remove') {
+    const roles = getSelfRoles(context.guild.id).filter((entry) => entry.id !== role?.id);
+    updateGuildSetting(context.guild.id, 'selfrole_roles', JSON.stringify(roles));
+    context.notice = '自助身分組選項已移除。';
+  }
+  if (action === 'announce_role') {
+    context.pending.announceRole = role?.id || null;
+    context.pending.announceMention = 'role';
+  }
+  await updateView(component, context);
+}
+
+async function handleUserSelect(component, context, action) {
+  if (action === 'ai_user') {
+    if (!requireAiUnlock(component, context)) return;
+    context.pending.aiUser = component.values[0];
+  }
+  if (action === 'member_user') context.pending.memberUser = component.values[0];
+  await updateView(component, context);
+}
+
+async function handleButton(component, context, action, value) {
+  if (action === 'announce_compose') {
+    if (!context.pending.announceChannel) {
+      return component.reply(v2Notice('尚未選擇公告頻道', '請先選擇公告要發布到哪個文字頻道。', UI_COLORS.WARNING));
+    }
+    const mention = context.pending.announceMention || 'none';
+    if (mention === 'role' && !context.pending.announceRole) {
+      return component.reply(v2Notice('尚未選擇提及身分組', '請先選擇公告要提及的身分組，或改選其他提及模式。', UI_COLORS.WARNING));
+    }
+    const mentionText = mention === 'role'
+      ? `<@&${context.pending.announceRole}>`
+      : mention === 'everyone' ? '@everyone' : mention === 'here' ? '@here' : null;
+    const allowedMentions = mention === 'role'
+      ? { parse: [], roles: [context.pending.announceRole] }
+      : mention === 'everyone' || mention === 'here' ? { parse: ['everyone'] } : { parse: [] };
+    return openAnnouncementComposer(component, { channelId: context.pending.announceChannel, mentionText, allowedMentions });
+  }
+  if (action === 'level') {
+    updateGuildSetting(context.guild.id, 'level_up_announcement_enabled', value === 'on' ? 1 : 0);
+    context.notice = '等級公告狀態已更新。';
+  }
+  if (action === 'steam_toggle') {
+    updateGuildSetting(context.guild.id, 'steam_deal_enabled', value === 'on' ? 1 : 0);
+    context.notice = 'Steam 推播狀態已更新。';
+  }
+  if (action === 'self_add') {
+    if (!context.pending.selfTarget) {
+      return component.reply(v2Notice('尚未選取身分組', '請先從選單選取要加入的身分組。', UI_COLORS.WARNING));
+    }
+    const roles = getSelfRoles(context.guild.id);
+    if (roles.some((entry) => entry.id === context.pending.selfTarget)) {
+      return component.reply(v2Notice('清單未變更', '選取的身分組已在自助清單中。', UI_COLORS.WARNING));
+    }
+    if (roles.length >= 25) {
+      return component.reply(v2Notice('選單已滿', '自助身分組最多只能提供 25 個選項。', UI_COLORS.WARNING));
+    }
+    roles.push({ id: context.pending.selfTarget, requirement: context.pending.selfRequirement || null });
+    updateGuildSetting(context.guild.id, 'selfrole_roles', JSON.stringify(roles));
+    context.notice = '自助身分組選項已新增。';
+    context.pending.selfTarget = null;
+    context.pending.selfRequirement = null;
+  }
+  if (action === 'self_clear_requirement') context.pending.selfRequirement = null;
+  if (action === 'ai_toggle') {
+    if (!requireAiUnlock(component, context)) return;
+    updateAiSetting(context.guild.id, value, getAiSettings(context.guild.id)[value] ? 0 : 1);
+    context.notice = 'AI 開關已更新。';
+  }
+  if (action === 'ai_user_add' || action === 'ai_user_remove') {
+    if (!requireAiUnlock(component, context)) return;
+    if (!context.pending.aiUser) return component.reply(v2Notice('尚未選取使用者', '請先選擇白名單使用者。', UI_COLORS.WARNING));
+    const settings = getAiSettings(context.guild.id);
+    const whitelist = new Set(settings.whitelist);
+    if (action === 'ai_user_add') whitelist.add(context.pending.aiUser);
+    else whitelist.delete(context.pending.aiUser);
+    updateAiSetting(context.guild.id, 'whitelist', JSON.stringify([...whitelist]));
+    context.notice = 'AI 白名單已更新。';
+  }
+  if (action === 'prepare_confirm') {
+    context.pending.confirmReturnView = context.view;
+    context.pending.confirm = value;
+    context.view = 'confirm';
+  }
+  await updateView(component, context);
+}
+
+async function openModal(component, context, type) {
+  if (type.startsWith('ai_') && type !== 'ai_unlock' && !requireAiUnlock(component, context)) return;
+  const modal = buildModal(context, type);
+  await component.showModal(modal);
+  const submit = await component.awaitModalSubmit({
+    time: 2 * 60_000,
+    filter: (candidate) => candidate.user.id === context.userId && candidate.customId === modal.data.custom_id,
+  }).catch(() => null);
+  if (!submit) return;
+  if (!isAdministrator(submit)) {
+    return submit.reply(v2Notice('管理權限已失效', '你目前沒有 Administrator 權限。', UI_COLORS.DANGER));
+  }
+
+  if (type === 'ai_unlock') {
+    const configuredPassword = process.env.AI_ADMIN_PASSWORD;
+    const suppliedPassword = submit.fields.getTextInputValue('password');
+    if (!configuredPassword) {
+      context.notice = { label: 'SETUP', color: COLORS.GOLD, text: '尚未配置 AI 管理密碼，請先設定環境變數。' };
+    } else if (suppliedPassword !== configuredPassword) {
+      context.notice = { label: 'DENIED', color: COLORS.RED, text: '管理密碼錯誤，AI 設定仍處於鎖定狀態。' };
+    } else {
+      const settings = getAiSettings(context.guild.id);
+      const adminIds = new Set(settings.admin_ids);
+      adminIds.add(context.userId);
+      updateAiSetting(context.guild.id, 'admin_ids', JSON.stringify([...adminIds]));
+      context.notice = { label: 'ACCESS', color: COLORS.GREEN, text: '身分驗證成功，AI 管理權限已解鎖。' };
+    }
+  }
+  if (type === 'welcome_message') {
+    updateGuildSetting(context.guild.id, 'welcome_message', submit.fields.getTextInputValue('value').trim() || null);
+    context.notice = '歡迎訊息已更新。';
+  }
+  if (type === 'steam_time') {
+    const time = submit.fields.getTextInputValue('value').trim();
+    if (!isValidSteamDealTime(time)) {
+      return submit.reply(v2Notice('時間格式錯誤', '請使用 `HH:mm` 格式，例如 `20:00`。', UI_COLORS.WARNING));
+    }
+    updateGuildSetting(context.guild.id, 'steam_deal_time', time);
+    context.notice = '每日推播時間已更新。';
+  }
+  if (type === 'self_description') context.pending.selfDescription = submit.fields.getTextInputValue('value').trim();
+  if (type === 'reaction_create') {
+    if (!context.pending.reactionChannel) {
+      return submit.reply(v2Notice('尚未選擇頻道', '請先在反應身分組頁面選擇發布頻道。', UI_COLORS.WARNING));
+    }
+    const result = parseReactionPairs(context.guild, submit.fields.getTextInputValue('pairs'));
+    if (result.error) return submit.reply(v2Notice('反應站設定無效', result.error, UI_COLORS.WARNING));
+    context.pending.reactionPairs = result.pairs;
+    context.pending.reactionTitle = submit.fields.getTextInputValue('title').trim();
+  }
+  if (type === 'ai_prompt') {
+    updateAiSetting(context.guild.id, 'system_prompt', submit.fields.getTextInputValue('value').trim() || DEFAULT_AI_PROMPT);
+    context.notice = 'AI 角色提示詞已更新。';
+  }
+  if (type === 'ai_party') {
+    if (!context.pending.aiPartyChannel) {
+      return submit.reply(v2Notice('尚未選擇頻道', '請先選擇派對模式的目標頻道。', UI_COLORS.WARNING));
+    }
+    const minutes = Number.parseInt(submit.fields.getTextInputValue('minutes'), 10);
+    if (!Number.isSafeInteger(minutes) || minutes < 1) {
+      return submit.reply(v2Notice('持續時間無效', '請輸入至少 1 分鐘的整數時間。', UI_COLORS.WARNING));
+    }
+    context.pending.aiPartyMinutes = minutes;
+  }
+  await updateView(submit, context);
+}
+
+function buildModal(context, type) {
+  const modal = new ModalBuilder().setCustomId(id(context, `modal_submit_${type}`));
+  if (type === 'welcome_message') {
+    const current = getGuildSettings(context.guild.id).welcome_message || '';
+    return modal.setTitle('編輯歡迎訊息').addComponents(textRow('value', '歡迎訊息（可留空恢復預設）', current, TextInputStyle.Paragraph, false));
+  }
+  if (type === 'steam_time') {
+    const current = getGuildSettings(context.guild.id).steam_deal_time || '20:00';
+    return modal.setTitle('設定每日推播時間').addComponents(textRow('value', '台灣時間 HH:mm', current, TextInputStyle.Short));
+  }
+  if (type === 'self_description') {
+    return modal.setTitle('發布選單文字').addComponents(textRow('value', '選單介紹', context.pending.selfDescription || '請在下方選擇你想領取的身分組。', TextInputStyle.Paragraph));
+  }
+  if (type === 'reaction_create') {
+    return modal.setTitle('建立反應身分組站').addComponents(
+      textRow('pairs', 'emoji:身分組ID，多組以逗號分隔', '', TextInputStyle.Paragraph),
+      textRow('title', '標題（選填）', '', TextInputStyle.Short, false)
+    );
+  }
+  if (type === 'ai_unlock') {
+    return modal.setTitle('AI 管理身分驗證').addComponents(textRow('password', '管理密碼', '', TextInputStyle.Short));
+  }
+  if (type === 'ai_prompt') {
+    return modal.setTitle('編輯 AI 角色設定').addComponents(textRow('value', '提示詞（留空恢復預設）', '', TextInputStyle.Paragraph, false));
+  }
+  return modal.setTitle('啟動 AI 派對模式').addComponents(textRow('minutes', '持續分鐘', '30', TextInputStyle.Short));
+}
+
+async function executeConfirmation(component, context) {
+  const type = context.pending.confirm;
+  if (!type) return updateView(component, context);
+  if (type === 'ai_party' && !aiUnlocked(context)) {
+    return component.reply(v2Notice('AI 設定已鎖定', '請回到控制台的 AI 頁完成管理身分驗證。', UI_COLORS.DANGER));
+  }
+
+  if (type === 'self_publish') {
+    if (!context.pending.selfPublishChannel) return component.reply(v2Notice('尚未選擇頻道', '請先選擇發布頻道。', UI_COLORS.WARNING));
+    const channel = await context.guild.channels.fetch(context.pending.selfPublishChannel).catch(() => null);
+    if (!channel?.isTextBased()) return component.reply(v2Notice('頻道無效', '選取的頻道無法發布訊息。', UI_COLORS.WARNING));
+    await component.deferUpdate();
+    await publishSelfRoleMenu(context.guild, channel, getSelfRoles(context.guild.id), context.pending.selfDescription);
+  }
+  if (type === 'reaction_create') {
+    if (!context.pending.reactionChannel || !context.pending.reactionPairs) {
+      return component.reply(v2Notice('設定尚未完成', '請選擇頻道並填寫反應配對。', UI_COLORS.WARNING));
+    }
+    const channel = await context.guild.channels.fetch(context.pending.reactionChannel).catch(() => null);
+    if (!channel?.isTextBased()) return component.reply(v2Notice('頻道無效', '選取的頻道無法發布訊息。', UI_COLORS.WARNING));
+    await component.deferUpdate();
+    await createReactionStation(context.guild, channel, context.pending.reactionPairs, context.pending.reactionTitle);
+  }
+  if (type === 'reaction_delete') {
+    if (!context.pending.reactionDeleteMessage) return component.reply(v2Notice('尚未選擇站點', '請先選取要刪除的反應站。', UI_COLORS.WARNING));
+    await component.deferUpdate();
+    await deleteReactionStation(context.guild, context.pending.reactionDeleteMessage);
+  }
+  if (type === 'steam_publish') {
+    await component.deferUpdate();
+    try {
+      await publishSteamDeals(context.guild);
+    } catch (error) {
+      await component.followUp(v2Notice('Steam 投放失敗', getSteamFailureMessage(error), UI_COLORS.WARNING));
+    }
+    context.pending.confirm = null;
+    context.view = 'steam';
+    const page = await renderView(context);
+    context.currentComponents = page.components;
+    await context.editResponse(v2EditPayload(ephemeralV2Payload(page.components)));
+    return;
+  }
+  if (type === 'ai_party') {
+    if (!context.pending.aiPartyChannel || !context.pending.aiPartyMinutes) {
+      return component.reply(v2Notice('設定尚未完成', '請先選擇派對頻道與持續時間。', UI_COLORS.WARNING));
+    }
+    await component.deferUpdate();
+    await startAiParty(context.guild, context.pending.aiPartyChannel, context.pending.aiPartyMinutes);
+  }
+  context.pending.confirm = null;
+  context.pending.confirmReturnView = null;
+  context.view = type.startsWith('self_') ? 'selfrole' : type.startsWith('reaction_') ? 'reaction' : type.startsWith('ai_') ? 'ai' : 'steam';
+  const page = await renderView(context);
+  context.currentComponents = page.components;
+  if (component.deferred) await context.editResponse(v2EditPayload(ephemeralV2Payload(page.components)));
+  else await component.update({ components: page.components });
+}
+
+async function updateView(component, context) {
+  const view = await renderView(context);
+  context.currentComponents = view.components;
+  await component.update({ components: view.components });
+}
+
+async function renderView(context) {
+  if (context.view === 'welcome') return renderWelcome(context);
+  if (context.view === 'logging') return renderLogging(context);
+  if (context.view === 'leveling') return renderLeveling(context);
+  if (context.view === 'steam') return renderSteam(context);
+  if (context.view === 'selfrole') return renderSelfRole(context);
+  if (context.view === 'reaction') return renderReaction(context);
+  if (context.view === 'ai') return renderAi(context);
+  if (context.view === 'serverinfo') return renderServerInfo(context);
+  if (context.view === 'botstatus') return renderBotStatus(context);
+  if (context.view === 'announcement') return renderAnnouncement(context);
+  if (context.view === 'member') return renderMemberLookup(context);
+  if (context.view === 'confirm') return renderConfirm(context);
+  return renderHome(context);
+}
+
+async function renderHome(context) {
+  const diagnostics = await getDiagnostics(context.guild);
+  const accessDiagnostic = {
+    label: 'AI 管理授權',
+    status: aiUnlocked(context) ? '正常' : '未設定',
+    detail: aiUnlocked(context) ? '已通過管理身分驗證' : '請進入 AI 頁完成管理身分驗證',
+  };
+  const statusItems = [...diagnostics, accessDiagnostic];
+  const readyCount = statusItems.filter((item) => item.status === '正常').length;
+  const pendingCount = statusItems.filter((item) => item.status === '未設定').length;
+  const alertCount = statusItems.filter((item) => item.status === '設定異常').length;
+  const overallLabel = alertCount ? '需要處理' : pendingCount ? '待完成設定' : '全系統正常';
+  const overview = ansiBlock([
+    { color: alertCount ? COLORS.RED : pendingCount ? COLORS.GOLD : COLORS.GREEN, text: `[ CONTROL ] ${overallLabel}` },
+    { color: COLORS.GREEN, text: `[ READY   ] ${readyCount} 個模組運作正常` },
+    { color: COLORS.GOLD, text: `[ SETUP   ] ${pendingCount} 個模組等待設定` },
+    { color: COLORS.RED, text: `[ ALERT   ] ${alertCount} 個模組需要修正` },
+    ...statusItems.map(formatDiagnosticLine),
+  ]);
+  const fixes = diagnostics.filter((item) => item.fix).map((item) => `- **${item.label}**：${item.fix}`).join('\n');
+  const panel = v2Panel(alertCount ? UI_COLORS.WARNING : UI_COLORS.ROYAL)
+    .addTextDisplayComponents(v2Text(
+      `-# ADMINISTRATOR CONTROL CENTER  /  OVERVIEW\n# ${context.guild.name} 管理控制台\n` +
+      '集中管理伺服器設定、公開操作與系統狀態。所有操作僅限 Administrator。'
+    ))
+    .addSeparatorComponents(v2Divider())
+    .addTextDisplayComponents(v2Text(`## 設定健康總覽\n${overview}${fixes ? `\n### 修正建議\n${fixes}` : '\n> 所有必要設定均已就緒。'}`))
+    .addSeparatorComponents(v2Divider())
+    .addTextDisplayComponents(v2Text('## CONFIGURATION | 功能設定\n調整成員體驗、自動化推播、身分組與 AI 行為。'))
+    .addActionRowComponents(
+      buttonRow(context, [['welcome', '歡迎'], ['logging', '紀錄'], ['leveling', '等級'], ['steam', 'Steam']]),
+      buttonRow(context, [['selfrole', '自助身分組'], ['reaction', '反應身分組'], ['ai', aiUnlocked(context) ? 'AI 設定' : 'AI 驗證', aiUnlocked(context) ? ButtonStyle.Secondary : ButtonStyle.Primary]])
+    )
+    .addSeparatorComponents(v2Divider())
+    .addTextDisplayComponents(v2Text('## OPERATIONS | 管理工具\n查看核心狀態，或執行會影響伺服器的管理工作。'))
+    .addActionRowComponents(
+      buttonRow(context, [['serverinfo', '伺服器資訊'], ['botstatus', '機器人狀態'], ['announcement', '發布公告'], ['member', '成員查詢']])
+    );
+  if (context.onReturnToHelp) {
+    panel.addActionRowComponents(actionButtons(context, [['help_home', '返回 /幫助 首頁', ButtonStyle.Secondary]]));
+  }
+  return { components: [panel] };
+}
+
+function renderWelcome(context) {
+  const settings = getGuildSettings(context.guild.id);
+  const panel = modulePanel(context, '歡迎訊息', `頻道：${settings.welcome_channel ? `<#${settings.welcome_channel}>` : '尚未設定'}\n訊息：${settings.welcome_message || '使用預設歡迎內容'}`)
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ChannelSelectMenuBuilder().setCustomId(id(context, 'welcome_channel')).setPlaceholder('選擇歡迎頻道').addChannelTypes(ChannelType.GuildText)
+    ))
+    .addActionRowComponents(actionButtons(context, [['modal:welcome_message', '編輯訊息', ButtonStyle.Primary]]));
+  return { components: [finishPanel(panel, context)] };
+}
+
+function renderLogging(context) {
+  const settings = getGuildSettings(context.guild.id);
+  const toggles = parseJsonObject(settings.log_toggles, {});
+  const panel = modulePanel(context, '紀錄設定', `日誌頻道：${settings.log_channel ? `<#${settings.log_channel}>` : '尚未設定'}\n選擇要啟用的紀錄類型。`)
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ChannelSelectMenuBuilder().setCustomId(id(context, 'log_channel')).setPlaceholder('選擇日誌頻道').addChannelTypes(ChannelType.GuildText)
+    ))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder().setCustomId(id(context, 'log_types')).setPlaceholder('啟用的紀錄類別').setMinValues(0).setMaxValues(LOG_TYPES.length)
+        .addOptions(LOG_TYPES.map((type) => ({ label: type.label, value: type.value, default: toggles[type.value] === 1 })))
+    ));
+  return { components: [finishPanel(panel, context)] };
+}
+
+function renderLeveling(context) {
+  const enabled = getGuildSettings(context.guild.id).level_up_announcement_enabled !== 0;
+  const panel = modulePanel(context, '等級系統', `升級公告目前為：**${enabled ? '開啟' : '關閉'}**`)
+    .addActionRowComponents(actionButtons(context, [
+      ['level:on', '開啟公告', ButtonStyle.Success],
+      ['level:off', '關閉公告', ButtonStyle.Secondary],
+    ]));
+  return { components: [finishPanel(panel, context)] };
+}
+
+function renderSteam(context) {
+  const settings = getGuildSettings(context.guild.id);
+  const status = settings.steam_deal_enabled === 1 ? '開啟' : '關閉';
+  const panel = modulePanel(context, 'Steam 推播', `狀態：**${status}**\n頻道：${settings.steam_deal_channel ? `<#${settings.steam_deal_channel}>` : '尚未設定'}\n每日時間：${settings.steam_deal_time || '尚未設定'} (Asia/Taipei)`)
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ChannelSelectMenuBuilder().setCustomId(id(context, 'steam_channel')).setPlaceholder('選擇推播頻道').addChannelTypes(ChannelType.GuildText)
+    ))
+    .addActionRowComponents(actionButtons(context, [
+      ['modal:steam_time', '設定時間', ButtonStyle.Primary],
+      ['steam_toggle:on', '啟用', ButtonStyle.Success],
+      ['steam_toggle:off', '停用', ButtonStyle.Secondary],
+      ['prepare_confirm:steam_publish', '立即投放', ButtonStyle.Danger],
+    ]));
+  return { components: [finishPanel(panel, context)] };
+}
+
+function renderSelfRole(context) {
+  const entries = getSelfRoles(context.guild.id);
+  const listing = entries.length ? entries.slice(0, 12).map((entry) => {
+    const role = context.guild.roles.cache.get(entry.id);
+    const required = entry.requirement ? context.guild.roles.cache.get(entry.requirement) : null;
+    return `- ${role ? `<@&${role.id}>` : `已刪除 (${entry.id})`}${required ? `，需 <@&${required.id}>` : ''}`;
+  }).join('\n') : '尚未建立選項';
+  const pending = context.pending.selfTarget
+    ? `\n待新增：<@&${context.pending.selfTarget}>${context.pending.selfRequirement ? `，需 <@&${context.pending.selfRequirement}>` : '，無門檻'}`
+    : '';
+  const panel = modulePanel(context, '自助身分組', `${listing}${pending}`)
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new RoleSelectMenuBuilder().setCustomId(id(context, 'self_target')).setPlaceholder('選擇要新增的身分組')
+    ))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new RoleSelectMenuBuilder().setCustomId(id(context, 'self_requirement')).setPlaceholder('選擇門檻身分組（選填）')
+    ))
+    .addActionRowComponents(actionButtons(context, [
+      ['self_add', '加入選項', ButtonStyle.Success],
+      ['self_clear_requirement', '清除門檻', ButtonStyle.Secondary],
+      ['modal:self_description', '編輯發布文字', ButtonStyle.Secondary],
+    ]))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new RoleSelectMenuBuilder().setCustomId(id(context, 'self_remove')).setPlaceholder('移除自助選項')
+    ))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ChannelSelectMenuBuilder().setCustomId(id(context, 'self_publish_channel')).setPlaceholder('選擇發布頻道').addChannelTypes(ChannelType.GuildText)
+    ))
+    .addActionRowComponents(actionButtons(context, [['prepare_confirm:self_publish', '發布選單', ButtonStyle.Danger]]));
+  return { components: [finishPanel(panel, context)] };
+}
+
+function renderReaction(context) {
+  const roles = getReactionRolesByGuild(context.guild.id);
+  const stationIds = [...new Set(roles.map((item) => item.message_id))];
+  const summary = stationIds.length ? `目前共有 ${stationIds.length} 個站點、${roles.length} 組配對。` : '尚未建立反應身分組站。';
+  const panel = modulePanel(context, '反應身分組', `${summary}\n建立站點需先選擇頻道，再填寫 emoji 與身分組配對。`)
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ChannelSelectMenuBuilder().setCustomId(id(context, 'reaction_channel')).setPlaceholder('選擇新站點頻道').addChannelTypes(ChannelType.GuildText)
+    ))
+    .addActionRowComponents(actionButtons(context, [
+      ['modal:reaction_create', '填寫新站點', ButtonStyle.Primary],
+      ['prepare_confirm:reaction_create', '發布新站點', ButtonStyle.Danger],
+    ]));
+  if (stationIds.length) {
+    panel.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder().setCustomId(id(context, 'reaction_delete_target')).setPlaceholder('選取要刪除的站點')
+        .addOptions(stationIds.slice(0, 25).map((messageId) => ({ label: `訊息 ${messageId}`, value: messageId })))
+    ));
+    panel.addActionRowComponents(actionButtons(context, [['prepare_confirm:reaction_delete', '刪除選取站點', ButtonStyle.Danger]]));
+  }
+  return { components: [finishPanel(panel, context)] };
+}
+
+function renderAi(context) {
+  if (!aiUnlocked(context)) {
+    const passwordStatus = process.env.AI_ADMIN_PASSWORD
+      ? { color: COLORS.GOLD, text: '[ LOCKED ] 尚未驗證管理身分' }
+      : { color: COLORS.RED, text: '[ SETUP  ] 尚未配置 AI_ADMIN_PASSWORD' };
+    const panel = modulePanel(context, 'AI 存取驗證', 'AI 管理設定目前為鎖定狀態。驗證成功後，此帳號將持續保有本伺服器的 AI 管理權限。')
+      .addTextDisplayComponents(v2Text([
+        '## ACCESS STATUS | 授權狀態',
+        ansiBlock([
+          passwordStatus,
+          { color: COLORS.CYAN, text: '[ SCOPE  ] 模型 / 聯網 / 記憶 / 白名單 / 派對模式' },
+        ]),
+        '密碼僅用於本次驗證，不會顯示於面板或寫入資料庫。',
+      ].join('\n')))
+      .addActionRowComponents(actionButtons(context, [['modal:ai_unlock', '輸入管理密碼', ButtonStyle.Primary]]));
+    return { components: [finishPanel(panel, context)] };
+  }
+  const settings = getAiSettings(context.guild.id);
+  const panel = modulePanel(context, 'AI 設定', `模型：\`${settings.model || DEFAULT_AI_MODEL}\`\n聯網：**${settings.search_enabled ? '開啟' : '關閉'}** | 對話記憶：**${settings.context_enabled ? '開啟' : '關閉'}**\n白名單：${settings.whitelist.length} 人`)
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder().setCustomId(id(context, 'ai_model')).setPlaceholder('選擇 AI 模型')
+        .addOptions(AI_MODELS.map((model) => ({ label: model, value: model, default: model === settings.model })))
+    ))
+    .addActionRowComponents(actionButtons(context, [
+      ['ai_toggle:search_enabled', settings.search_enabled ? '關閉聯網' : '開啟聯網', settings.search_enabled ? ButtonStyle.Secondary : ButtonStyle.Success],
+      ['ai_toggle:context_enabled', settings.context_enabled ? '關閉記憶' : '開啟記憶', settings.context_enabled ? ButtonStyle.Secondary : ButtonStyle.Success],
+      ['modal:ai_prompt', '編輯提示詞', ButtonStyle.Secondary],
+    ]))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new UserSelectMenuBuilder().setCustomId(id(context, 'ai_user')).setPlaceholder('選擇白名單使用者')
+    ))
+    .addActionRowComponents(actionButtons(context, [
+      ['ai_user_add', '加入白名單', ButtonStyle.Success],
+      ['ai_user_remove', '移除白名單', ButtonStyle.Secondary],
+    ]))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ChannelSelectMenuBuilder().setCustomId(id(context, 'ai_party_channel')).setPlaceholder('選擇派對頻道').addChannelTypes(ChannelType.GuildText)
+    ))
+    .addActionRowComponents(actionButtons(context, [
+      ['modal:ai_party', '設定派對時間', ButtonStyle.Secondary],
+      ['prepare_confirm:ai_party', '啟動派對', ButtonStyle.Danger],
+    ]));
+  return { components: [finishPanel(panel, context)] };
+}
+
+async function renderServerInfo(context) {
+  const guild = context.guild;
+  const owner = await guild.fetchOwner().catch(() => null);
+  const aiSettings = getAiSettings(guild.id);
+  const diagnostics = await getDiagnostics(guild);
+  const readyCount = diagnostics.filter((item) => item.status === '正常').length;
+  const pendingCount = diagnostics.filter((item) => item.status === '未設定').length;
+  const alertCount = diagnostics.filter((item) => item.status === '設定異常').length;
+  const textChannels = guild.channels.cache.filter((channel) => channel.type === ChannelType.GuildText).size;
+  const voiceChannels = guild.channels.cache.filter((channel) => channel.type === ChannelType.GuildVoice).size;
+  const categories = guild.channels.cache.filter((channel) => channel.type === ChannelType.GuildCategory).size;
+  const verificationLevels = ['無', '低', '中', '高', '最高'];
+  const filters = ['關閉', '無身分組成員', '全部成員'];
+  const panel = modulePanel(
+    context,
+    '伺服器資訊',
+    `**${guild.name}** 的管理摘要、安全狀態與設定覆蓋情形。`,
+    { thumbnail: guild.iconURL?.({ size: 256, extension: 'png' }) }
+  )
+    .addTextDisplayComponents(v2Text([
+      '## SERVER HEALTH | 管理健康度',
+      ansiBlock([
+        { color: alertCount ? COLORS.RED : pendingCount ? COLORS.GOLD : COLORS.GREEN, text: `[ STATUS ] ${alertCount ? '需要處理異常' : pendingCount ? '尚有功能待設定' : '所有設定正常'}` },
+        { color: COLORS.GREEN, text: `[ READY  ] ${readyCount} 個模組正常` },
+        { color: COLORS.GOLD, text: `[ SETUP  ] ${pendingCount} 個模組待設定` },
+        { color: COLORS.RED, text: `[ ALERT  ] ${alertCount} 個模組異常` },
+      ]),
+      '## SERVER PROFILE | 基本資料',
+      ansiBlock([
+        { color: COLORS.GOLD, text: `[ MEMBERS  ] ${guild.memberCount} 位成員` },
+        { color: COLORS.CYAN, text: `[ CHANNELS ] ${textChannels} 文字 / ${voiceChannels} 語音 / ${categories} 分類` },
+        { color: COLORS.WHITE, text: `[ ASSETS   ] ${guild.roles.cache.size} 身分組 / ${guild.emojis.cache.size} 表情` },
+      ]),
+      `伺服器 ID：\`${guild.id}\``,
+      `領主：${owner ? `**${owner.user.tag}**` : '未知'} | 建立日期：<t:${Math.floor(guild.createdTimestamp / 1000)}:d>`,
+      `加成等級：**Lv.${guild.premiumTier}** (${guild.premiumSubscriptionCount || 0} 次加成)`,
+      `偏好語系：\`${guild.preferredLocale || '未知'}\` | 社群功能：**${guild.features?.length || 0}** 項`,
+    ].join('\n')))
+    .addSeparatorComponents(v2Divider())
+    .addTextDisplayComponents(v2Text([
+      '## SECURITY & AI | 安全與 AI',
+      `驗證層級：**${verificationLevels[guild.verificationLevel] || '未知'}** | 內容過濾：**${filters[guild.explicitContentFilter] || '未知'}**`,
+      `AI 模型：\`${aiSettings.model || DEFAULT_AI_MODEL}\` | 聯網檢索：**${aiSettings.search_enabled ? '開啟' : '關閉'}**`,
+      `派對模式：**${aiSettings.party_channel_id && aiSettings.party_expires_at > Date.now() ? '進行中' : '未啟用'}**`,
+    ].join('\n')))
+    .addSeparatorComponents(v2Divider())
+    .addTextDisplayComponents(v2Text(`## CONFIG SNAPSHOT | 設定摘要\n${diagnostics.map((item) => `${statusMarker(item.status)} **${item.label}**：${item.detail}`).join('\n')}`));
+  return { components: [finishPanel(panel, context)] };
+}
+
+function renderBotStatus(context) {
+  const ping = context.client?.ws?.ping;
+  const uptime = process.uptime();
+  const days = Math.floor(uptime / 86400);
+  const hours = Math.floor((uptime % 86400) / 3600);
+  const minutes = Math.floor((uptime % 3600) / 60);
+  const memory = process.memoryUsage();
+  const heapUsed = (memory.heapUsed / 1024 / 1024).toFixed(1);
+  const heapTotal = (memory.heapTotal / 1024 / 1024).toFixed(1);
+  const load = os.loadavg().map((amount) => amount.toFixed(2)).join(', ');
+  const guildCount = context.client?.guilds?.cache?.size ?? 0;
+  const memberCount = context.client?.guilds?.cache?.reduce?.((total, guild) => total + guild.memberCount, 0) ?? 0;
+  const panel = modulePanel(context, '機器人狀態', '檢視目前程序、主機與連線狀況。')
+    .addTextDisplayComponents(v2Text([
+      '## SERVICE CORE | 核心服務',
+      ansiBlock([
+        { color: COLORS.CYAN, text: `[系統] Node ${process.version} | discord.js v${discordJsVersion}` },
+        { color: COLORS.WHITE, text: `[運行] ${days}d ${hours}h ${minutes}m` },
+        { color: Number.isFinite(ping) && ping < 150 ? COLORS.GREEN : COLORS.GOLD, text: `[延遲] ${Number.isFinite(ping) ? `${ping} ms` : '讀取中'}` },
+      ]),
+    ].join('\n')))
+    .addSeparatorComponents(v2Divider())
+    .addTextDisplayComponents(v2Text([
+      '## HOST LOAD | 主機負載',
+      ansiBlock([
+        { color: COLORS.GREEN, text: `[ MEMORY ] ${heapUsed} / ${heapTotal} MB` },
+        { color: COLORS.CYAN, text: `[ LOAD   ] ${load}` },
+        { color: COLORS.GOLD, text: `[ SCOPE  ] ${guildCount} 個伺服器 / ${memberCount} 位成員` },
+      ]),
+      `處理器：\`${os.cpus()[0]?.model?.trim() || '未知'}\``,
+      `執行環境：\`${os.type()} ${os.release()} (${os.arch()})\``,
+    ].join('\n')));
+  return { components: [finishPanel(panel, context)] };
+}
+
+function renderAnnouncement(context) {
+  const mode = context.pending.announceMention || 'none';
+  const modeText = {
+    none: '不提及任何人',
+    here: '提及 @here',
+    everyone: '提及 @everyone',
+    role: context.pending.announceRole ? `提及 <@&${context.pending.announceRole}>` : '提及指定身分組 (尚未選擇)',
+  }[mode];
+  const panel = modulePanel(context, '發布公告', [
+    '公告在預覽確認前不會公開發布；附件僅接受圖片，最多 3 張。',
+    ansiBlock([
+      { color: context.pending.announceChannel ? COLORS.GREEN : COLORS.GOLD, text: `[ CHANNEL ] ${context.pending.announceChannel ? `#${context.pending.announceChannel}` : '尚未選擇目標頻道'}` },
+      { color: mode === 'everyone' ? COLORS.RED : mode === 'none' ? COLORS.CYAN : COLORS.GOLD, text: `[ MENTION ] ${modeText}` },
+      { color: COLORS.WHITE, text: '[ STATUS  ] 等待撰寫與預覽確認' },
+    ]),
+    `目前目標：${context.pending.announceChannel ? `<#${context.pending.announceChannel}>` : '**尚未選擇**'}`,
+  ].join('\n'))
+    .addTextDisplayComponents(v2Text('## COMPOSER | 發布目標\n先選擇頻道與互斥的提及模式，再開啟公告編輯器。'))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ChannelSelectMenuBuilder().setCustomId(id(context, 'announce_channel')).setPlaceholder('選擇公告發布頻道').addChannelTypes(ChannelType.GuildText)
+    ))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder().setCustomId(id(context, 'announce_mention')).setPlaceholder('選擇提及模式').addOptions(
+        { label: '不提及任何人', value: 'none', default: mode === 'none' },
+        { label: '提及 @here', value: 'here', default: mode === 'here' },
+        { label: '提及 @everyone', value: 'everyone', default: mode === 'everyone' },
+        { label: '提及指定身分組', value: 'role', default: mode === 'role' }
+      )
+    ))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new RoleSelectMenuBuilder().setCustomId(id(context, 'announce_role')).setPlaceholder('指定要提及的身分組 (選填)')
+    ))
+    .addActionRowComponents(actionButtons(context, [['announce_compose', '撰寫並預覽公告', ButtonStyle.Primary]]));
+  return { components: [finishPanel(panel, context)] };
+}
+
+async function renderMemberLookup(context) {
+  const member = context.pending.memberUser
+    ? await context.guild.members.fetch(context.pending.memberUser).catch(() => null)
+    : null;
+  const user = member
+    ? (typeof member.user.fetch === 'function' ? await member.user.fetch().catch(() => member.user) : member.user)
+    : null;
+  const avatar = member?.displayAvatarURL?.({ size: 256, extension: 'png' })
+    || user?.displayAvatarURL?.({ size: 256, extension: 'png' });
+  const panel = modulePanel(
+    context,
+    '成員查詢',
+    member
+      ? `已載入 **${member.displayName}** 的私人管理檔案。`
+      : '選擇成員後查看帳號、活動、權限與等級紀錄。查詢內容僅顯示於此私人面板。',
+    { thumbnail: avatar }
+  )
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new UserSelectMenuBuilder().setCustomId(id(context, 'member_user')).setPlaceholder('選擇要查詢的成員')
+    ));
+  if (!context.pending.memberUser) {
+    panel.addTextDisplayComponents(v2Text(ansiBlock([{ color: COLORS.GRAY, text: '[ WAITING ] 尚未選擇成員' }])));
+    return { components: [finishPanel(panel, context)] };
+  }
+  if (!member) {
+    panel.addTextDisplayComponents(v2Text('找不到選取的成員，請重新選擇。'));
+    return { components: [finishPanel(panel, context)] };
+  }
+  const level = getUserLevel(context.guild.id, member.id);
+  const xpNeeded = getXpForLevel(level.level + 1);
+  const progress = Math.min(100, Math.floor((level.xp / Math.max(1, xpNeeded)) * 100));
+  const memberRoles = member.roles.cache
+    .filter((role) => role.id !== context.guild.id)
+    .sort((a, b) => b.position - a.position);
+  const roles = memberRoles
+    .map((role) => role.toString())
+    .slice(0, 12)
+    .join(', ') || '無';
+  const permissionNames = [
+    [PermissionFlagsBits.Administrator, 'Administrator'],
+    [PermissionFlagsBits.ManageGuild, '管理伺服器'],
+    [PermissionFlagsBits.ManageRoles, '管理身分組'],
+    [PermissionFlagsBits.ManageMessages, '管理訊息'],
+    [PermissionFlagsBits.KickMembers, '踢除成員'],
+    [PermissionFlagsBits.BanMembers, '封鎖成員'],
+  ].filter(([permission]) => member.permissions?.has?.(permission)).map(([, label]) => label);
+  const statusLabels = { online: '線上', idle: '閒置', dnd: '請勿打擾', offline: '離線' };
+  const presence = statusLabels[member.presence?.status] || '未提供';
+  const activities = member.presence?.activities?.map((activity) => activity.name).filter(Boolean).join('、') || '無';
+  const badges = user.flags?.toArray?.().join('、') || '無';
+  const timeout = member.communicationDisabledUntilTimestamp > Date.now()
+    ? `<t:${Math.floor(member.communicationDisabledUntilTimestamp / 1000)}:R> 結束`
+    : '無';
+  panel
+    .addSeparatorComponents(v2Divider())
+    .addTextDisplayComponents(v2Text([
+      `## MEMBER PROFILE | ${member.displayName}`,
+      ansiBlock([
+        { color: COLORS.GOLD, text: `[ LEVEL  ] Lv.${level.level} / ${getRankTitle(level.level)}` },
+        { color: COLORS.CYAN, text: `[ XP     ] ${level.xp} / ${xpNeeded} (${progress}%)` },
+        { color: COLORS.GREEN, text: `[ ACTIVE ] ${level.total_messages} 則訊息 / ${level.total_voice_mins || 0} 分鐘語音` },
+      ]),
+      `帳號：**${user.tag}** | ID：\`${member.id}\` | 類型：**${user.bot ? '機器人' : '使用者'}**`,
+      `暱稱：**${member.nickname || '未設定'}** | 狀態：**${presence}** | 活動：**${activities}**`,
+      `建立帳號：<t:${Math.floor(user.createdTimestamp / 1000)}:F> (<t:${Math.floor(user.createdTimestamp / 1000)}:R>)`,
+      `加入伺服器：${member.joinedTimestamp ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:F> (<t:${Math.floor(member.joinedTimestamp / 1000)}:R>)` : '未知'}`,
+    ].join('\n')))
+    .addSeparatorComponents(v2Divider())
+    .addTextDisplayComponents(v2Text([
+      '## MODERATION & ROLES | 管理與身分',
+      `伺服器加成：**${member.premiumSinceTimestamp ? `自 <t:${Math.floor(member.premiumSinceTimestamp / 1000)}:d> 起加成` : '無'}** | 禁言狀態：**${timeout}**`,
+      `帳號徽章：${badges}`,
+      `管理權限：${permissionNames.length ? permissionNames.map((name) => `\`${name}\``).join(' ') : '無特殊管理權限'}`,
+      `身分組數量：**${memberRoles.size}** | 最高身分組：${memberRoles.first()?.toString() || '無'}`,
+      `主要身分組：${roles}`,
+    ].join('\n')));
+  return { components: [finishPanel(panel, context)] };
+}
+
+function renderConfirm(context) {
+  const labels = {
+    self_publish: `將在 ${context.pending.selfPublishChannel ? `<#${context.pending.selfPublishChannel}>` : '選取的頻道'} 發布新的自助身分組選單。`,
+    reaction_create: `將在 ${context.pending.reactionChannel ? `<#${context.pending.reactionChannel}>` : '選取的頻道'} 建立新的反應身分組站。`,
+    reaction_delete: `將刪除反應身分組公開訊息 \`${context.pending.reactionDeleteMessage || '尚未選取'}\` 與其設定。`,
+    steam_publish: '將立即在已設定的推播頻道發布 Steam 特價列表。',
+    ai_party: `將在 ${context.pending.aiPartyChannel ? `<#${context.pending.aiPartyChannel}>` : '選取頻道'} 啟動 AI 派對模式並公開發送通知。`,
+  };
+  const message = labels[context.pending.confirm] || '此操作會產生公開變更。';
+  const panel = v2Panel(UI_COLORS.DANGER)
+    .addTextDisplayComponents(v2Text(
+      '-# ADMINISTRATOR CONTROL CENTER  /  CONFIRMATION\n# 確認公開操作\n這項動作會對伺服器產生公開影響，請再次核對。'
+    ))
+    .addSeparatorComponents(v2Divider())
+    .addTextDisplayComponents(v2Text(`## 動作影響\n${message}\n\n> 按下確認後會立即執行，無法由此面板復原。`))
+    .addActionRowComponents(actionButtons(context, [
+      ['confirm', '確認執行', ButtonStyle.Danger],
+      ['cancel', '取消', ButtonStyle.Secondary],
+    ]));
+  return { components: [panel] };
+}
+
+function modulePanel(context, title, description, { thumbnail = null } = {}) {
+  const meta = MODULE_STYLE[title] || { section: 'CONTROL PANEL', color: UI_COLORS.ROYAL };
+  const notice = typeof context.notice === 'string'
+    ? { label: 'SAVED', color: COLORS.GREEN, text: context.notice }
+    : context.notice;
+  const feedback = context.notice
+    ? `\n\n${ansiBlock([{ color: notice.color, text: `[ ${notice.label} ] ${notice.text}` }])}`
+    : '';
+  const heading = `-# ADMINISTRATOR CONTROL CENTER  /  ${meta.section}\n# ${title}\n${description}${feedback}`;
+  const panel = v2Panel(meta.color);
+  if (thumbnail) {
+    panel.addSectionComponents(
+      new SectionBuilder()
+        .addTextDisplayComponents(v2Text(heading))
+        .setThumbnailAccessory(new ThumbnailBuilder().setURL(thumbnail).setDescription(`${title} 圖示`))
+    );
+  } else {
+    panel.addTextDisplayComponents(v2Text(heading));
+  }
+  return panel.addSeparatorComponents(v2Divider());
+}
+
+function finishPanel(panel, context) {
+  return panel
+    .addSeparatorComponents(v2Divider())
+    .addActionRowComponents(actionButtons(context, [['back', '返回總覽', ButtonStyle.Secondary]]));
+}
+
+function basePanel(title, description) {
+  return v2Panel(UI_COLORS.ROYAL).addTextDisplayComponents(v2Text(`# ${title}\n${description}`));
+}
+
+function buttonRow(context, pages) {
+  return new ActionRowBuilder().addComponents(pages.map(([view, label, style = ButtonStyle.Secondary]) =>
+    new ButtonBuilder().setCustomId(id(context, `view:${view}`)).setLabel(label).setStyle(style)
+  ));
+}
+
+function actionButtons(context, definitions) {
+  return new ActionRowBuilder().addComponents(definitions.map(([action, label, style]) =>
+    new ButtonBuilder().setCustomId(id(context, action)).setLabel(label).setStyle(style)
+  ));
+}
+
+function textRow(customId, label, value, style, required = true) {
+  const input = new TextInputBuilder().setCustomId(customId).setLabel(label).setStyle(style).setRequired(required);
+  if (value) input.setValue(String(value).slice(0, style === TextInputStyle.Short ? 400 : 4000));
+  return new ActionRowBuilder().addComponents(input);
+}
+
+function id(context, action) {
+  return `settings:${context.userId}:${action}`;
+}
+
+function isAdministrator(interaction) {
+  return Boolean(interaction.memberPermissions?.has?.(PermissionFlagsBits.Administrator)
+    || interaction.member?.permissions?.has?.(PermissionFlagsBits.Administrator));
+}
+
+function aiUnlocked(context) {
+  return getAiSettings(context.guild.id).admin_ids.includes(context.userId);
+}
+
+function requireAiUnlock(component, context) {
+  if (aiUnlocked(context)) return true;
+  component.reply(v2Notice('AI 設定已鎖定', '請回到控制台的 AI 頁完成管理身分驗證。', UI_COLORS.DANGER)).catch(() => {});
+  return false;
+}
+
+async function getDiagnostics(guild) {
+  const settings = getGuildSettings(guild.id);
+  const aiSettings = getAiSettings(guild.id);
+  const reactionRoles = getReactionRolesByGuild(guild.id);
+  const channelIds = [
+    settings.welcome_channel,
+    settings.log_channel,
+    settings.steam_deal_channel,
+    ...reactionRoles.map((entry) => entry.channel_id),
+  ].filter(Boolean);
+  const availableChannelIds = new Set();
+  await Promise.all(channelIds.map(async (channelId) => {
+    if (await guild.channels.fetch(channelId).catch(() => null)) availableChannelIds.add(channelId);
+  }));
+  return buildGuildDiagnostics({
+    settings,
+    aiSettings: { ...aiSettings, model: aiSettings.model || DEFAULT_AI_MODEL },
+    reactionRoles,
+    availableChannelIds,
+    hasDiscordToken: !!process.env.DISCORD_TOKEN,
+    hasGoogleAiKey: !!process.env.GOOGLE_AI_KEY,
+    hasAiAdminPassword: !!process.env.AI_ADMIN_PASSWORD,
+  });
+}
+
+function statusMarker(status) {
+  if (status === '正常') return '[OK]';
+  if (status === '未設定') return '[--]';
+  return '[!!]';
+}
+
+function formatDiagnosticLine(item) {
+  return {
+    color: item.status === '正常' ? COLORS.GREEN : item.status === '未設定' ? COLORS.GOLD : COLORS.RED,
+    text: `${statusMarker(item.status)} ${item.label}: ${item.detail}`,
+  };
+}
+
+function getSelfRoles(guildId) {
+  return normalizeSelfRoleSettings(getGuildSettings(guildId).selfrole_roles);
+}
+
+function parseReactionPairs(guild, source) {
+  const pairs = [];
+  for (const entry of String(source).split(',').map((part) => part.trim()).filter(Boolean)) {
+    const separator = entry.lastIndexOf(':');
+    if (separator <= 0) return { error: `格式錯誤：\`${entry}\`，請使用 \`emoji:身分組ID\`。` };
+    const emoji = entry.slice(0, separator).trim();
+    const role = guild.roles.cache.get(entry.slice(separator + 1).trim());
+    if (!role) return { error: `找不到身分組：\`${entry.slice(separator + 1).trim()}\`。` };
+    const invalid = validateAssignableRole(guild, role);
+    if (invalid) return { error: `${role.name}：${invalid}` };
+    pairs.push({ emoji, role });
+  }
+  if (!pairs.length) return { error: '至少需要一組 emoji 與身分組配對。' };
+  if (pairs.length > 20) return { error: '反應身分組最多只能建立 20 組配對。' };
+  return { pairs };
+}
+
+async function publishSelfRoleMenu(guild, channel, roles, description) {
+  const valid = roles
+    .map((entry) => ({ entry, role: guild.roles.cache.get(entry.id) }))
+    .filter(({ role }) => role && !validateAssignableRole(guild, role));
+  if (!valid.length) throw new Error('沒有可發布的自助身分組選項。');
+  const select = new StringSelectMenuBuilder().setCustomId('selfrole_select').setPlaceholder('選擇你的身分組').setMinValues(0).setMaxValues(valid.length)
+    .addOptions(valid.map(({ entry, role }) => ({
+      label: role.name,
+      value: role.id,
+      description: entry.requirement ? `需先擁有 ${guild.roles.cache.get(entry.requirement)?.name || '指定身分組'}` : `領取或取消 ${role.name}`,
+    })));
+  const panel = basePanel('自助身分組', description || '請從下方選單選擇要領取或取消的身分組。')
+    .addActionRowComponents(new ActionRowBuilder().addComponents(select));
+  await channel.send(v2Payload([panel]));
+}
+
+async function createReactionStation(guild, channel, pairs, title) {
+  const text = pairs.map(({ emoji, role }) => `${emoji} -> <@&${role.id}>`).join('\n');
+  const message = await channel.send(v2Payload([basePanel(title || '反應身分組', `點擊反應即可領取或取消身分組。\n\n${text}`)]));
+  try {
+    for (const { emoji, role } of pairs) {
+      await message.react(emoji);
+      addReactionRole(guild.id, channel.id, message.id, emoji, role.id);
+    }
+  } catch (error) {
+    deleteReactionRolesByMessage(message.id);
+    await message.delete().catch(() => {});
+    throw new Error('無法建立反應站，請確認 emoji 可供機器人使用。', { cause: error });
+  }
+}
+
+async function deleteReactionStation(guild, messageId) {
+  const entry = getReactionRolesByGuild(guild.id).find((item) => item.message_id === messageId);
+  if (!entry) throw new Error('找不到選取的反應身分組站。');
+  const channel = await guild.channels.fetch(entry.channel_id).catch(() => null);
+  if (channel?.isTextBased()) {
+    const message = await channel.messages.fetch(messageId).catch(() => null);
+    await message?.delete().catch(() => {});
+  }
+  deleteReactionRolesByMessage(messageId);
+}
+
+async function publishSteamDeals(guild) {
+  const settings = getGuildSettings(guild.id);
+  const channel = await guild.channels.fetch(settings.steam_deal_channel).catch(() => null);
+  if (!channel?.isTextBased()) throw new Error('尚未設定可用的 Steam 推播頻道。');
+  const deals = await fetchSteamSpecialDeals(10);
+  await channel.send(buildSteamDealsPayload(deals));
+}
+
+async function startAiParty(guild, channelId, minutes) {
+  const channel = await guild.channels.fetch(channelId).catch(() => null);
+  if (!channel?.isTextBased()) throw new Error('派對頻道不存在或無法發送訊息。');
+  updateAiSetting(guild.id, 'party_channel_id', channelId);
+  updateAiSetting(guild.id, 'party_expires_at', Date.now() + minutes * 60_000);
+  updateAiSetting(guild.id, 'enabled', 1);
+  await channel.send(v2Notice('AI 派對模式已開啟', `接下來 ${minutes} 分鐘內，任何成員都可在此頻道提及本王進行聊天。`, UI_COLORS.ROYAL, { ephemeral: false }));
+}
+
+function closePanel(components) {
+  const panel = components[0];
+  for (const child of panel.components ?? []) {
+    if (child.components) child.components.forEach((component) => component.setDisabled?.(true));
+  }
+  panel.addSeparatorComponents(v2Divider()).addTextDisplayComponents(v2Text('設定面板已逾時，請重新使用 `/設定`。'));
+  return components;
+}
+
+export const settingsViewTesting = {
+  renderHome,
+  renderWelcome,
+  renderAi,
+  renderServerInfo,
+  renderBotStatus,
+  renderAnnouncement,
+  renderMemberLookup,
+  renderConfirm,
+  buildModal,
+  openModal,
+  closePanel,
+};

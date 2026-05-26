@@ -13,6 +13,7 @@ import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { ansiBlock, COLORS, UI_COLORS } from '../../utils/style.js';
 import { ephemeralV2Payload, v2Divider, v2EditPayload, v2Panel, v2Text } from '../../utils/componentsV2.js';
+import { openSettingsPanelFromHelp } from '../admin/settings.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,14 +39,14 @@ const CATEGORY_META = {
     leveling: {
         label: '等級',
         emoji: '🏅',
-        description: '查看等級、排行榜與升級設定。',
+        description: '查看等級與排行榜。',
         order: 30,
         group: 'public'
     },
     steam: {
         label: 'Steam',
         emoji: '🎮',
-        description: '查詢遊戲情報與每日特價推播。',
+        description: '查詢遊戲情報。',
         order: 40,
         group: 'public'
     },
@@ -66,18 +67,10 @@ const CATEGORY_META = {
     admin: {
         label: '管理',
         emoji: '🛡️',
-        description: '公告、伺服器資訊與成員管理工具。',
+        description: '集中設定、公告、伺服器資訊與成員管理工具。',
         order: 60,
         group: 'admin',
         permission: PermissionFlagsBits.ManageGuild
-    },
-    ai: {
-        label: 'AI',
-        emoji: '🤖',
-        description: 'AI 登入、模型、白名單與聊天設定。',
-        order: 70,
-        group: 'admin',
-        permission: PermissionFlagsBits.Administrator
     },
     logging: {
         label: '日誌',
@@ -111,20 +104,9 @@ const COMMAND_META = {
     汪汪: { label: '陪王聊天', examples: ['/汪汪 內容:國王今天心情如何'] },
     等級: { label: '爵位查詢', examples: ['/等級', '/等級 使用者:@朋友'] },
     排行榜: { label: '排行榜', examples: ['/排行榜'] },
-    設定等級系統: { label: '等級設定', examples: ['/設定等級系統 狀態:on'] },
     特價查詢: { label: '特價查詢', examples: ['/特價查詢 搜尋 遊戲名稱:Stardew Valley'] },
-    設定特價推播: { label: '特價推播設定', examples: ['/設定特價推播 設定頻道 目標頻道:#steam-deals 時間:20:00', '/設定特價推播 特價列表', '/設定特價推播 狀態'] },
     戰績: { label: '公開戰績查詢', examples: ['/戰績 特戰英豪 玩家名稱:SEN TenZ 標籤:2906', '/戰績 英雄聯盟 玩家名稱:Hide on bush 標籤:KR1 區服:kr'] },
-    發布公告: { label: '發布公告', examples: ['/發布公告 頻道:#公告'] },
-    機器人狀態: { label: '機器人狀態', examples: ['/機器人狀態'] },
-    伺服器資訊: { label: '伺服器資訊', examples: ['/伺服器資訊'] },
-    查身家: { label: '使用者資訊', examples: ['/查身家 使用者:@朋友'] },
-    智慧登入: { label: 'AI 登入', examples: ['/智慧登入 密碼:••••••'] },
-    智慧設定: { label: 'AI 設定', examples: ['/智慧設定 狀態面板', '/智慧設定 模型切換 模型名稱:gemini-2.5-flash'] },
-    設定紀錄: { label: '日誌設定', examples: ['/設定紀錄 頻道:#伺服器日誌'] },
-    反應身分組: { label: '按鈕身分組', examples: ['/反應身分組 建立設定 頻道:#領身分組 配對:🎮:123,🎵:456'] },
-    自助身分組: { label: '自助身分組', examples: ['/自助身分組 列表總覽', '/自助身分組 發布選單 頻道:#領身分組'] },
-    設定歡迎: { label: '歡迎設定', examples: ['/設定歡迎 頻道:#歡迎 訊息:歡迎 {user} 加入 {server}'] }
+    設定: { label: '集中設定面板', examples: ['/設定'] },
 };
 
 const OPTION_TYPE_NAMES = {
@@ -160,18 +142,31 @@ export const aliases = [
 ];
 
 export async function execute(interaction) {
+    return openHelpPanel(interaction, false);
+}
+
+export async function openHelpHomeFromSettings(interaction) {
+    return openHelpPanel(interaction, true);
+}
+
+async function openHelpPanel(interaction, replaceMessage) {
     const context = {
         userId: interaction.user.id,
         catalog: await buildCatalog(interaction),
+        canOpenSettings: hasRequiredPermission(interaction, PermissionFlagsBits.Administrator),
         currentComponents: []
     };
 
     const homePayload = renderHome(context);
     context.currentComponents = homePayload.components;
 
-    await interaction.reply(ephemeralV2Payload(homePayload.components));
+    if (replaceMessage) {
+        await interaction.update({ components: homePayload.components });
+    } else {
+        await interaction.reply(ephemeralV2Payload(homePayload.components));
+    }
 
-    const response = await interaction.fetchReply();
+    const response = replaceMessage ? interaction.message : await interaction.fetchReply();
     const collector = response.createMessageComponentCollector({
         componentType: ComponentType.Button,
         time: COLLECTOR_TIME
@@ -183,6 +178,12 @@ export async function execute(interaction) {
                 '🛡️ 這份大典不屬於你',
                 '汪！請使用 `/幫助` 開啟屬於你自己的互動選單。'
             ));
+            return;
+        }
+
+        if (buttonInteraction.customId === makeCustomId(context, 'settings')) {
+            collector.stop('settings');
+            await openSettingsPanelFromHelp(buttonInteraction, openHelpHomeFromSettings);
             return;
         }
 
@@ -201,7 +202,8 @@ export async function execute(interaction) {
         });
     });
 
-    collector.on('end', () => {
+    collector.on('end', (_, reason) => {
+        if (reason === 'settings') return;
         interaction.editReply(v2EditPayload(ephemeralV2Payload(
             closeHelpBook(context.currentComponents)
         ))).catch(() => { });
@@ -238,6 +240,7 @@ async function buildCatalog(interaction) {
             if (!commandModule.data) continue;
 
             const commandJson = commandModule.data.toJSON();
+            if (commandJson.name === '設定') continue;
             if (!hasRequiredPermission(interaction, commandJson.default_member_permissions)) continue;
 
             commands.push(normalizeCommand(commandJson, commandIds.get(commandJson.name), category));
@@ -323,7 +326,7 @@ function renderHome(context) {
     const publicCategories = context.catalog.filter((category) => category.group !== 'admin');
     const adminCategories = context.catalog.filter((category) => category.group === 'admin');
     const commandCount = context.catalog.reduce((total, category) => total + category.commands.length, 0);
-    const viewMode = adminCategories.length > 0 ? '管理模式' : '一般模式';
+    const viewMode = context.canOpenSettings || adminCategories.length > 0 ? '管理模式' : '一般模式';
 
     const panel = v2Panel(UI_COLORS.ROYAL)
         .addTextDisplayComponents(v2Text([
@@ -335,7 +338,7 @@ function renderHome(context) {
     const statusText = [
         '## 📊 目前視圖',
         ansiBlock([
-            { color: adminCategories.length > 0 ? COLORS.GOLD : COLORS.CYAN, text: `[模式] ${viewMode}` },
+            { color: context.canOpenSettings || adminCategories.length > 0 ? COLORS.GOLD : COLORS.CYAN, text: `[模式] ${viewMode}` },
             { color: COLORS.WHITE, text: `[分類] ${context.catalog.length} 個可瀏覽分類` },
             { color: COLORS.WHITE, text: `[指令] ${commandCount} 個可使用指令` },
             { color: COLORS.GRAY, text: `[操作] 按分類按鈕可翻頁、查看詳情、返回首頁` }
@@ -373,6 +376,26 @@ function renderHome(context) {
                 '',
                 '-# 只顯示你目前具備權限的管理分類與指令。',
             ].join('\n')));
+    }
+
+    if (context.canOpenSettings) {
+        panel
+            .addSeparatorComponents(v2Divider())
+            .addTextDisplayComponents(v2Text([
+                '-# ADMINISTRATOR ACCESS  /  CONTROL CENTER',
+                '## ⚙️ 皇家管理控制台',
+                '集中查看設定健康度、服務狀態與公開管理操作。',
+                '',
+                ansiBlock([
+                    { color: COLORS.GOLD, text: '[ ACCESS ] Administrator 專用' },
+                    { color: COLORS.CYAN, text: '[ SCOPE  ] 設定 / 狀態 / 公告 / 成員查詢' },
+                ]),
+            ].join('\n')))
+            .addActionRowComponents(
+                new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(makeCustomId(context, 'settings')).setLabel('進入皇家管理控制台').setStyle(ButtonStyle.Primary)
+                )
+            );
     }
 
     panel
@@ -608,6 +631,7 @@ function renderNotice(title, message) {
 
 function makeCustomId(context, view, category = 'home', page = 0, commandIndex = 0) {
     if (view === 'home') return `help:${context.userId}:home`;
+    if (view === 'settings') return `help:${context.userId}:settings`;
     if (view === 'detail') return `help:${context.userId}:detail:${category}:${page}:${commandIndex}`;
     return `help:${context.userId}:cat:${category}:${page}`;
 }

@@ -13,8 +13,6 @@ export function register(client) {
             const channel = await member.guild.channels.fetch(settings.welcome_channel).catch(() => null);
             if (!channel) return;
 
-            const displayName = member.displayName || member.user.username;
-            
             // 隨機歡迎辭
             const greetings = [
                 `喔喔喔！歡迎新子民 {user} 駕臨吉吉王國！`,
@@ -39,16 +37,23 @@ export function register(client) {
                 { color: COLORS.GRAY, text: `🆔 帳號創建: ${new Date(member.user.createdTimestamp).toLocaleDateString()}` }
             ]);
 
+            const customWelcome = settings.welcome_message
+                ? settings.welcome_message
+                    .replaceAll('{user}', member.toString())
+                    .replaceAll('{server}', member.guild.name)
+                    .replaceAll('{count}', String(member.guild.memberCount))
+                : null;
+
             const embed = new EmbedBuilder()
                 .setColor(0xFFD700)
                 .setAuthor({ name: '👑 王國入境管理處', iconURL: member.guild.iconURL() })
                 .setTitle(`🐕👋 歡迎新子民入城！`)
                 .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
-                .setDescription(
+                .setDescription(customWelcome || (
                     `**${greeting.replace('{user}', member.toString())}**\n\n` +
                     infoBlock + '\n\n' +
                     closing
-                )
+                ))
                 .addFields(
                     { 
                         name: '📜 皇家指南', 

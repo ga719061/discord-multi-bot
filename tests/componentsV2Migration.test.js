@@ -12,7 +12,7 @@ import {
 } from '../src/utils/componentsV2.js';
 import { UI_COLORS } from '../src/utils/style.js';
 import { buildPollPayload } from '../src/commands/fun/poll.js';
-import { buildAnnouncementPayload, execute as executeAnnouncement } from '../src/commands/admin/announce.js';
+import { buildAnnouncementPayload, openAnnouncementComposer } from '../src/utils/announcementTools.js';
 
 test('V2 payloads set flags, default to safe mentions, and reject duplicate ids', () => {
     const row = new ActionRowBuilder().addComponents(
@@ -64,21 +64,14 @@ test('new poll and announcement renders are V2-only with controlled mentions', (
     assert.match(JSON.stringify(announcement.components[0].toJSON()), /維護通知/);
 });
 
-test('announcement command opens a modal with file upload rather than slash image options', async () => {
+test('announcement composer opens a modal with file upload', async () => {
     let modal;
-    const commandJson = (await import('../src/commands/admin/announce.js')).data.toJSON();
     const interaction = {
         user: { id: 'admin' },
-        options: {
-            getChannel: () => ({ id: 'channel' }),
-            getString: () => 'none',
-            getRole: () => null,
-        },
         showModal: async (nextModal) => { modal = nextModal.toJSON(); },
     };
 
-    await executeAnnouncement(interaction);
+    await openAnnouncementComposer(interaction, { channelId: 'channel' });
 
-    assert.equal(commandJson.options.some((option) => option.name.startsWith('圖片')), false);
     assert.match(JSON.stringify(modal), /announce_images/);
 });
