@@ -6,13 +6,14 @@ import {
     MessageFlags,
     ModalBuilder,
     SlashCommandBuilder,
+    StringSelectMenuBuilder,
     TextInputBuilder,
     TextInputStyle,
 } from 'discord.js';
 import { fmt, COLORS, ansiBlock, UI_COLORS } from '../../utils/style.js';
 import { fetchSteamJson, getSteamFailureMessage } from '../../utils/steamDeals.js';
 import { logger } from '../../utils/logger.js';
-import { embedsToV2Payload, v2EditPayload, v2Notice } from '../../utils/componentsV2.js';
+import { embedsToV2Payload, ephemeralV2Payload, v2Divider, v2EditPayload, v2Notice, v2Panel, v2Text } from '../../utils/componentsV2.js';
 
 const QUERY_TIMEOUT = 10 * 60_000;
 
@@ -32,15 +33,11 @@ export async function execute(interaction) {
 
     const query = submit.fields.getTextInputValue('game_name').trim();
     await submit.deferReply({ flags: MessageFlags.Ephemeral });
-    const result = await findSteamGame(submit, query);
-    if (!result) return;
+    const candidates = await findSteamCandidates(submit, query);
+    if (!candidates) return;
 
-    const state = { published: false };
-    const privatePayload = buildSteamSearchResultPayload(result.appId, result.details, {
-        ephemeral: true,
-        publishCustomId: steamId(sessionId, 'publish'),
-    });
-    await submit.editReply(v2EditPayload(privatePayload));
+    const state = { result: null, published: false };
+    await submit.editReply(v2EditPayload(buildSteamSelectionPayload(sessionId, query, candidates)));
     const response = await submit.fetchReply();
     const collector = response.createMessageComponentCollector({ time: QUERY_TIMEOUT });
 
@@ -53,7 +50,27 @@ export async function execute(interaction) {
                     UI_COLORS.WARNING
                 ));
             }
+            if (component.customId === steamId(sessionId, 'select')) {
+                const appId = Number(component.values[0]);
+                const candidate = candidates.find((game) => game.id === appId);
+                if (!candidate) {
+                    return component.reply(v2Notice(
+                        '🛒 採購選項已失效',
+                        '這筆候選遊戲已無法辨識，請重新使用 `/特價查詢`。',
+                        UI_COLORS.WARNING
+                    ));
+                }
+                await component.deferUpdate();
+                const details = await fetchSteamDetails(component, appId);
+                if (!details) return;
+                state.result = { appId, details };
+                return component.editReply(v2EditPayload(buildSteamSearchResultPayload(appId, details, {
+                    ephemeral: true,
+                    publishCustomId: steamId(sessionId, 'publish'),
+                })));
+            }
             if (component.customId !== steamId(sessionId, 'publish')) return;
+            if (!state.result) return;
             if (state.published) {
                 return component.reply(v2Notice(
                     '🛒 情報已頒布',
@@ -63,9 +80,9 @@ export async function execute(interaction) {
             }
 
             await component.deferUpdate();
-            await interaction.channel.send(buildSteamSearchResultPayload(result.appId, result.details));
+            await interaction.channel.send(buildSteamSearchResultPayload(state.result.appId, state.result.details));
             state.published = true;
-            await component.editReply(v2EditPayload(buildSteamSearchResultPayload(result.appId, result.details, {
+            await component.editReply(v2EditPayload(buildSteamSearchResultPayload(state.result.appId, state.result.details, {
                 ephemeral: true,
                 publishCustomId: steamId(sessionId, 'publish'),
                 published: true,
@@ -79,12 +96,15 @@ export async function execute(interaction) {
     });
 
     collector.on('end', () => {
-        submit.editReply(v2EditPayload(buildSteamSearchResultPayload(result.appId, result.details, {
-            ephemeral: true,
-            publishCustomId: steamId(sessionId, 'publish'),
-            published: state.published,
-            expired: true,
-        }))).catch(() => {});
+        const expired = state.result
+            ? buildSteamSearchResultPayload(state.result.appId, state.result.details, {
+                ephemeral: true,
+                publishCustomId: steamId(sessionId, 'publish'),
+                published: state.published,
+                expired: true,
+            })
+            : buildSteamSelectionPayload(sessionId, query, candidates, true);
+        submit.editReply(v2EditPayload(expired)).catch(() => {});
     });
 }
 
@@ -100,6 +120,32 @@ export function buildSteamSearchModal(sessionId) {
         .setCustomId(steamId(sessionId, 'submit'))
         .setTitle('皇家採購簿 | Steam 搜尋')
         .addComponents(new ActionRowBuilder().addComponents(input));
+}
+
+export function buildSteamSelectionPayload(sessionId, query, candidates, disabled = false) {
+    const select = new StringSelectMenuBuilder()
+        .setCustomId(steamId(sessionId, 'select'))
+        .setPlaceholder('挑選正確遊戲，查看皇家採購情報')
+        .setMinValues(1)
+        .setMaxValues(1)
+        .setDisabled(disabled)
+        .addOptions(candidates.slice(0, 10).map((game) => ({
+            label: truncateOption(game.name, 100),
+            description: truncateOption(`Steam App ${game.id} | 選取後查看目前價格`, 100),
+            value: String(game.id),
+        })));
+    const panel = v2Panel(UI_COLORS.ROYAL)
+        .addTextDisplayComponents(v2Text([
+            '# 🐕🎮 皇家採購搜尋結果',
+            `本王找到了與 **${query}** 相符的遊戲，請挑選要查閱的一款。`,
+            '-# 選定後會私下呈上目前價格與商店入口。',
+        ].join('\n')))
+        .addSeparatorComponents(v2Divider())
+        .addActionRowComponents(new ActionRowBuilder().addComponents(select));
+    if (disabled) {
+        panel.addTextDisplayComponents(v2Text('## ⌛ 採購查詢已結束\n請重新使用 `/特價查詢` 尋找遊戲。'));
+    }
+    return ephemeralV2Payload([panel]);
 }
 
 export function buildSteamSearchResultPayload(appId, details, options = {}) {
@@ -158,10 +204,11 @@ export function buildSteamSearchResultPayload(appId, details, options = {}) {
     return embedsToV2Payload([embed], {
         actionRows: [new ActionRowBuilder().addComponents(buttons)],
         ephemeral: options.ephemeral === true,
+        linkTitle: false,
     });
 }
 
-async function findSteamGame(interaction, query) {
+async function findSteamCandidates(interaction, query) {
     try {
         const searchUrl = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(query)}&l=tchinese&cc=tw`;
         const searchData = await fetchSteamJson(searchUrl);
@@ -175,7 +222,16 @@ async function findSteamGame(interaction, query) {
             return null;
         }
 
-        const appId = searchData.items[0].id;
+        return searchData.items.slice(0, 10);
+    } catch (error) {
+        logger.warn(`[SteamSearch] 查詢失敗 guild=${interaction.guildId} code=${error.code || 'unavailable'}: ${error.message}`);
+        await interaction.editReply(v2EditPayload(v2Notice('🎮 皇家採購查詢失敗', getSteamFailureMessage(error), UI_COLORS.WARNING)));
+        return null;
+    }
+}
+
+async function fetchSteamDetails(interaction, appId) {
+    try {
         const detailUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}&cc=tw&l=tchinese`;
         const detailData = await fetchSteamJson(detailUrl);
         if (!detailData[appId] || !detailData[appId].success) {
@@ -186,12 +242,17 @@ async function findSteamGame(interaction, query) {
             )));
             return null;
         }
-        return { appId, details: detailData[appId].data };
+        return detailData[appId].data;
     } catch (error) {
-        logger.warn(`[SteamSearch] 查詢失敗 guild=${interaction.guildId} code=${error.code || 'unavailable'}: ${error.message}`);
+        logger.warn(`[SteamSearch] 詳情查詢失敗 guild=${interaction.guildId} app=${appId} code=${error.code || 'unavailable'}: ${error.message}`);
         await interaction.editReply(v2EditPayload(v2Notice('🎮 皇家採購查詢失敗', getSteamFailureMessage(error), UI_COLORS.WARNING)));
         return null;
     }
+}
+
+function truncateOption(text, maxLength) {
+    const value = String(text || '-');
+    return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`;
 }
 
 function steamId(sessionId, action) {

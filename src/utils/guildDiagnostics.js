@@ -6,6 +6,7 @@ export function buildGuildDiagnostics({
   aiSettings,
   reactionRoles = [],
   availableChannelIds = new Set(),
+  channelNames = new Map(),
   hasDiscordToken = false,
   hasGoogleAiKey = false,
   hasAiAdminPassword = false,
@@ -42,6 +43,7 @@ export function buildGuildDiagnostics({
     '史官日誌',
     settings.log_channel,
     availableChannelIds,
+    channelNames,
     '在 `/設定` 的「紀錄」頁選擇日誌頻道'
   );
   if (logDiagnostic.status === '正常') {
@@ -55,6 +57,7 @@ export function buildGuildDiagnostics({
     '皇家迎賓佈告',
     settings.welcome_channel,
     availableChannelIds,
+    channelNames,
     '在 `/設定` 的「歡迎」頁選擇歡迎頻道'
   );
   if (welcomeDiagnostic.status === '正常') {
@@ -102,11 +105,11 @@ export function buildGuildDiagnostics({
     });
   }
 
-  diagnostics.push(steamDiagnostic(settings, availableChannelIds));
+  diagnostics.push(steamDiagnostic(settings, availableChannelIds, channelNames));
   return diagnostics;
 }
 
-function channelDiagnostic(label, channelId, channelIds, command) {
+function channelDiagnostic(label, channelId, channelIds, channelNames, command) {
   if (!channelId) {
     return {
       label,
@@ -123,10 +126,10 @@ function channelDiagnostic(label, channelId, channelIds, command) {
       fix: `重新${command}。`,
     };
   }
-  return { label, status: '正常', detail: `<#${channelId}>`, fix: null };
+  return { label, status: '正常', detail: displayChannelName(channelId, channelNames), fix: null };
 }
 
-function steamDiagnostic(settings, channelIds) {
+function steamDiagnostic(settings, channelIds, channelNames) {
   if (settings.steam_deal_enabled !== 1) {
     return {
       label: '皇家採購推播',
@@ -154,7 +157,13 @@ function steamDiagnostic(settings, channelIds) {
   return {
     label: '皇家採購推播',
     status: '正常',
-    detail: `<#${settings.steam_deal_channel}> 每日 ${settings.steam_deal_time}`,
+    detail: `${displayChannelName(settings.steam_deal_channel, channelNames)} 每日 ${settings.steam_deal_time}`,
     fix: null,
   };
+}
+
+function displayChannelName(channelId, channelNames) {
+  const name = channelNames.get(channelId);
+  if (!name) return '#已設定頻道';
+  return `#${String(name).replace(/[\r\n\u001b]/g, '').slice(0, 100)}`;
 }

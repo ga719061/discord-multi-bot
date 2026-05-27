@@ -8,6 +8,8 @@ test('command manifest retains /help and excludes stale English commands', async
 
     assert.equal(names.includes('help'), true);
     assert.equal(names.includes('設定'), true);
+    assert.equal(names.includes('投票'), false);
+    assert.equal(names.includes('抽獎'), false);
     assert.equal(names.includes('智慧登入'), false);
     assert.equal(names.includes('智慧設定'), false);
     assert.equal(names.includes('設定紀錄'), false);

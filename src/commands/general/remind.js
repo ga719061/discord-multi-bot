@@ -1,104 +1,205 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { addReminder, getUserReminders, deleteReminder } from '../../utils/database.js';
+import {
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ModalBuilder,
+    SlashCommandBuilder,
+    StringSelectMenuBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+} from 'discord.js';
+import { randomUUID } from 'node:crypto';
+import { addReminder, deleteReminder, getUserReminders } from '../../utils/database.js';
 import { parseReminderTime } from '../../utils/reminderManager.js';
-import { fmt, COLORS } from '../../utils/style.js';
-import { embedsToV2Payload, v2Notice } from '../../utils/componentsV2.js';
 import { UI_COLORS } from '../../utils/style.js';
+import { ephemeralV2Payload, v2EditPayload, v2Panel, v2Text } from '../../utils/componentsV2.js';
+
+const PANEL_TIMEOUT = 5 * 60_000;
 
 export const data = new SlashCommandBuilder()
     .setName('提醒')
-    .setDescription('⏰ 皇家提醒系統：讓國王為你記住重要的大事！')
-    .setDescriptionLocalizations({ 'zh-TW': '⏰ 皇家提醒系統：讓國王為你記住重要的大事！' })
-    .addSubcommand(sub =>
-        sub.setName('設定')
-            .setDescription('設定一個新的提醒')
-            .addStringOption(opt =>
-                opt.setName('時間')
-                    .setDescription('提醒時間 (如 10m, 1h, 16:00)')
-                    .setRequired(true)
-            )
-            .addStringOption(opt =>
-                opt.setName('內容')
-                    .setDescription('提醒的內容')
-                    .setRequired(true)
-            )
-    )
-    .addSubcommand(sub =>
-        sub.setName('清單')
-            .setDescription('查看你目前所有的提醒')
-    )
-    .addSubcommand(sub =>
-        sub.setName('刪除')
-            .setDescription('刪除指定的提醒')
-            .addIntegerOption(opt =>
-                opt.setName('編號')
-                    .setDescription('提醒編號 (從清單查看)')
-                    .setRequired(true)
-            )
-    );
+    .setDescription('⏰ 皇家提醒系統：開啟彈窗，讓本王替你記住重要的大事')
+    .setDescriptionLocalizations({ 'zh-TW': '⏰ 皇家提醒系統：開啟彈窗，讓本王替你記住重要的大事' });
 
 export async function execute(interaction) {
-    const subcommand = interaction.options.getSubcommand();
+    return openReminderComposer(interaction);
+}
 
-    if (subcommand === '設定') {
-        const timeStr = interaction.options.getString('時間');
-        const content = interaction.options.getString('內容');
-        
-        const targetTime = parseReminderTime(timeStr);
-        if (!targetTime) {
-            return interaction.reply(v2Notice('⏰ 時間格式錯誤', '🐕 汪嗚！請使用 `10m`、`1h` 或 `16:00` 這種格式喔！', UI_COLORS.WARNING));
-        }
+export async function openReminderComposer(interaction) {
+    const sessionId = randomUUID();
+    await interaction.showModal(buildReminderModal(sessionId));
+    const submit = await interaction.awaitModalSubmit({
+        filter: (modalSubmit) => modalSubmit.customId === reminderId(sessionId, 'submit') && modalSubmit.user.id === interaction.user.id,
+        time: PANEL_TIMEOUT,
+    }).catch(() => null);
+    if (!submit) return;
 
-        const timeDiff = targetTime - Date.now();
-        if (timeDiff <= 0) {
-            return interaction.reply(v2Notice('⏰ 時間已過', '🐕 本王沒辦法回到過去幫你提醒，請重新設定未來的時間喔！', UI_COLORS.WARNING));
-        }
-
-        addReminder(interaction.guildId, interaction.channelId, interaction.user.id, content, targetTime);
-        
-        const dateStr = new Date(targetTime).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-        return interaction.reply(v2Notice('⏰ 皇家提醒已登記', `🐕✅ 遵命！本王已記下了：\n> **內容**：${content}\n> **時間**：${dateStr}\n屆時本王會在這頻道準時汪一聲提醒你！`, UI_COLORS.SUCCESS));
-    }
-
-    if (subcommand === '清單') {
-        const reminders = getUserReminders(interaction.user.id);
-        
-        if (reminders.length === 0) {
-            return interaction.reply(v2Notice('📜 提醒清單空空如也', '🐕 你目前沒有任何待處理的提醒喔！真是個輕鬆自在的子民呢～', UI_COLORS.MUTED));
-        }
-
-        const embed = new EmbedBuilder()
-            .setColor(0xFFD700)
-            .setTitle('📜 你的皇家提醒清單')
-            .setDescription('以下是本王為你留意的待辦事項：')
-            .setTimestamp();
-
-        reminders.forEach(r => {
-            const dateStr = new Date(r.target_time).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-            const info = [
-                `${fmt(COLORS.CYAN, '🆔 編號')}: ${fmt(COLORS.BOLD, String(r.id))}`,
-                `${fmt(COLORS.GOLD, '📅 時間')}: ${dateStr}`,
-                `${fmt(COLORS.WHITE, '📝 內容')}: ${r.content}`
-            ].join('\n');
-
-            embed.addFields({
-                name: `📌 提醒 #${r.id}`,
-                value: '```ansi\n' + info + '\n```',
-                inline: false
-            });
+    const timeText = submit.fields.getTextInputValue('time').trim();
+    const content = submit.fields.getTextInputValue('content').trim();
+    const targetTime = parseReminderTime(timeText);
+    if (!targetTime || targetTime <= Date.now()) {
+        await submit.reply(buildReminderErrorPayload(sessionId));
+        await attachReminderControls(submit, interaction.user.id, sessionId, (disabled = false) => buildReminderErrorPayload(sessionId, disabled), {
+            allowDelete: false,
         });
-
-        return interaction.reply(embedsToV2Payload([embed], { ephemeral: true }));
+        return;
     }
 
-    if (subcommand === '刪除') {
-        const id = interaction.options.getInteger('編號');
-        const result = deleteReminder(id, interaction.user.id);
+    addReminder(submit.guildId, submit.channelId, interaction.user.id, content, targetTime);
+    await submit.reply(buildReminderSuccessPayload(sessionId, content, targetTime));
+    await attachReminderControls(submit, interaction.user.id, sessionId, (disabled = false) =>
+        buildReminderSuccessPayload(sessionId, content, targetTime, disabled), { allowDelete: false });
+}
 
-        if (result.changes === 0) {
-            return interaction.reply(v2Notice('📜 找不到提醒', `🐕 汪嗚...找不到編號為 \`${id}\` 的提醒，或者是那不屬於你。`, UI_COLORS.WARNING));
+export async function openReminderManager(interaction) {
+    const sessionId = randomUUID();
+    await interaction.reply(buildReminderManagerPayload(sessionId, getUserReminders(interaction.user.id)));
+    await attachReminderControls(interaction, interaction.user.id, sessionId, (disabled = false) =>
+        buildReminderManagerPayload(sessionId, getUserReminders(interaction.user.id), disabled));
+}
+
+export function buildReminderModal(sessionId) {
+    return new ModalBuilder()
+        .setCustomId(reminderId(sessionId, 'submit'))
+        .setTitle('皇家提醒 | 新增委託')
+        .addComponents(
+            new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('time')
+                    .setLabel('提醒時間')
+                    .setPlaceholder('10m、1h、1d 或 16:00')
+                    .setStyle(TextInputStyle.Short)
+                    .setMaxLength(20)
+                    .setRequired(true)
+            ),
+            new ActionRowBuilder().addComponents(
+                new TextInputBuilder()
+                    .setCustomId('content')
+                    .setLabel('要提醒的內容')
+                    .setPlaceholder('例如：起身喝水')
+                    .setStyle(TextInputStyle.Paragraph)
+                    .setMaxLength(500)
+                    .setRequired(true)
+            )
+        );
+}
+
+export function buildReminderSuccessPayload(sessionId, content, targetTime, disabled = false) {
+    return ephemeralV2Payload([
+        v2Panel(UI_COLORS.SUCCESS)
+            .addTextDisplayComponents(v2Text([
+                '# ⏰ 皇家提醒已登記',
+                '🐕✅ 遵命！本王會在這個頻道準時提醒你。',
+                `**內容：** ${content}`,
+                `**時間：** ${formatReminderDate(targetTime)}`,
+                disabled ? '\n## ⌛ 此提醒頁已逾時\n請重新使用 `/提醒` 開啟新的操作頁。' : '',
+            ].join('\n')))
+            .addActionRowComponents(buildReminderButtonRow(sessionId, disabled)),
+    ]);
+}
+
+export function buildReminderErrorPayload(sessionId, disabled = false) {
+    return ephemeralV2Payload([
+        v2Panel(UI_COLORS.WARNING)
+            .addTextDisplayComponents(v2Text([
+                '# ⏰ 提醒時間不成立',
+                '請使用 `10m`、`1h`、`1d` 或 `16:00` 這類未來時間格式。',
+                disabled ? '\n## ⌛ 此操作頁已逾時\n請重新使用 `/提醒`。' : '',
+            ].join('\n')))
+            .addActionRowComponents(buildReminderButtonRow(sessionId, disabled)),
+    ]);
+}
+
+export function buildReminderManagerPayload(sessionId, reminders, disabled = false) {
+    const rows = [buildReminderButtonRow(sessionId, disabled)];
+    if (reminders.length > 0) {
+        rows.unshift(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId(reminderId(sessionId, 'delete'))
+                .setPlaceholder('挑選要刪除的皇家提醒')
+                .setDisabled(disabled)
+                .addOptions(reminders.map((reminder) => ({
+                    label: truncate(`提醒 #${reminder.id} | ${reminder.content}`, 100),
+                    description: truncate(formatReminderDate(reminder.target_time), 100),
+                    value: String(reminder.id),
+                })))
+        ));
+    }
+    const details = reminders.length === 0
+        ? '目前沒有待發送的提醒。按下方按鈕，讓本王替你記下一件事。'
+        : reminders.map((reminder) =>
+            `**#${reminder.id}** ${formatReminderDate(reminder.target_time)}\n${reminder.content}`
+        ).join('\n\n');
+    return ephemeralV2Payload([
+        v2Panel(UI_COLORS.ROYAL)
+            .addTextDisplayComponents(v2Text([
+                '# 📜 我的皇家提醒',
+                details,
+                disabled ? '\n## ⌛ 管理頁已逾時\n請從 `/幫助` 再次開啟提醒管理。' : '',
+            ].join('\n')))
+            .addActionRowComponents(...rows),
+    ]);
+}
+
+async function attachReminderControls(rootInteraction, userId, sessionId, renderCurrent, options = {}) {
+    const response = await rootInteraction.fetchReply();
+    const collector = response.createMessageComponentCollector({ time: PANEL_TIMEOUT });
+    let currentRenderer = renderCurrent;
+    let canDelete = options.allowDelete !== false;
+    collector.on('collect', async (component) => {
+        if (component.user.id !== userId) {
+            return component.reply(ephemeralV2Payload([
+                v2Panel(UI_COLORS.WARNING).addTextDisplayComponents(v2Text(
+                    '# 🛡️ 這份提醒簿不屬於你\n請使用 `/提醒` 開啟自己的皇家提醒。'
+                )),
+            ]));
         }
+        if (component.customId === reminderId(sessionId, 'create')) {
+            return openReminderComposer(component);
+        }
+        if (component.customId === reminderId(sessionId, 'manage')) {
+            currentRenderer = (disabled = false) => buildReminderManagerPayload(sessionId, getUserReminders(userId), disabled);
+            canDelete = true;
+            return component.update({
+                components: buildReminderManagerPayload(sessionId, getUserReminders(userId)).components,
+            });
+        }
+        if (canDelete && component.customId === reminderId(sessionId, 'delete')) {
+            deleteReminder(Number(component.values[0]), userId);
+            return component.update({
+                components: buildReminderManagerPayload(sessionId, getUserReminders(userId)).components,
+            });
+        }
+    });
+    collector.on('end', () => {
+        rootInteraction.editReply(v2EditPayload(currentRenderer(true))).catch(() => {});
+    });
+}
 
-        return interaction.reply(v2Notice('📜 提醒已刪除', `🐕✅ 好的！本王已經把編號 \`${id}\` 的提醒從大典中抹去了！`, UI_COLORS.SUCCESS));
-    }
+function buildReminderButtonRow(sessionId, disabled) {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId(reminderId(sessionId, 'create'))
+            .setLabel('新增提醒')
+            .setStyle(ButtonStyle.Primary)
+            .setDisabled(disabled),
+        new ButtonBuilder()
+            .setCustomId(reminderId(sessionId, 'manage'))
+            .setLabel('管理我的提醒')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(disabled)
+    );
+}
+
+function reminderId(sessionId, action) {
+    return `reminder:${sessionId}:${action}`;
+}
+
+function formatReminderDate(timestamp) {
+    return new Date(timestamp).toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+}
+
+function truncate(text, length) {
+    const value = String(text || '-');
+    return value.length <= length ? value : `${value.slice(0, length - 1)}…`;
 }

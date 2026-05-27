@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MessageFlags } from 'discord.js';
 import { buildStatsReply } from '../lib/embed.js';
-import { buildStatsLauncher, buildStatsModal, data } from '../stats.js';
+import { buildStatsModal, data } from '../stats.js';
 
 function serializedCard(payload) {
   return JSON.stringify(payload.components.map((component) => component.toJSON()));
@@ -95,21 +95,19 @@ test('buildStatsReply creates a fallback card when a source is blocked', () => {
   assert.equal(payload.components.length, 1);
 });
 
-test('/戰績 opens an ephemeral royal launcher and game-specific modal flow', () => {
+test('/戰績 opens one direct modal containing game selection and Riot ID fields', () => {
   const command = data.toJSON();
-  const launcher = buildStatsLauncher('query-session');
-  const launcherText = serializedCard(launcher);
-  const valorant = JSON.stringify(buildStatsModal('query-session', 'valorant').toJSON());
-  const lol = JSON.stringify(buildStatsModal('query-session', 'lol').toJSON());
+  const modal = JSON.stringify(buildStatsModal('query-session').toJSON());
 
   assert.equal(command.options?.length ?? 0, 0);
-  assert.match(launcherText, /皇家戰報廳/);
-  assert.match(launcherText, /特戰英豪/);
-  assert.match(launcherText, /英雄聯盟/);
-  assert.match(valorant, /player_name/);
-  assert.equal(valorant.includes('region'), false);
-  assert.match(lol, /region/);
-  assert.match(lol, /台灣/);
+  assert.match(modal, /皇家戰報廳/);
+  assert.match(modal, /game/);
+  assert.match(modal, /特戰英豪/);
+  assert.match(modal, /英雄聯盟/);
+  assert.match(modal, /player_name/);
+  assert.match(modal, /region/);
+  assert.match(modal, /台灣/);
+  assert.match(modal, /特戰英豪會自動忽略/);
 });
 
 test('private successful stats reply offers one-time publishing while public reply does not', () => {
@@ -130,8 +128,11 @@ test('private successful stats reply offers one-time publishing while public rep
     published: true,
   });
   const publicPayload = buildStatsReply(result, 'test', 'TW2');
+  const publicCard = serializedCard(publicPayload);
 
   assert.equal((privatePayload.flags & MessageFlags.Ephemeral) !== 0, true);
+  assert.equal(publicCard.includes('](https://op.gg'), false);
+  assert.match(publicCard, /"url":"https:\/\/op\.gg\/lol\/summoners\/tw\/test-TW2"/);
   assert.match(serializedCard(privatePayload), /頒布至目前頻道/);
   assert.match(serializedCard(publishedPayload), /戰報已頒布/);
   assert.equal(serializedCard(publicPayload).includes('頒布至目前頻道'), false);

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MessageFlags } from 'discord.js';
-import { buildSteamSearchModal, buildSteamSearchResultPayload, data } from '../src/commands/steam/steam.js';
+import { buildSteamSearchModal, buildSteamSearchResultPayload, buildSteamSelectionPayload, data } from '../src/commands/steam/steam.js';
 
 const details = {
   name: 'Royal Game',
@@ -29,6 +29,20 @@ test('/特價查詢 opens a direct royal search modal without legacy slash param
   assert.match(modal, /Stardew Valley/);
 });
 
+test('Steam keyword search offers a private candidate game selector before showing details', () => {
+  const payload = buildSteamSelectionPayload('session', 'Royal', [
+    { id: 42, name: 'Royal Game' },
+    { id: 43, name: 'Royal Game Deluxe' },
+  ]);
+  const text = serialize(payload);
+
+  assert.equal((payload.flags & MessageFlags.Ephemeral) !== 0, true);
+  assert.match(text, /皇家採購搜尋結果/);
+  assert.match(text, /Royal Game/);
+  assert.match(text, /Royal Game Deluxe/);
+  assert.match(text, /steam_search:session:select/);
+});
+
 test('Steam result is private until the owner publishes it once', () => {
   const privatePayload = buildSteamSearchResultPayload(42, details, {
     ephemeral: true,
@@ -40,8 +54,11 @@ test('Steam result is private until the owner publishes it once', () => {
     published: true,
   });
   const publicPayload = buildSteamSearchResultPayload(42, details);
+  const publicCard = serialize(publicPayload);
 
   assert.equal((privatePayload.flags & MessageFlags.Ephemeral) !== 0, true);
+  assert.equal(publicCard.includes('](https://store.steampowered.com'), false);
+  assert.match(publicCard, /"url":"https:\/\/store\.steampowered\.com\/app\/42\/"/);
   assert.match(serialize(privatePayload), /皇家採購廳/);
   assert.match(serialize(privatePayload), /頒布至目前頻道/);
   assert.match(serialize(publishedPayload), /情報已頒布/);

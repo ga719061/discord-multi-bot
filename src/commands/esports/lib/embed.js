@@ -24,6 +24,7 @@ export function buildStatsReply(result, playerName, tag, options = {}) {
   return embedsToV2Payload([embed], {
     actionRows: [new ActionRowBuilder().addComponents(buttons)],
     ephemeral: options.ephemeral === true,
+    linkTitle: false,
   });
 }
 

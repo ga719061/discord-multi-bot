@@ -1,8 +1,6 @@
 import {
-  ActionRowBuilder,
-  ButtonBuilder,
-  ButtonStyle,
   LabelBuilder,
+  MessageFlags,
   ModalBuilder,
   SlashCommandBuilder,
   StringSelectMenuBuilder,
@@ -11,7 +9,7 @@ import {
 } from 'discord.js';
 import { cachedStats, buildCacheKey } from './lib/cache.js';
 import { buildStatsReply } from './lib/embed.js';
-import { ephemeralV2Payload, v2Divider, v2EditPayload, v2Notice, v2Panel, v2Text } from '../../utils/componentsV2.js';
+import { v2EditPayload, v2Notice } from '../../utils/componentsV2.js';
 import { UI_COLORS } from '../../utils/style.js';
 import { fetchLolStats } from './lib/providers/lol.js';
 import { fetchValorantStats } from './lib/providers/valorant.js';
@@ -33,10 +31,33 @@ export async function execute(interaction) {
   const sessionId = interaction.id;
   const ownerId = interaction.user.id;
   const state = { result: null, playerName: '', tag: '', published: false };
+  const modal = buildStatsModal(sessionId);
+  await interaction.showModal(modal);
+  const submit = await interaction.awaitModalSubmit({
+    time: 2 * 60_000,
+    filter: (candidate) => candidate.user.id === ownerId && candidate.customId === modal.data.custom_id,
+  }).catch(() => null);
+  if (!submit) return;
 
-  const launcher = buildStatsLauncher(sessionId);
-  await interaction.reply(ephemeralV2Payload(launcher.components));
-  const response = await interaction.fetchReply();
+  const game = submit.fields.getStringSelectValues('game')[0] || 'valorant';
+  state.playerName = submit.fields.getTextInputValue('player_name').trim();
+  state.tag = submit.fields.getTextInputValue('tag').replace(/^#/, '').trim();
+  const region = game === 'valorant'
+    ? 'ap'
+    : submit.fields.getStringSelectValues('region')[0] || 'tw';
+  const key = buildCacheKey(game, state.playerName, state.tag, region);
+  await submit.deferReply({ flags: MessageFlags.Ephemeral });
+  state.result = await cachedStats(key, () => game === 'valorant'
+    ? fetchValorantStats(state.playerName, state.tag)
+    : fetchLolStats(state.playerName, state.tag, region));
+
+  await submit.editReply(v2EditPayload(buildStatsReply(state.result, state.playerName, state.tag, {
+    ephemeral: true,
+    publishCustomId: statsId(sessionId, 'publish'),
+  })));
+  if (state.result.status !== 'ok') return;
+
+  const response = await submit.fetchReply();
   const collector = response.createMessageComponentCollector({ time: QUERY_TIMEOUT });
 
   collector.on('collect', async (component) => {
@@ -51,32 +72,6 @@ export async function execute(interaction) {
 
       const [scope, id, action] = component.customId.split(':');
       if (scope !== 'stats' || id !== sessionId) return;
-
-      if (action === 'valorant' || action === 'lol') {
-        const modal = buildStatsModal(sessionId, action);
-        await component.showModal(modal);
-        const submit = await component.awaitModalSubmit({
-          time: 2 * 60_000,
-          filter: (candidate) => candidate.user.id === ownerId && candidate.customId === modal.data.custom_id,
-        }).catch(() => null);
-        if (!submit) return;
-
-        state.playerName = submit.fields.getTextInputValue('player_name').trim();
-        state.tag = submit.fields.getTextInputValue('tag').replace(/^#/, '').trim();
-        const region = action === 'valorant'
-          ? 'ap'
-          : submit.fields.getStringSelectValues('region')[0] || 'tw';
-        const key = buildCacheKey(action, state.playerName, state.tag, region);
-        await submit.deferUpdate();
-        state.result = await cachedStats(key, () => action === 'valorant'
-          ? fetchValorantStats(state.playerName, state.tag)
-          : fetchLolStats(state.playerName, state.tag, region));
-
-        return submit.editReply(v2EditPayload(buildStatsReply(state.result, state.playerName, state.tag, {
-          ephemeral: true,
-          publishCustomId: statsId(sessionId, 'publish'),
-        })));
-      }
 
       if (action === 'publish' && state.result?.status === 'ok') {
         if (state.published) {
@@ -103,59 +98,39 @@ export async function execute(interaction) {
   });
 
   collector.on('end', () => {
-    const expired = state.result?.status === 'ok'
-      ? buildStatsReply(state.result, state.playerName, state.tag, {
-          ephemeral: true,
-          publishCustomId: statsId(sessionId, 'publish'),
-          published: state.published,
-          expired: true,
-        })
-      : buildStatsLauncher(sessionId, true);
-    interaction.editReply(v2EditPayload(expired)).catch(() => {});
+    const expired = buildStatsReply(state.result, state.playerName, state.tag, {
+      ephemeral: true,
+      publishCustomId: statsId(sessionId, 'publish'),
+      published: state.published,
+      expired: true,
+    });
+    submit.editReply(v2EditPayload(expired)).catch(() => {});
   });
 }
 
-export function buildStatsLauncher(sessionId, disabled = false) {
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(statsId(sessionId, 'valorant'))
-      .setLabel('特戰英豪')
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(disabled),
-    new ButtonBuilder()
-      .setCustomId(statsId(sessionId, 'lol'))
-      .setLabel('英雄聯盟')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(disabled)
-  );
-  const panel = v2Panel(UI_COLORS.ROYAL)
-    .addTextDisplayComponents(v2Text([
-      '# 🐕📜 皇家戰報廳',
-      '挑選戰場後填寫 Riot ID，本王會私下呈上公開賽季戰績。',
-      '-# 查詢結果僅你可見；確認內容後可頒布至目前頻道一次。',
-    ].join('\n')))
-    .addSeparatorComponents(v2Divider())
-    .addActionRowComponents(row);
-  if (disabled) {
-    panel.addTextDisplayComponents(v2Text('## ⌛ 查詢委託已結束\n請重新使用 `/戰績` 送出新的戰報委託。'));
-  }
-  return { components: [panel] };
-}
-
-export function buildStatsModal(sessionId, game) {
-  const isValorant = game === 'valorant';
-  const modal = new ModalBuilder()
-    .setCustomId(statsId(sessionId, `submit_${game}`))
-    .setTitle(isValorant ? '皇家戰報 | 特戰英豪' : '皇家戰報 | 英雄聯盟')
+export function buildStatsModal(sessionId) {
+  return new ModalBuilder()
+    .setCustomId(statsId(sessionId, 'submit'))
+    .setTitle('皇家戰報廳 | 查詢公開戰績')
     .addLabelComponents(
-      textLabel('玩家名稱', 'player_name', 'Riot ID 的玩家名稱，例如 Hide on bush'),
-      textLabel('標籤', 'tag', '不含或包含 # 均可，例如 TW2')
-    );
-  if (!isValorant) {
-    modal.addLabelComponents(
       new LabelBuilder()
-        .setLabel('查詢區服')
-        .setDescription('未特別指定時，以台灣區作為預設。')
+        .setLabel('選擇戰場')
+        .setDescription('請選擇要查詢的遊戲。')
+        .setStringSelectMenuComponent(
+          new StringSelectMenuBuilder()
+            .setCustomId('game')
+            .setMinValues(1)
+            .setMaxValues(1)
+            .addOptions(
+              { label: '特戰英豪 (VALORANT)', value: 'valorant', default: true },
+              { label: '英雄聯盟 (League of Legends)', value: 'lol' }
+            )
+        ),
+      textLabel('玩家名稱', 'player_name', 'Riot ID 的玩家名稱，例如 Hide on bush'),
+      textLabel('標籤', 'tag', '不含或包含 # 均可，例如 TW2'),
+      new LabelBuilder()
+        .setLabel('英雄聯盟查詢區服')
+        .setDescription('僅英雄聯盟使用；特戰英豪會自動忽略此選項。')
         .setStringSelectMenuComponent(
           new StringSelectMenuBuilder()
             .setCustomId('region')
@@ -164,8 +139,6 @@ export function buildStatsModal(sessionId, game) {
             .addOptions(LOL_REGIONS)
         )
     );
-  }
-  return modal;
 }
 
 function textLabel(label, customId, placeholder) {

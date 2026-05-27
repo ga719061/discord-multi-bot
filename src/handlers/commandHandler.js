@@ -22,12 +22,14 @@ export async function loadCommands(client) {
             try {
                 const command = await import(filePath);
 
-                if (command.data && command.execute) {
+                if (command.data && command.execute && !command.helpOnly) {
                     client.commands.set(command.data.name, command);
                     for (const aliasData of command.aliases ?? []) {
                         client.commands.set(aliasData.name, command);
                     }
                     logger.debug(`  ✅ 指令載入: /${command.data.name} [${category}]`);
+                } else if (command.helpOnly) {
+                    logger.debug(`  ✅ 面板功能載入: ${file} [${category}]`);
                 } else {
                     logger.warn(`  ⚠️ 指令跳過: ${file} (缺少 data 或 execute)`);
                 }

@@ -1019,14 +1019,20 @@ async function getDiagnostics(guild) {
     ...reactionRoles.map((entry) => entry.channel_id),
   ].filter(Boolean);
   const availableChannelIds = new Set();
+  const channelNames = new Map();
   await Promise.all(channelIds.map(async (channelId) => {
-    if (await guild.channels.fetch(channelId).catch(() => null)) availableChannelIds.add(channelId);
+    const channel = await guild.channels.fetch(channelId).catch(() => null);
+    if (channel) {
+      availableChannelIds.add(channelId);
+      channelNames.set(channelId, channel.name || '未命名頻道');
+    }
   }));
   return buildGuildDiagnostics({
     settings,
     aiSettings: { ...aiSettings, model: aiSettings.model || DEFAULT_AI_MODEL },
     reactionRoles,
     availableChannelIds,
+    channelNames,
     hasDiscordToken: !!process.env.DISCORD_TOKEN,
     hasGoogleAiKey: !!process.env.GOOGLE_AI_KEY,
     hasAiAdminPassword: !!process.env.AI_ADMIN_PASSWORD,

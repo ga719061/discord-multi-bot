@@ -88,6 +88,75 @@ test('help category and detail pages serialize within the V2 component limit', (
     assert.equal(countComponents(detailContainer) <= 40, true);
 });
 
+test('interactive help pages offer direct launch buttons instead of command-entry guidance', () => {
+    const context = {
+        userId: 'viewer',
+        canOpenSettings: false,
+        catalog: [
+            {
+                id: 'steam',
+                label: 'Steam',
+                emoji: '🎮',
+                description: '皇家採購。',
+                group: 'public',
+                commands: [createCommand('特價查詢', '皇家採購查詢')],
+            },
+            {
+                id: 'esports',
+                label: '戰績',
+                emoji: '📊',
+                description: '皇家戰報。',
+                group: 'public',
+                commands: [createCommand('戰績', '皇家戰報查詢')],
+            },
+            {
+                id: 'general',
+                label: '一般',
+                emoji: '📘',
+                description: '皇家提醒。',
+                group: 'public',
+                commands: [createCommand('提醒', '提醒系統')],
+            },
+            {
+                id: 'fun',
+                label: '娛樂',
+                emoji: '🎲',
+                description: '皇家互動。',
+                group: 'public',
+                commands: [createCommand('投票', '正式投票'), createCommand('抽獎', '皇家抽獎')],
+            },
+        ],
+    };
+
+    for (const [category, expectedId, expectedLabel] of [
+        [context.catalog[0], 'help:viewer:launch:steam', '開啟皇家採購查詢'],
+        [context.catalog[1], 'help:viewer:launch:stats', '開啟皇家戰報查詢'],
+        [context.catalog[2], 'help:viewer:launch:reminder_create', '新增皇家提醒'],
+    ]) {
+        const categoryText = JSON.stringify(helpViewTesting.renderCategory(context, category, 0).components[0].toJSON());
+        const detail = helpViewTesting.renderDetail(context, category, 0, 0).components[0].toJSON();
+        const detailText = JSON.stringify(detail);
+
+        assert.match(categoryText, /點擊下方按鈕，立即開啟皇家互動介面/);
+        assert.match(detailText, /不必再輸入指令/);
+        assert.match(detailText, new RegExp(expectedLabel));
+        assert.match(detailText, new RegExp(expectedId));
+        assert.equal(countComponents(detail) <= 40, true);
+    }
+
+    const home = JSON.stringify(helpViewTesting.renderHome(context).components[0].toJSON());
+    assert.match(home, /help:viewer:launch:steam/);
+    assert.match(home, /help:viewer:launch:stats/);
+    assert.equal(home.includes('help:viewer:cat:steam'), false);
+    assert.equal(home.includes('help:viewer:cat:esports'), false);
+
+    const reminderDetail = JSON.stringify(helpViewTesting.renderDetail(context, context.catalog[2], 0, 0).components[0].toJSON());
+    const funCategory = JSON.stringify(helpViewTesting.renderCategory(context, context.catalog[3], 0).components[0].toJSON());
+    assert.match(reminderDetail, /help:viewer:launch:reminder_manage/);
+    assert.match(funCategory, /help:viewer:launch:poll/);
+    assert.match(funCategory, /help:viewer:launch:giveaway/);
+});
+
 test('help expiration disables every interactive control and adds a V2 status notice', () => {
     const components = helpViewTesting.renderHome(createContext()).components;
     const closed = helpViewTesting.closeHelpBook(components)[0].toJSON();

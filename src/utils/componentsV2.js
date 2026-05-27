@@ -117,10 +117,12 @@ export function v2Card({
     return panel;
 }
 
-export function embedToV2Container(embed, actionRows = []) {
+export function embedToV2Container(embed, actionRows = [], options = {}) {
     const data = typeof embed?.toJSON === 'function' ? embed.toJSON() : (embed?.data ?? embed ?? {});
     const author = data.author?.name ? `**${data.author.name}**` : null;
-    const linkedTitle = data.title && data.url ? `[${data.title}](${data.url})` : data.title;
+    const linkedTitle = options.linkTitle !== false && data.title && data.url
+        ? `[${data.title}](${data.url})`
+        : data.title;
     return v2Card({
         title: linkedTitle,
         description: [author, data.description].filter(Boolean).join('\n'),
@@ -136,11 +138,14 @@ export function embedToV2Container(embed, actionRows = []) {
 export function embedsToV2Payload(embeds, options = {}) {
     const actionRows = options.actionRows ?? options.components ?? [];
     const panels = embeds.map((embed, index) =>
-        embedToV2Container(embed, index === embeds.length - 1 ? actionRows : [])
+        embedToV2Container(embed, index === embeds.length - 1 ? actionRows : [], {
+            linkTitle: options.linkTitle,
+        })
     );
     const payloadOptions = { ...options };
     delete payloadOptions.components;
     delete payloadOptions.actionRows;
+    delete payloadOptions.linkTitle;
     const isEphemeral = payloadOptions.ephemeral === true;
     delete payloadOptions.ephemeral;
     return isEphemeral

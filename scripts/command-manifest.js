@@ -22,7 +22,7 @@ export async function buildCommandManifest(commandsDir = DEFAULT_COMMANDS_DIR) {
 
     for (const commandPath of listCommandFiles(commandsDir)) {
         const command = await import(pathToFileURL(commandPath).href);
-        if (!command.data) continue;
+        if (!command.data || command.helpOnly) continue;
 
         commands.push(command.data.toJSON());
         for (const aliasData of command.aliases ?? []) {

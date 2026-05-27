@@ -25,12 +25,17 @@ test('buildGuildDiagnostics reports healthy configured features', () => {
     aiSettings: { model: 'gemini-2.5-flash-lite' },
     reactionRoles: [{ channel_id: 'roles' }],
     availableChannelIds: new Set(['welcome', 'logs', 'deals', 'roles']),
+    channelNames: new Map([['welcome', '迎賓大廳'], ['logs', '史官館'], ['deals', '皇家採購'], ['roles', '身分領取']]),
     hasDiscordToken: true,
     hasGoogleAiKey: true,
     hasAiAdminPassword: true,
   });
 
   assert.equal(diagnostics.every((item) => item.status === '正常'), true);
+  assert.match(byLabel(diagnostics, '史官日誌').detail, /#史官館/);
+  assert.match(byLabel(diagnostics, '皇家迎賓佈告').detail, /#迎賓大廳/);
+  assert.match(byLabel(diagnostics, '皇家採購推播').detail, /#皇家採購 每日 20:00/);
+  assert.equal(JSON.stringify(diagnostics).includes('<#'), false);
 });
 
 test('buildGuildDiagnostics identifies missing channels and AI environment settings', () => {
