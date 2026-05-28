@@ -123,22 +123,26 @@ test('interactive help pages offer direct launch buttons instead of command-entr
                 emoji: '🎲',
                 description: '皇家互動。',
                 group: 'public',
-                commands: [createCommand('投票', '正式投票'), createCommand('抽獎', '皇家抽獎')],
+                commands: [
+                    { ...createCommand('占卜', '皇家占卜'), helpOnly: false },
+                    { ...createCommand('投票', '正式投票'), helpOnly: true },
+                    { ...createCommand('抽獎', '皇家抽獎'), helpOnly: true },
+                ],
             },
         ],
     };
 
-    for (const [category, expectedId, expectedLabel] of [
-        [context.catalog[0], 'help:viewer:launch:steam', '開啟皇家採購查詢'],
-        [context.catalog[1], 'help:viewer:launch:stats', '開啟皇家戰報查詢'],
-        [context.catalog[2], 'help:viewer:launch:reminder_create', '新增皇家提醒'],
+    for (const [category, expectedId, expectedLabel, categoryHint, detailHint] of [
+        [context.catalog[0], 'help:viewer:launch:steam', '開啟皇家採購查詢', /點擊下方按鈕，立即開啟皇家互動介面/, /不必再輸入指令/],
+        [context.catalog[1], 'help:viewer:launch:stats', '開啟皇家戰報查詢', /點擊下方按鈕，立即開啟皇家互動介面/, /不必再輸入指令/],
+        [context.catalog[2], 'help:viewer:launch:reminder_create', '新增皇家提醒', /管理尚未送出的皇家傳喚/, /管理待發送項目/],
     ]) {
         const categoryText = JSON.stringify(helpViewTesting.renderCategory(context, category, 0).components[0].toJSON());
         const detail = helpViewTesting.renderDetail(context, category, 0, 0).components[0].toJSON();
         const detailText = JSON.stringify(detail);
 
-        assert.match(categoryText, /點擊下方按鈕，立即開啟皇家互動介面/);
-        assert.match(detailText, /不必再輸入指令/);
+        assert.match(categoryText, categoryHint);
+        assert.match(detailText, detailHint);
         assert.match(detailText, new RegExp(expectedLabel));
         assert.match(detailText, new RegExp(expectedId));
         assert.equal(countComponents(detail) <= 40, true);
@@ -151,10 +155,18 @@ test('interactive help pages offer direct launch buttons instead of command-entr
     assert.equal(home.includes('help:viewer:cat:esports'), false);
 
     const reminderDetail = JSON.stringify(helpViewTesting.renderDetail(context, context.catalog[2], 0, 0).components[0].toJSON());
+    const reminderCategory = JSON.stringify(helpViewTesting.renderCategory(context, context.catalog[2], 0).components[0].toJSON());
     const funCategory = JSON.stringify(helpViewTesting.renderCategory(context, context.catalog[3], 0).components[0].toJSON());
+    assert.match(reminderCategory, /管理尚未送出的皇家傳喚/);
+    assert.match(reminderCategory, /help:viewer:launch:reminder_create/);
     assert.match(reminderDetail, /help:viewer:launch:reminder_manage/);
+    assert.match(reminderDetail, /建立時所在頻道準時傳喚你/);
+    assert.match(funCategory, /皇家互動入口/);
     assert.match(funCategory, /help:viewer:launch:poll/);
     assert.match(funCategory, /help:viewer:launch:giveaway/);
+    assert.match(funCategory, /皇家占卜/);
+    assert.equal(funCategory.includes('### 正式投票'), false);
+    assert.equal(funCategory.includes('### 皇家抽獎'), false);
 });
 
 test('help expiration disables every interactive control and adds a V2 status notice', () => {

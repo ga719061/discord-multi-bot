@@ -47,7 +47,7 @@ const CATEGORY_META = {
     fun: {
         label: '娛樂',
         emoji: '🎲',
-        description: '陪伴本王互動、小遊戲、投票與每日運勢。',
+        description: '陪伴本王互動、小遊戲、每日運勢與皇家活動。',
         order: 20,
         group: 'public'
     },
@@ -457,6 +457,8 @@ function renderCategory(context, category, page) {
     const maxPage = getMaxPage(category);
     const safePage = clamp(page, 0, maxPage);
     const pageCommands = getPageCommands(category, safePage);
+    const interactiveCommands = category.commands.filter((command) => command.helpOnly);
+    const commandCount = category.commands.length - interactiveCommands.length;
 
     const panel = v2Panel(UI_COLORS.ROYAL)
         .addTextDisplayComponents(v2Text([
@@ -469,22 +471,42 @@ function renderCategory(context, category, page) {
             ansiBlock([
                 { color: COLORS.GOLD, text: `[分類] ${category.label}` },
                 { color: COLORS.CYAN, text: `[頁數] ${safePage + 1} / ${maxPage + 1}` },
-                { color: COLORS.WHITE, text: `[入口] ${category.commands.length} 個可使用功能` }
+                { color: COLORS.WHITE, text: `[指令] ${commandCount} 個可使用指令` },
+                ...(interactiveCommands.length > 0
+                    ? [{ color: COLORS.WHITE, text: `[互動] ${interactiveCommands.length} 個按鈕入口` }]
+                    : [])
             ]),
         ].join('\n')));
+
+    if (interactiveCommands.length > 0) {
+        panel
+            .addSeparatorComponents(v2Divider())
+            .addTextDisplayComponents(v2Text([
+                '## 👑 皇家互動入口',
+                '投票與抽獎使用下方按鈕建立，依彈窗填寫後即可在頻道頒布。',
+            ].join('\n')))
+            .addActionRowComponents(...buildDirectQueryRows(context, interactiveCommands));
+    }
 
     for (const command of pageCommands) {
         panel
             .addSeparatorComponents(v2Divider())
             .addTextDisplayComponents(v2Text([
-                command.helpOnly ? `### ${command.label}` : `### ${command.mention} | ${command.label}`,
+                `### ${command.mention} | ${command.label}`,
                 command.description,
-                DIRECT_QUERY_ACTIONS[command.name] ? '操作：點擊下方按鈕，立即開啟皇家互動介面。' : `用法：\`${command.usage}\``,
+                getCategoryUsageText(command),
                 command.subcommands.length > 0 ? `子指令：${formatSubcommandMentions(command).join('、')}` : null
             ].filter(Boolean).join('\n')));
+
+        if (command.name === '提醒') {
+            panel.addActionRowComponents(...buildDirectQueryRows(context, [command]));
+        }
     }
 
-    const directRows = buildDirectQueryRows(context, pageCommands);
+    const directRows = buildDirectQueryRows(
+        context,
+        pageCommands.filter((command) => command.name !== '提醒')
+    );
     if (directRows.length > 0) {
         panel
             .addSeparatorComponents(v2Divider())
@@ -529,7 +551,7 @@ function renderDetail(context, category, page, commandIndex) {
         .addSeparatorComponents(v2Divider())
         .addTextDisplayComponents(v2Text([
             DIRECT_QUERY_ACTIONS[command.name] ? '## 🚪 直接開始' : '## 🔗 快速使用',
-            DIRECT_QUERY_ACTIONS[command.name] ? '按下方按鈕即可開啟互動介面，不必再輸入指令。' : command.mention,
+            getDetailLaunchText(command),
             command.subcommands.length > 0 ? `子指令：${formatSubcommandMentions(command).join('、')}` : null
         ].filter(Boolean).join('\n')));
 
@@ -538,7 +560,9 @@ function renderDetail(context, category, page, commandIndex) {
         .addSeparatorComponents(v2Divider())
         .addTextDisplayComponents(v2Text([
             '## 🧾 參數',
-            parameterLines.length > 0 ? parameterLines.join('\n') : '這個指令不需要額外參數。',
+            command.name === '提醒'
+                ? '點擊「新增皇家提醒」後，在彈窗填入時間與提醒內容。'
+                : parameterLines.length > 0 ? parameterLines.join('\n') : '這個指令不需要額外參數。',
         ].join('\n')));
 
     if (command.subcommands.length > 0) {
@@ -558,8 +582,10 @@ function renderDetail(context, category, page, commandIndex) {
         .addSeparatorComponents(v2Divider())
         .addTextDisplayComponents(v2Text([
             '## 💡 範例',
-            DIRECT_QUERY_ACTIONS[command.name]
-                ? '點擊「直接開啟」按鈕，依互動介面完成操作。'
+            command.name === '提醒'
+                ? '新增提醒後，本王會在建立時所在頻道準時傳喚你；也可由「管理我的提醒」查看或刪除待發送項目。'
+                : DIRECT_QUERY_ACTIONS[command.name]
+                ? '點擊下方按鈕，依互動介面完成操作。'
                 : command.examples.map((example) => `\`${example}\``).join('\n'),
             '',
             `-# ${category.label}分類，第 ${safePage + 1} 頁中的第 ${safeCommandIndex + 1} 個指令。`,
@@ -687,6 +713,25 @@ function getDirectActions(commandName) {
     ];
 }
 
+function getCategoryUsageText(command) {
+    if (command.name === '提醒') {
+        return '操作：使用下方按鈕新增提醒，或管理尚未送出的皇家傳喚。';
+    }
+    if (DIRECT_QUERY_ACTIONS[command.name]) {
+        return '操作：點擊下方按鈕，立即開啟皇家互動介面。';
+    }
+    return `用法：\`${command.usage}\``;
+}
+
+function getDetailLaunchText(command) {
+    if (command.name === '提醒') {
+        return '按下方按鈕新增提醒或管理待發送項目；也可直接使用 `/提醒` 開始新增。';
+    }
+    return DIRECT_QUERY_ACTIONS[command.name]
+        ? '按下方按鈕即可開啟互動介面，不必再輸入指令。'
+        : command.mention;
+}
+
 function disableComponents(components) {
     for (const component of components) {
         if (!(component instanceof ContainerBuilder)) continue;
@@ -727,11 +772,14 @@ function makeCustomId(context, view, category = 'home', page = 0, commandIndex =
 
 function getPageCommands(category, page) {
     const start = page * COMMANDS_PER_PAGE;
-    return category.commands.slice(start, start + COMMANDS_PER_PAGE);
+    return category.commands
+        .filter((command) => !command.helpOnly)
+        .slice(start, start + COMMANDS_PER_PAGE);
 }
 
 function getMaxPage(category) {
-    return Math.max(Math.ceil(category.commands.length / COMMANDS_PER_PAGE) - 1, 0);
+    const commandCount = category.commands.filter((command) => !command.helpOnly).length;
+    return Math.max(Math.ceil(commandCount / COMMANDS_PER_PAGE) - 1, 0);
 }
 
 function buildUsage(commandName, options = [], subcommandName = null) {
