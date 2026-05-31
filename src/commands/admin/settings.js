@@ -560,15 +560,15 @@ async function renderView(context) {
 async function renderHome(context) {
   const diagnostics = await getDiagnostics(context.guild);
   const accessDiagnostic = {
-    label: '御前 AI 管理授權',
+    label: 'AI 管理授權',
     status: aiUnlocked(context) ? '正常' : '未設定',
-    detail: aiUnlocked(context) ? '已通過御前管理身分驗證' : '請進入 AI 頁完成御前管理身分驗證',
+    detail: aiUnlocked(context) ? '已通過管理身分驗證' : '請進入 AI 頁完成管理身分驗證',
   };
   const statusItems = [...diagnostics, accessDiagnostic];
   const readyCount = statusItems.filter((item) => item.status === '正常').length;
   const pendingCount = statusItems.filter((item) => item.status === '未設定').length;
   const alertCount = statusItems.filter((item) => item.status === '設定異常').length;
-  const overallLabel = alertCount ? '領地有異常待處理' : pendingCount ? '領地待完成配置' : '王國運作安穩';
+  const overallLabel = alertCount ? '有設定異常需要處理' : pendingCount ? '有項目尚未完成設定' : '所有必要設定正常';
   const overview = ansiBlock([
     { color: alertCount ? COLORS.RED : pendingCount ? COLORS.GOLD : COLORS.GREEN, text: `[ CONTROL ] ${overallLabel}` },
     { color: COLORS.GREEN, text: `[ READY   ] ${readyCount} 個模組運作正常` },
@@ -579,19 +579,19 @@ async function renderHome(context) {
   const fixes = diagnostics.filter((item) => item.fix).map((item) => `- **${item.label}**：${item.fix}`).join('\n');
   const panel = v2Panel(alertCount ? UI_COLORS.WARNING : UI_COLORS.ROYAL)
     .addTextDisplayComponents(v2Text(
-      `-# ROYAL ADMINISTRATOR CONTROL CENTER  /  OVERVIEW\n# 🐕👑 ${context.guild.name} 皇家管理控制台\n` +
-      '本王在此統籌領地設定、公開頒布與服務狀態。所有操作僅限 Administrator。'
+      `-# ADMIN CONTROL CENTER  /  OVERVIEW\n# ${context.guild.name} 管理控制台\n` +
+      '集中管理伺服器設定、公開發布與服務狀態。所有操作僅限 Administrator。'
     ))
     .addSeparatorComponents(v2Divider())
-    .addTextDisplayComponents(v2Text(`## 🏰 領地健康總覽\n${overview}${fixes ? `\n### 御前修正建議\n${fixes}` : '\n> 所有必要設定均已就緒，本王巡視無虞。'}`))
+    .addTextDisplayComponents(v2Text(`## 伺服器健康總覽\n${overview}${fixes ? `\n### 修正建議\n${fixes}` : '\n> 所有必要設定均已就緒。'}`))
     .addSeparatorComponents(v2Divider())
-    .addTextDisplayComponents(v2Text('## CONFIGURATION | 皇家功能配置\n調整子民體驗、自動化推播、身分領取與國王智慧行為。'))
+    .addTextDisplayComponents(v2Text('## CONFIGURATION | 功能設定\n調整使用者體驗、自動化推播、身分領取與 AI 行為。'))
     .addActionRowComponents(
       buttonRow(context, [['welcome', '歡迎'], ['logging', '紀錄'], ['leveling', '等級'], ['steam', 'Steam']]),
       buttonRow(context, [['selfrole', '自助身分組'], ['reaction', '反應身分組'], ['ai', aiUnlocked(context) ? 'AI 設定' : 'AI 驗證', aiUnlocked(context) ? ButtonStyle.Secondary : ButtonStyle.Primary]])
     )
     .addSeparatorComponents(v2Divider())
-    .addTextDisplayComponents(v2Text('## OPERATIONS | 御前管理工具\n巡視領地與核心狀態，或執行會影響伺服器的公開管理工作。'))
+    .addTextDisplayComponents(v2Text('## OPERATIONS | 管理工具\n查看伺服器與核心狀態，或執行會影響伺服器的公開管理工作。'))
     .addActionRowComponents(
       buttonRow(context, [['serverinfo', '伺服器資訊'], ['botstatus', '機器人狀態'], ['announcement', '發布公告'], ['member', '成員查詢']])
     );

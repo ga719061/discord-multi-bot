@@ -81,9 +81,9 @@ async function postSteamDealsForGuild(client, row, today, db) {
 
     const deals = await fetchSteamSpecialDeals(10);
     const payload = buildSteamDealsPayload(deals, {
-      title: '🐕👑 吉吉王國每日 Steam 特價聖旨',
-      intro: `汪汪！今日的皇家採購清單送達。本王親自批准這 ${deals.length} 款熱門特價，子民們可以開始盤算荷包了！`,
-      footer: `🐕 每日 ${row.steam_deal_time} 御前推播 | Steam 台灣區價格`,
+      title: 'Steam 特價情報',
+      intro: `Steam 台灣區目前有 ${deals.length} 款熱門特價遊戲可供參考，價格與折扣可能會隨商店更新而變動。`,
+      footer: `每日 ${row.steam_deal_time} 推播 | Steam 台灣區特價`,
     });
 
     await channel.send(payload);

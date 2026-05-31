@@ -51,6 +51,33 @@ test('announcement page includes publishing target and mutually exclusive mentio
   assert.match(text, /返回總覽/);
 });
 
+test('settings home health overview uses neutral admin wording', async () => {
+  initDatabase();
+  const guildId = `settings-home-neutral-${process.pid}`;
+  const context = {
+    userId: 'admin',
+    guild: {
+      id: guildId,
+      name: 'Test Server',
+      channels: { fetch: async () => null },
+    },
+    pending: {},
+    notice: null,
+  };
+
+  const view = await settingsViewTesting.renderHome(context);
+  const text = JSON.stringify(view.components[0].toJSON());
+
+  assert.match(text, /Test Server 管理控制台/);
+  assert.match(text, /伺服器健康總覽/);
+  assert.match(text, /修正建議/);
+  assert.match(text, /功能設定/);
+  assert.match(text, /管理工具/);
+  assert.equal(text.includes('本王'), false);
+  assert.equal(text.includes('領地健康總覽'), false);
+  assert.equal(text.includes('御前修正建議'), false);
+});
+
 test('Steam panel exposes independent limited-free push controls', () => {
   initDatabase();
   const guildId = `settings-steam-free-${process.pid}`;

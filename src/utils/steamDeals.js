@@ -153,20 +153,20 @@ export function buildSteamDealsEmbeds(deals, options = {}) {
 }
 
 export function buildSteamDealsPayload(deals, options = {}) {
-  const title = options.title || '🐕👑 吉吉王國・御用百視達特價榜';
-  const intro = options.intro || '汪！皇家採購廳已巡完 Steam 商店，以下是本王替子民挑出的熱門特價清單：';
-  const footer = options.footer || '🐕 吉吉國王每日採購聖旨 | 台灣區價格';
+  const title = options.title || 'Steam 特價情報';
+  const intro = options.intro || 'Steam 台灣區目前的熱門特價遊戲如下，價格與折扣可能會隨商店更新而變動。';
+  const footer = options.footer || 'Steam 台灣區特價推播';
   const rankedDeals = deals.slice(0, 10);
   const publishedAt = getTaipeiDateTime(options.publishedAt || new Date());
   const firstPanel = v2Panel(UI_COLORS.STEAM)
     .addTextDisplayComponents(v2Text(
-      `# ${title}\n${intro}\n-# Steam 台灣區熱門排行 | 名次沿用 Steam 顯示順序`
+      `# ${title}\n${intro}\n-# 名次沿用 Steam 目前顯示順序，實際價格以商店頁面為準。`
     ))
     .addSeparatorComponents(v2Divider());
   const secondPanel = v2Panel(UI_COLORS.STEAM)
-    .addTextDisplayComponents(v2Text('## 📜 皇家採購續榜'));
+    .addTextDisplayComponents(v2Text('## 特價候選'));
   const thirdPanel = v2Panel(UI_COLORS.STEAM)
-    .addTextDisplayComponents(v2Text('## 📜 皇家採購末卷'));
+    .addTextDisplayComponents(v2Text('## 更多特價'));
 
   rankedDeals.forEach((game, index) => {
     const targetPanel = index < 4 ? firstPanel : (index < 8 ? secondPanel : thirdPanel);
@@ -186,7 +186,7 @@ export function buildSteamDealsPayload(deals, options = {}) {
   const selectRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId('steam_deal_detail')
-      .setPlaceholder('選擇遊戲，查看目前價格與詳細情報')
+      .setPlaceholder('選一款特價遊戲查看目前 Steam 情報')
       .addOptions(
         rankedDeals.map((game, index) => ({
           label: truncateMenuText(`${getRankMedal(index)} ${game.name}`, 100),
@@ -198,9 +198,9 @@ export function buildSteamDealsPayload(deals, options = {}) {
 
   thirdPanel
     .addSeparatorComponents(v2Divider())
-    .addTextDisplayComponents(v2Text('## 🔎 查看目前情報\n選取一款遊戲，本王會私下呈上 Steam 目前價格與商店入口。'))
+    .addTextDisplayComponents(v2Text('## 查看目前情報\n選取一款遊戲，系統會私下顯示 Steam 目前價格與商店入口。'))
     .addActionRowComponents(selectRow)
-    .addTextDisplayComponents(v2Text(`-# ${footer} | 發布 ${publishedAt.date} ${publishedAt.time} | 特價可能隨時變動`));
+    .addTextDisplayComponents(v2Text(`-# ${footer} | 發布 ${publishedAt.date} ${publishedAt.time} | 特價活動會隨 Steam 商店更新而變動`));
 
   return v2Payload([firstPanel, secondPanel, thirdPanel]);
 }
@@ -251,7 +251,7 @@ export function buildSteamFreeGamesPayload(games, options = {}) {
 
   thirdPanel
     .addSeparatorComponents(v2Divider())
-    .addTextDisplayComponents(v2Text('## 查看目前情報\n選取一款遊戲，本王會私下呈上 Steam 目前價格與商店入口。'))
+    .addTextDisplayComponents(v2Text('## 查看目前情報\n選取一款遊戲，系統會私下顯示 Steam 目前價格與商店入口。'))
     .addActionRowComponents(selectRow)
     .addTextDisplayComponents(v2Text(`-# ${footer} | 發布 ${publishedAt.date} ${publishedAt.time} | 免費活動會隨 Steam 商店更新而變動`));
 

@@ -35,9 +35,9 @@ test('buildGuildDiagnostics reports healthy configured features', () => {
   });
 
   assert.equal(diagnostics.every((item) => item.status === '正常'), true);
-  assert.match(byLabel(diagnostics, '史官日誌').detail, /#史官館/);
-  assert.match(byLabel(diagnostics, '皇家迎賓佈告').detail, /#迎賓大廳/);
-  assert.match(byLabel(diagnostics, '皇家採購推播').detail, /#皇家採購 每日 20:00/);
+  assert.match(byLabel(diagnostics, '日誌記錄').detail, /#史官館/);
+  assert.match(byLabel(diagnostics, '歡迎訊息').detail, /#迎賓大廳/);
+  assert.match(byLabel(diagnostics, 'Steam 特價推播').detail, /#皇家採購 每日 20:00/);
   assert.match(byLabel(diagnostics, 'Steam 限時免費推播').detail, /#免費情報 每日 21:00/);
   assert.equal(JSON.stringify(diagnostics).includes('<#'), false);
 });
@@ -50,11 +50,11 @@ test('buildGuildDiagnostics identifies missing channels and AI environment setti
     availableChannelIds: new Set(['welcome', 'deals']),
   });
 
-  assert.equal(byLabel(diagnostics, '國王智慧核心').status, '設定異常');
-  assert.equal(byLabel(diagnostics, '史官日誌').status, '設定異常');
-  assert.equal(byLabel(diagnostics, '大內環境配置').status, '設定異常');
-  assert.equal(byLabel(diagnostics, '皇家反應身分站').status, '設定異常');
-  assert.equal(byLabel(diagnostics, '皇家採購推播').status, '設定異常');
+  assert.equal(byLabel(diagnostics, 'AI 設定').status, '設定異常');
+  assert.equal(byLabel(diagnostics, '日誌記錄').status, '設定異常');
+  assert.equal(byLabel(diagnostics, '環境變數').status, '設定異常');
+  assert.equal(byLabel(diagnostics, '反應身分組').status, '設定異常');
+  assert.equal(byLabel(diagnostics, 'Steam 特價推播').status, '設定異常');
   assert.equal(byLabel(diagnostics, 'Steam 限時免費推播').status, '設定異常');
 });
 
@@ -75,10 +75,10 @@ test('buildGuildDiagnostics distinguishes optional features that are not configu
     hasAiAdminPassword: true,
   });
 
-  assert.equal(byLabel(diagnostics, '史官日誌').status, '未設定');
-  assert.equal(byLabel(diagnostics, '皇家迎賓佈告').status, '未設定');
-  assert.equal(byLabel(diagnostics, '皇家自助身分領取').status, '未設定');
-  assert.equal(byLabel(diagnostics, '皇家反應身分站').status, '未設定');
-  assert.equal(byLabel(diagnostics, '皇家採購推播').status, '未設定');
+  assert.equal(byLabel(diagnostics, '日誌記錄').status, '未設定');
+  assert.equal(byLabel(diagnostics, '歡迎訊息').status, '未設定');
+  assert.equal(byLabel(diagnostics, '自助身分組').status, '未設定');
+  assert.equal(byLabel(diagnostics, '反應身分組').status, '未設定');
+  assert.equal(byLabel(diagnostics, 'Steam 特價推播').status, '未設定');
   assert.equal(byLabel(diagnostics, 'Steam 限時免費推播').status, '未設定');
 });

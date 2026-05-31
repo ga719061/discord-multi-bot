@@ -24,14 +24,14 @@ export function buildGuildDiagnostics({
   ].filter(Boolean);
 
   diagnostics.push({
-    label: '大內環境配置',
+    label: '環境變數',
     status: missingEnvironment.length ? '設定異常' : '正常',
     detail: environment.map(([name, configured]) => `${name} ${configured ? '已配置' : '未配置'}`).join(' | '),
     fix: missingEnvironment.length ? '在 `.env` 補齊未配置的必要環境變數後重新啟動。' : null,
   });
 
   diagnostics.push({
-    label: '國王智慧核心',
+    label: 'AI 設定',
     status: missingAiEnv.length ? '設定異常' : '正常',
     detail: missingAiEnv.length
       ? `缺少 ${missingAiEnv.join('、')}`
@@ -40,7 +40,7 @@ export function buildGuildDiagnostics({
   });
 
   const logDiagnostic = channelDiagnostic(
-    '史官日誌',
+    '日誌記錄',
     settings.log_channel,
     availableChannelIds,
     channelNames,
@@ -54,7 +54,7 @@ export function buildGuildDiagnostics({
   }
   diagnostics.push(logDiagnostic);
   const welcomeDiagnostic = channelDiagnostic(
-    '皇家迎賓佈告',
+    '歡迎訊息',
     settings.welcome_channel,
     availableChannelIds,
     channelNames,
@@ -66,7 +66,7 @@ export function buildGuildDiagnostics({
   diagnostics.push(welcomeDiagnostic);
 
   diagnostics.push({
-    label: '爵位晉升公告',
+    label: '等級升級公告',
     status: '正常',
     detail: settings.level_up_announcement_enabled !== 0 ? '升級時會發送公告' : '已由管理員關閉公告',
     fix: null,
@@ -74,31 +74,31 @@ export function buildGuildDiagnostics({
 
   const selfRoleCount = parseJsonArray(settings.selfrole_roles, []).length;
   diagnostics.push({
-    label: '皇家自助身分領取',
+    label: '自助身分組',
     status: selfRoleCount > 0 ? '正常' : '未設定',
     detail: selfRoleCount > 0 ? `已建立 ${selfRoleCount} 個領取選項` : '尚未建立領取選項',
-    fix: selfRoleCount > 0 ? null : '在 `/設定` 的「自助身分組」頁建立皇家領取選項。',
+    fix: selfRoleCount > 0 ? null : '在 `/設定` 的「自助身分組」頁建立可領取的身分組選項。',
   });
 
   const reactionChannelIds = [...new Set(reactionRoles.map((item) => item.channel_id))];
   const missingReactionChannel = reactionChannelIds.some((id) => !availableChannelIds.has(id));
   if (missingReactionChannel) {
     diagnostics.push({
-      label: '皇家反應身分站',
+      label: '反應身分組',
       status: '設定異常',
       detail: '反應身分組使用的頻道已不存在',
-      fix: '在 `/設定` 的「反應角色」頁檢查並刪除失效設定。',
+      fix: '在 `/設定` 的「反應身分組」頁檢查並刪除失效設定。',
     });
   } else if (reactionRoles.length === 0) {
     diagnostics.push({
-      label: '皇家反應身分站',
+      label: '反應身分組',
       status: '未設定',
       detail: '尚未建立反應站',
       fix: '在 `/設定` 的「反應身分組」頁建立站點。',
     });
   } else {
     diagnostics.push({
-      label: '皇家反應身分站',
+      label: '反應身分組',
       status: '正常',
       detail: `已建立 ${reactionRoles.length} 組配對`,
       fix: null,
@@ -133,7 +133,7 @@ function channelDiagnostic(label, channelId, channelIds, channelNames, command) 
 function steamDiagnostic(settings, channelIds, channelNames) {
   if (settings.steam_deal_enabled !== 1) {
     return {
-      label: '皇家採購推播',
+      label: 'Steam 特價推播',
       status: '未設定',
       detail: settings.steam_deal_channel ? '目前已關閉' : '尚未啟用',
       fix: '在 `/設定` 的「Steam」頁啟用每日推播。',
@@ -141,7 +141,7 @@ function steamDiagnostic(settings, channelIds, channelNames) {
   }
   if (!settings.steam_deal_channel || !channelIds.has(settings.steam_deal_channel)) {
     return {
-      label: '皇家採購推播',
+      label: 'Steam 特價推播',
       status: '設定異常',
       detail: '推播頻道不存在或無法存取',
       fix: '在 `/設定` 的「Steam」頁重新選擇推播頻道。',
@@ -149,14 +149,14 @@ function steamDiagnostic(settings, channelIds, channelNames) {
   }
   if (!isValidSteamDealTime(settings.steam_deal_time)) {
     return {
-      label: '皇家採購推播',
+      label: 'Steam 特價推播',
       status: '設定異常',
       detail: '每日投放時間格式無效',
       fix: '在 `/設定` 的「Steam」頁將時間設為 `HH:mm` 格式。',
     };
   }
   return {
-    label: '皇家採購推播',
+    label: 'Steam 特價推播',
     status: '正常',
     detail: `${displayChannelName(settings.steam_deal_channel, channelNames)} 每日 ${settings.steam_deal_time}`,
     fix: null,

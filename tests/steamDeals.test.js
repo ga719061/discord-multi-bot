@@ -50,12 +50,18 @@ test('buildSteamDealsPayload displays a full media card and detail selector for 
   const galleries = children.filter((component) => component.type === ComponentType.MediaGallery);
   const actionRow = children.find((component) => component.type === ComponentType.ActionRow);
   const selector = actionRow.components[0];
+  const text = JSON.stringify(payload.components.map((panel) => panel.toJSON()));
 
   assert.equal((payload.flags & MessageFlags.IsComponentsV2) !== 0, true);
   assert.equal(payload.components.length, 3);
   assert.equal(galleries.length, 10);
   assert.equal(galleries[0].items[0].media.url, 'https://cdn.example.test/game-1.jpg');
   assert.equal(galleries[9].items[0].media.url, 'https://cdn.example.test/game-10.jpg');
+  assert.match(text, /Steam 特價情報/);
+  assert.match(text, /特價候選/);
+  assert.match(text, /更多特價/);
+  assert.match(text, /選一款特價遊戲查看目前 Steam 情報/);
+  assert.equal(text.includes('皇家採購'), false);
   assert.equal(selector.custom_id, 'steam_deal_detail');
   assert.equal(selector.options.length, 10);
   assert.equal(countV2Components(payload.components) <= 40, true);
