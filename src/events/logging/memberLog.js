@@ -1,6 +1,6 @@
 import { EmbedBuilder, AuditLogEvent } from 'discord.js';
 import { sendLog, getAuditLogExecutor } from '../../utils/logUtils.js';
-import { fmt, COLORS } from '../../utils/style.js';
+import { fmt, COLORS, UI_COLORS } from '../../utils/style.js';
 import { inviteCache } from '../../bot.js';
 import { logger } from '../../utils/logger.js';
 
@@ -28,7 +28,7 @@ export function register(client) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor(0x00FF00)
+            .setColor(UI_COLORS.SUCCESS)
             .setTitle('🐕👋 新子民加入領地！')
             .setThumbnail(member.user.displayAvatarURL())
             .setDescription(`**${member.displayName}** 加入了本王的領地！汪！`)
@@ -57,7 +57,7 @@ export function register(client) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor(0xFF0000)
+            .setColor(UI_COLORS.DANGER)
             .setTitle('🐕💔 子民離開了本王的領地...')
             .setThumbnail(member.user.displayAvatarURL())
             .addFields(
@@ -92,7 +92,7 @@ export function register(client) {
             setTimeout(() => nicknameUpdateCache.delete(nickCacheKey), 5000);
 
             const embed = new EmbedBuilder()
-                .setColor(0x0099FF)
+                .setColor(UI_COLORS.INFO)
                 .setTitle('🐕📛 子民改名了！')
                 .setDescription(`**${newMember.displayName}** 換了新名字！汪！`)
                 .addFields(
@@ -119,7 +119,7 @@ export function register(client) {
             if (!added && !removed) return;
 
             const embed = new EmbedBuilder()
-                .setColor(0x0099FF)
+                .setColor(UI_COLORS.INFO)
                 .setTitle('🐕🏷️ 身分組變動！')
                 .setDescription(`**${newMember.displayName}** 的身分有所改變！汪！`)
                 .setTimestamp();
@@ -134,7 +134,7 @@ export function register(client) {
         if (!oldMember.isCommunicationDisabled() && newMember.isCommunicationDisabled()) {
             const executor = await getAuditLogExecutor(newMember.guild, AuditLogEvent.MemberUpdate, newMember.id);
             const embed = new EmbedBuilder()
-                .setColor(0xFF0000)
+                .setColor(UI_COLORS.DANGER)
                 .setTitle('🐕🔇 壞狗狗！被禁言了！')
                 .setDescription(`**${newMember.displayName}** 被關進反省室了！汪！`)
                 .addFields(
@@ -147,7 +147,7 @@ export function register(client) {
         // 解除禁言
         if (oldMember.isCommunicationDisabled() && !newMember.isCommunicationDisabled()) {
             const embed = new EmbedBuilder()
-                .setColor(0x00FF00)
+                .setColor(UI_COLORS.SUCCESS)
                 .setTitle('🐕🔊 解除禁言！')
                 .setDescription(`**${newMember.displayName}** 反省結束，可以說話了！汪！`)
                 .setTimestamp();
@@ -159,7 +159,7 @@ export function register(client) {
     client.on('guildBanAdd', async (ban) => {
         const executor = await getAuditLogExecutor(ban.guild, AuditLogEvent.MemberBanAdd, ban.user.id);
         const embed = new EmbedBuilder()
-            .setColor(0xFF0000)
+            .setColor(UI_COLORS.DANGER)
             .setTitle('🐕🔨 驅逐出境！ (Ban)')
             .setThumbnail(ban.user.displayAvatarURL())
             .setDescription(`**${ban.user.displayName || ban.user.username}** 嚴重違反國法，已被本王驅逐！汪！`)
@@ -175,7 +175,7 @@ export function register(client) {
     client.on('guildBanRemove', async (ban) => {
         const executor = await getAuditLogExecutor(ban.guild, AuditLogEvent.MemberBanRemove, ban.user.id);
         const embed = new EmbedBuilder()
-            .setColor(0x00FF00)
+            .setColor(UI_COLORS.SUCCESS)
             .setTitle('🐕🔓 獲得赦免！ (Unban)')
             .setThumbnail(ban.user.displayAvatarURL())
             .setDescription(`**${ban.user.displayName || ban.user.username}** 獲得本王赦免，解除了封鎖！汪！`)

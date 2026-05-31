@@ -1,6 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import { sendLog } from '../../utils/logUtils.js';
-import { fmt, COLORS } from '../../utils/style.js';
+import { fmt, COLORS, UI_COLORS } from '../../utils/style.js';
 
 export function register(client) {
     client.on('voiceStateUpdate', (oldState, newState) => {
@@ -11,7 +11,7 @@ export function register(client) {
         // 加入語音
         if (!oldState.channelId && newState.channelId) {
             const embed = new EmbedBuilder()
-                .setColor(0x00FF00)
+                .setColor(UI_COLORS.SUCCESS)
                 .setTitle('🐕🎤 汪！有人來開派對了！')
                 .setThumbnail(member.user.displayAvatarURL())
                 .setDescription(`**${member.displayName}** 跑進了 **${newState.channel.name}**！\n` + '```ansi\n' + fmt(COLORS.GREEN, '本王也要一起玩！汪！') + '\n```')
@@ -22,7 +22,7 @@ export function register(client) {
         // 離開語音
         else if (oldState.channelId && !newState.channelId) {
             const embed = new EmbedBuilder()
-                .setColor(0xFF0000)
+                .setColor(UI_COLORS.DANGER)
                 .setTitle('🐕🚪 派對結束了嗎？')
                 .setThumbnail(member.user.displayAvatarURL())
                 .setDescription(`**${member.displayName}** 離開了 **${oldState.channel.name}**... \n` + '```ansi\n' + fmt(COLORS.RED, '汪... 寂寞...') + '\n```')
@@ -33,7 +33,7 @@ export function register(client) {
         // 切換頻道
         else if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
             const embed = new EmbedBuilder()
-                .setColor(0x0099FF)
+                .setColor(UI_COLORS.INFO)
                 .setTitle('🐕🔄 跳來跳去的！')
                 .setThumbnail(member.user.displayAvatarURL())
                 .setDescription(

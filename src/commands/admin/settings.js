@@ -50,15 +50,15 @@ const LOG_TYPES = [
 const MODULE_STYLE = {
   '歡迎訊息': { section: 'CONFIGURATION / WELCOME', color: UI_COLORS.ROYAL },
   '紀錄設定': { section: 'CONFIGURATION / LOGGING', color: UI_COLORS.INFO },
-  '等級系統': { section: 'CONFIGURATION / LEVELING', color: UI_COLORS.SUCCESS },
-  'Steam 推播': { section: 'CONFIGURATION / STEAM', color: UI_COLORS.INFO },
+  '等級系統': { section: 'CONFIGURATION / LEVELING', color: UI_COLORS.ROYAL },
+  'Steam 推播': { section: 'CONFIGURATION / STEAM', color: UI_COLORS.STEAM },
   '自助身分組': { section: 'CONFIGURATION / SELF ROLES', color: UI_COLORS.ROYAL },
-  '反應身分組': { section: 'CONFIGURATION / REACTION ROLES', color: UI_COLORS.SPECIAL },
+  '反應身分組': { section: 'CONFIGURATION / REACTION ROLES', color: UI_COLORS.FUN },
   'AI 設定': { section: 'CONFIGURATION / AI', color: UI_COLORS.SPECIAL },
   'AI 存取驗證': { section: 'CONFIGURATION / AI ACCESS', color: UI_COLORS.MUTED },
   '伺服器資訊': { section: 'OPERATIONS / SERVER', color: UI_COLORS.INFO },
   '機器人狀態': { section: 'OPERATIONS / SYSTEM', color: UI_COLORS.SUCCESS },
-  '發布公告': { section: 'OPERATIONS / ANNOUNCEMENT', color: UI_COLORS.ROYAL },
+  '發布公告': { section: 'OPERATIONS / ANNOUNCEMENT', color: UI_COLORS.ANNOUNCEMENT },
   '成員查詢': { section: 'OPERATIONS / MEMBER', color: UI_COLORS.INFO },
 };
 const MODULE_TITLES = {

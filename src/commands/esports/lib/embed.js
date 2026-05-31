@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
-import { ansiBlock, COLORS } from '../../../utils/style.js';
+import { ansiBlock, COLORS, UI_COLORS } from '../../../utils/style.js';
 import { embedsToV2Payload } from '../../../utils/componentsV2.js';
 
 export function buildStatsReply(result, playerName, tag, options = {}) {
@@ -50,7 +50,7 @@ function buildValorantEmbed(result) {
       ]
     : [{ name: '🗺️ 近期亮點', value: recentLines, inline: false }];
   const embed = new EmbedBuilder()
-    .setColor(0xFA4454)
+    .setColor(UI_COLORS.VALORANT)
     .setAuthor({ name: `皇家戰報廳 | VALORANT · ${result.source} All Modes` })
     .setTitle(`🎯 ${stats.playerId}`)
     .setURL(result.sourceUrl)
@@ -101,7 +101,7 @@ function buildLolEmbed(result) {
     ? `${stats.flex.rank}${stats.flex.lp ? ` ${stats.flex.lp} LP` : ''}${stats.flex.winRate ? ` ｜ 勝率 ${stats.flex.winRate}` : ''}`
     : '網站未呈報';
   const embed = new EmbedBuilder()
-    .setColor(0x0AC8B9)
+    .setColor(UI_COLORS.LEAGUE)
     .setAuthor({ name: '皇家戰報廳 | LEAGUE OF LEGENDS 公開戰績' })
     .setTitle(`⚔️ ${stats.playerId}`)
     .setURL(result.sourceUrl)
@@ -128,22 +128,22 @@ function buildFailureEmbed(result, playerId) {
   const copy = {
     not_found: {
       title: '皇家史冊找不到公開戰績',
-      color: 0x99AAB5,
+      color: UI_COLORS.MUTED,
       description: '可能是 Riot ID 輸入錯誤、帳號未公開，或情報來源尚未收錄資料。',
     },
     blocked: {
       title: '情報使者暫時被來源網站擋下',
-      color: 0xF1C40F,
+      color: UI_COLORS.WARNING,
       description: '公開戰績來源目前限制自動查詢，仍可使用下方按鈕親自前往查看。',
     },
     unavailable: {
       title: '皇家戰報線路暫時不通',
-      color: 0xE67E22,
+      color: UI_COLORS.WARNING,
       description: '來源網站可能維護中或連線逾時，請稍後再向本王查詢。',
     },
     parse_error: {
       title: '公開戰報卷宗格式已變更',
-      color: 0xE67E22,
+      color: UI_COLORS.WARNING,
       description: '本王暫時讀不懂網站的新排版，但仍可由下方按鈕前往查看。',
     },
   };

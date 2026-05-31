@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { fmt, COLORS } from '../../utils/style.js';
+import { fmt, COLORS, UI_COLORS } from '../../utils/style.js';
 import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
@@ -40,14 +40,14 @@ export async function execute(interaction) {
     const luckyNum = (Math.abs(hash) % 100) + 1;
 
     const embed = new EmbedBuilder()
-        .setColor(0xFFD700)
+        .setColor(UI_COLORS.ROYAL)
         .setTitle('🐕👑 吉吉國王的每日金句')
-        .setDescription('```ansi\n' + fmt(COLORS.CYAN, quote) + '\n```')
+        .setDescription('汪！本王翻開今日小小御前筆記，送你一句專屬祝福：\n\n```ansi\n' + fmt(COLORS.CYAN, quote) + '\n```')
         .addFields(
             { name: '🍀 今日幸運指數', value: `${'⭐'.repeat(Math.ceil(luckyNum / 20))} **${luckyNum}**/100`, inline: true },
             { name: '🐕 國王的話', value: '```ansi\n' + (luckyNum > 80 ? fmt(COLORS.GREEN, '今天超級幸運！本王賜福於你！汪！') : luckyNum > 50 ? '不錯的一天！好好努力吧子民～' : luckyNum > 20 ? '普通的一天，摸摸本王會帶來好運喔！' : fmt(COLORS.RED, '今天要小心...多來找本王就對了！')) + '\n```', inline: false }
         )
-        .setFooter({ text: `每天只有一句金句喔！明天再來找本王吧～` });
+        .setFooter({ text: '🐕👑 每天只有一句金句喔！明天再來找本王吧～' });
 
     await interaction.reply(embedsToV2Payload([embed]));
 }

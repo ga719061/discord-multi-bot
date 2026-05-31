@@ -59,13 +59,18 @@ export async function openGiveawayComposer(interaction) {
 
     const endTime = Date.now() + duration * 60 * 1000;
     await submit.deferReply({ flags: MessageFlags.Ephemeral });
-    const message = await submit.channel.send(buildGiveawayPayload(prize, duration, winnersCount, endTime));
+    const message = await submit.channel.send(buildGiveawayPayload(prize, duration, winnersCount, endTime, {
+        creatorId: interaction.user.id,
+        creatorName: getInteractionDisplayName(interaction),
+    }));
     await message.react('🎉');
     addGiveaway(submit.guildId, submit.channelId, message.id, prize, winnersCount, endTime);
     await submit.editReply(v2EditPayload(ephemeralV2Payload([
-        v2Panel(UI_COLORS.SUCCESS).addTextDisplayComponents(v2Text(
-            '# 🎉 皇家抽獎已頒布\n本王已將賞賜張貼於目前頻道，請子民以 🎉 反應參加。'
-        )),
+        v2Panel(UI_COLORS.SUCCESS).addTextDisplayComponents(v2Text([
+            '# 🎉 皇家抽獎已頒布',
+            '汪汪！本王已把賞賜張貼到目前頻道，子民們可以用 🎉 反應排隊領好運了。',
+            '-# 開獎時間到時，本王會自動公布幸運得主。',
+        ].join('\n'))),
     ])));
 }
 
@@ -80,25 +85,30 @@ export function buildGiveawayModal(sessionId) {
         );
 }
 
-export function buildGiveawayPayload(prize, duration, winnersCount, endTime) {
+export function buildGiveawayPayload(prize, duration, winnersCount, endTime, options = {}) {
     const stampAttachment = new AttachmentBuilder('./assets/stamp.png', { name: 'stamp.png' });
+    const creatorName = options.creatorName || options.creatorId || '未知子民';
     const giveawayAnsi = ansiBlock([
         { color: COLORS.GOLD + ';' + COLORS.BOLD, text: '✨ 【皇家賞賜：限時抽獎活動】' },
         { color: COLORS.CYAN, text: '━━━━━━━━━━━━━━━━━━━━' },
         { color: COLORS.WHITE, text: `🎁 獎品內容：${prize}` },
         { color: COLORS.WHITE, text: `👥 預計名額：${winnersCount} 位` },
         { color: COLORS.GOLD, text: `⏰ 活動時長：${duration} 分鐘` },
+        { color: COLORS.CYAN, text: `👑 發起子民：${creatorName}` },
         { color: COLORS.CYAN, text: '━━━━━━━━━━━━━━━━━━━━' },
-        { color: COLORS.RESET, text: '點擊下方的 🎉 反應即可參加活動！' },
+        { color: COLORS.RESET, text: '快點擊下方的 🎉 反應，本王要把你的名字放進幸運名冊！' },
     ]);
     const embed = new EmbedBuilder()
         .setTitle('🐕🎉 吉吉國王的皇家大抽獎！')
-        .setDescription(giveawayAnsi)
-        .setColor(0xFFD700)
+        .setDescription(`汪！今日王國開宴，本王要把寶物賞給幸運子民！\n\n${giveawayAnsi}`)
+        .setColor(UI_COLORS.ROYAL)
         .setThumbnail('attachment://stamp.png')
-        .setFooter({ text: '抽獎倒數中...' })
+        .setFooter({ text: `🐕👑 皇家賞賜倒數中 | 發起：${creatorName}` })
         .setTimestamp(endTime);
-    return embedsToV2Payload([embed], { files: [stampAttachment] });
+    return embedsToV2Payload([embed], {
+        files: [stampAttachment],
+        allowedMentions: { parse: [] },
+    });
 }
 
 export function buildGiveawayErrorPayload(sessionId, disabled = false) {
@@ -112,7 +122,11 @@ export function buildGiveawayErrorPayload(sessionId, disabled = false) {
     return ephemeralV2Payload([
         v2Panel(UI_COLORS.WARNING)
             .addTextDisplayComponents(v2Text(
-                '# 🎁 賞賜設定不成立\n時間與名額必須輸入大於 0 的整數，請重新建立抽獎。'
+                [
+                    '# 🎁 賞賜設定不成立',
+                    '時間與名額必須輸入大於 0 的整數，請重新建立抽獎。',
+                    disabled ? '\n## ⌛ 建立流程已逾時\n請從 `/幫助` 再開一次皇家抽獎。' : '',
+                ].join('\n')
             ))
             .addActionRowComponents(row),
     ]);
@@ -132,6 +146,14 @@ function inputRow(id, label, placeholder, style, maxLength) {
 
 function giveawayId(sessionId, action) {
     return `giveaway:${sessionId}:${action}`;
+}
+
+function getInteractionDisplayName(interaction) {
+    return interaction.member?.displayName
+        || interaction.user?.globalName
+        || interaction.user?.username
+        || interaction.user?.tag
+        || '未知子民';
 }
 
 function isPositiveInteger(text, value) {

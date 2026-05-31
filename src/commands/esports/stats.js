@@ -4,6 +4,7 @@ import {
   ModalBuilder,
   SlashCommandBuilder,
   StringSelectMenuBuilder,
+  TextDisplayBuilder,
   TextInputBuilder,
   TextInputStyle,
 } from 'discord.js';
@@ -112,6 +113,10 @@ export function buildStatsModal(sessionId) {
   return new ModalBuilder()
     .setCustomId(statsId(sessionId, 'submit'))
     .setTitle('皇家戰報廳 | 查詢公開戰績')
+    .addTextDisplayComponents(
+      new TextDisplayBuilder()
+        .setContent('**功能說明**\n選擇 VALORANT 或 League of Legends，輸入 Riot ID 的玩家名稱與 Tag；本王會查詢公開賽季戰績、牌位、勝率與常用角色，結果可一鍵發布到目前頻道。')
+    )
     .addLabelComponents(
       new LabelBuilder()
         .setLabel('選擇戰場')

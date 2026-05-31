@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MessageFlags } from 'discord.js';
+import { ComponentType, MessageFlags } from 'discord.js';
 import { buildSteamSearchModal, buildSteamSearchResultPayload, buildSteamSelectionPayload, data } from '../src/commands/steam/steam.js';
 
 const details = {
@@ -21,12 +21,25 @@ function serialize(payload) {
 
 test('/特價查詢 opens a direct royal search modal without legacy slash parameters', () => {
   const command = data.toJSON();
-  const modal = JSON.stringify(buildSteamSearchModal('session').toJSON());
+  const modalJson = buildSteamSearchModal('session').toJSON();
+  const modal = JSON.stringify(modalJson);
+  const textDisplay = modalJson.components.find((component) => component.type === ComponentType.TextDisplay);
+  const textInputs = modalJson.components
+    .filter((component) => component.type === ComponentType.ActionRow)
+    .flatMap((row) => row.components)
+    .filter((component) => component.type === ComponentType.TextInput);
 
   assert.equal(command.options?.length ?? 0, 0);
   assert.match(command.description, /皇家採購/);
   assert.match(modal, /game_name/);
+  assert.match(modal, /功能說明/);
+  assert.match(modal, /候選清單/);
+  assert.match(modal, /台灣價格/);
   assert.match(modal, /Stardew Valley/);
+  assert.equal(modal.includes('feature_note'), false);
+  assert.equal(textDisplay.content.includes('功能說明'), true);
+  assert.equal(textInputs.length, 1);
+  assert.equal(textInputs[0].custom_id, 'game_name');
 });
 
 test('Steam keyword search offers a private candidate game selector before showing details', () => {

@@ -1,6 +1,6 @@
 import { EmbedBuilder, AuditLogEvent } from 'discord.js';
 import { sendLog, getAuditLogExecutor, resolveMentions } from '../../utils/logUtils.js';
-import { fmt, COLORS } from '../../utils/style.js';
+import { fmt, COLORS, UI_COLORS } from '../../utils/style.js';
 import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
 export function register(client) {
@@ -38,7 +38,7 @@ export function register(client) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor(0xFF0000)
+            .setColor(UI_COLORS.DANGER)
             .setTitle('🐕🗑️ 本王發現訊息被吃掉了！')
             .setDescription(
                 `**原有者:** ${message.member?.displayName || message.author.tag} (${message.author.tag})\n` +
@@ -84,7 +84,7 @@ export function register(client) {
         newContent = await resolveMentions(newMessage.guild, newContent);
 
         const embed = new EmbedBuilder()
-            .setColor(0xFFA500)
+            .setColor(UI_COLORS.WARNING)
             .setTitle('🐕✏️ 本王看到訊息被偷改了！')
             .setDescription(`**作者:** ${oldMessage.member?.displayName || oldMessage.author.tag} (${oldMessage.author.tag})\n**頻道:** ${oldMessage.channel}\n[👉 跳過去看看](${newMessage.url})`)
             .addFields(

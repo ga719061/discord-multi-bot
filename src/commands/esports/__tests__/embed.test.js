@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { MessageFlags } from 'discord.js';
+import { ComponentType, MessageFlags } from 'discord.js';
 import { buildStatsReply } from '../lib/embed.js';
 import { buildStatsModal, data } from '../stats.js';
 
@@ -97,10 +97,19 @@ test('buildStatsReply creates a fallback card when a source is blocked', () => {
 
 test('/戰績 opens one direct modal containing game selection and Riot ID fields', () => {
   const command = data.toJSON();
-  const modal = JSON.stringify(buildStatsModal('query-session').toJSON());
+  const modalJson = buildStatsModal('query-session').toJSON();
+  const modal = JSON.stringify(modalJson);
+  const textDisplay = modalJson.components.find((component) => component.type === ComponentType.TextDisplay);
+  const textInputs = modalJson.components
+    .filter((component) => component.type === ComponentType.Label)
+    .map((label) => label.component)
+    .filter((component) => component?.type === ComponentType.TextInput);
 
   assert.equal(command.options?.length ?? 0, 0);
   assert.match(modal, /皇家戰報廳/);
+  assert.match(modal, /功能說明/);
+  assert.match(modal, /公開賽季戰績/);
+  assert.match(modal, /一鍵發布/);
   assert.match(modal, /game/);
   assert.match(modal, /特戰英豪/);
   assert.match(modal, /英雄聯盟/);
@@ -108,6 +117,10 @@ test('/戰績 opens one direct modal containing game selection and Riot ID field
   assert.match(modal, /region/);
   assert.match(modal, /台灣/);
   assert.match(modal, /特戰英豪會自動忽略/);
+  assert.equal(modal.includes('feature_note'), false);
+  assert.equal(textDisplay.content.includes('功能說明'), true);
+  assert.equal(textInputs.length, 2);
+  assert.deepEqual(textInputs.map((input) => input.custom_id), ['player_name', 'tag']);
 });
 
 test('private successful stats reply offers one-time publishing while public reply does not', () => {

@@ -1,7 +1,7 @@
 import { getDueReminders, updateReminderStatus } from './database.js';
 import { EmbedBuilder } from 'discord.js';
 import { logger } from './logger.js';
-import { fmt, COLORS } from './style.js';
+import { fmt, COLORS, UI_COLORS } from './style.js';
 import { embedsToV2Payload } from './componentsV2.js';
 
 let checkInterval = null;
@@ -55,7 +55,7 @@ async function checkReminders(client) {
                 ].join('\n');
 
                 const embed = new EmbedBuilder()
-                    .setColor(0x3498DB)
+                    .setColor(UI_COLORS.INFO)
                     .setTitle(`⏰ 皇家提醒時間到！`)
                     .setDescription(reminderDesc)
                     .setTimestamp()

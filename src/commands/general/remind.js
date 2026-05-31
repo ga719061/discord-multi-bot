@@ -89,7 +89,7 @@ export function buildReminderSuccessPayload(sessionId, content, targetTime, disa
         v2Panel(UI_COLORS.SUCCESS)
             .addTextDisplayComponents(v2Text([
                 '# ⏰ 皇家提醒已登記',
-                '🐕✅ 遵命！本王會在這個頻道準時提醒你。',
+                '🐕✅ 遵命！本王已把這件事塞進小小皇冠底下，時間到會在這個頻道提醒你。',
                 `**內容：** ${content}`,
                 `**時間：** ${formatReminderDate(targetTime)}`,
                 disabled ? '\n## ⌛ 此提醒頁已逾時\n請重新使用 `/提醒` 開啟新的操作頁。' : '',
@@ -103,7 +103,7 @@ export function buildReminderErrorPayload(sessionId, disabled = false) {
         v2Panel(UI_COLORS.WARNING)
             .addTextDisplayComponents(v2Text([
                 '# ⏰ 提醒時間不成立',
-                '請使用 `10m`、`1h`、`1d` 或 `16:00` 這類未來時間格式。',
+                '本王看了一下懷錶，這個時間不太成立。請使用 `10m`、`1h`、`1d` 或 `16:00` 這類未來時間格式。',
                 disabled ? '\n## ⌛ 此操作頁已逾時\n請重新使用 `/提醒`。' : '',
             ].join('\n')))
             .addActionRowComponents(buildReminderButtonRow(sessionId, disabled)),
@@ -126,7 +126,7 @@ export function buildReminderManagerPayload(sessionId, reminders, disabled = fal
         ));
     }
     const details = reminders.length === 0
-        ? '目前沒有待發送的提醒。按下方按鈕，讓本王替你記下一件事。'
+        ? '目前沒有待發送的提醒。按下方按鈕，讓本王替你記下一件事。汪！'
         : reminders.map((reminder) =>
             `**#${reminder.id}** ${formatReminderDate(reminder.target_time)}\n${reminder.content}`
         ).join('\n\n');
@@ -134,6 +134,7 @@ export function buildReminderManagerPayload(sessionId, reminders, disabled = fal
         v2Panel(UI_COLORS.ROYAL)
             .addTextDisplayComponents(v2Text([
                 '# 📜 我的皇家提醒',
+                '本王替你保管中的待辦都在這裡。',
                 details,
                 disabled ? '\n## ⌛ 管理頁已逾時\n請從 `/幫助` 再次開啟提醒管理。' : '',
             ].join('\n')))

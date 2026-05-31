@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { getUserLevel, getXpForLevel, getRankTitle } from '../../utils/database.js';
-import { fmt, COLORS, ansiBar, ansiBlock } from '../../utils/style.js';
+import { fmt, COLORS, UI_COLORS, ansiBar, ansiBlock } from '../../utils/style.js';
 import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
@@ -36,11 +36,11 @@ export async function execute(interaction) {
     ]);
 
     const embed = new EmbedBuilder()
-        .setColor(isBooster ? 0xF47FFF : 0xFFD700)
+        .setColor(isBooster ? UI_COLORS.BOOST : UI_COLORS.ROYAL)
         .setAuthor({ name: `👑 ${targetMember?.displayName || target.username} 的皇家功勳紀錄`, iconURL: target.displayAvatarURL() })
         .setThumbnail(target.displayAvatarURL({ size: 128 }))
         .setDescription(
-            `汪！本王翻閱了領地史冊，以下是你的功勳資料：\n\n` +
+            `汪！本王翻閱了領地史冊，以下是御前功勳資料：\n\n` +
             mainBlock
         )
         .setFooter({ text: '🐕 繼續在王國內活躍，本王會賜予你更高的頭銜喔！汪！' })

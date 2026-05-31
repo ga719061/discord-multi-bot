@@ -1,6 +1,6 @@
 import { EmbedBuilder, AuditLogEvent } from 'discord.js';
 import { sendLog, getAuditLogExecutor } from '../../utils/logUtils.js';
-import { fmt, COLORS } from '../../utils/style.js';
+import { fmt, COLORS, UI_COLORS } from '../../utils/style.js';
 
 export function register(client) {
     // 頻道變更
@@ -11,7 +11,7 @@ export function register(client) {
         const embed = new EmbedBuilder()
             .setTitle('🐕🏗️ 本王批准新領地建設！')
             .setDescription(`**名稱:** ${channel.name}\n**類型:** ${channel.type}\n**執行者:** ${executor ? executor.tag : '未知'}\n汪！這裡要蓋什麼呢？`)
-            .setColor(0x00FF00)
+            .setColor(UI_COLORS.SUCCESS)
             .setTimestamp();
         
         sendLog(channel.guild, embed, 'server');
@@ -24,7 +24,7 @@ export function register(client) {
         const embed = new EmbedBuilder()
             .setTitle('🐕🏚️ 這裡是違建嗎？拆掉！')
             .setDescription(`**名稱:** ${channel.name}\n**執行者:** ${executor ? executor.tag : '未知'}\n本王還沒玩夠呢... 汪...`)
-            .setColor(0xFF0000)
+            .setColor(UI_COLORS.DANGER)
             .setTimestamp();
         
         sendLog(channel.guild, embed, 'server');
@@ -44,7 +44,7 @@ export function register(client) {
                 { name: '負責人', value: executor ? executor.tag : '未知', inline: false }
             )
             .setDescription('汪！本王喜歡這個新名字嗎？')
-            .setColor(0x0099FF).setTimestamp();
+            .setColor(UI_COLORS.INFO).setTimestamp();
         
         sendLog(newChannel.guild, embed, 'server');
     });
@@ -55,7 +55,7 @@ export function register(client) {
         const embed = new EmbedBuilder()
             .setTitle('🐕🏷️ 頒發新頭銜！')
             .setDescription(`**名稱:** ${role.name}\n**頒發者:** ${executor ? executor.tag : '未知'}\n看起來很厲害的樣子！汪！`)
-            .setColor(0x00FF00).setTimestamp();
+            .setColor(UI_COLORS.SUCCESS).setTimestamp();
         
         sendLog(role.guild, embed, 'server');
     });
@@ -65,7 +65,7 @@ export function register(client) {
         const embed = new EmbedBuilder()
             .setTitle('🐕✂️ 頭銜被收回了！')
             .setDescription(`**名稱:** ${role.name}\n**執行者:** ${executor ? executor.tag : '未知'}\n再見了... 榮耀...`)
-            .setColor(0xFF0000).setTimestamp();
+            .setColor(UI_COLORS.DANGER).setTimestamp();
         
         sendLog(role.guild, embed, 'server');
     });
@@ -81,7 +81,7 @@ export function register(client) {
                 { name: '新的', value: '```ansi\n' + fmt(COLORS.BLUE, newRole.name) + '\n```', inline: true },
                 { name: '執行者', value: executor ? executor.tag : '未知', inline: false }
             )
-            .setColor(0x0099FF).setTimestamp();
+            .setColor(UI_COLORS.INFO).setTimestamp();
         
         sendLog(newRole.guild, embed, 'server');
     });
@@ -93,7 +93,7 @@ export function register(client) {
             .setTitle('🐕😀 新的表情包！')
             .setDescription(`**名稱:** ${emoji.name}\n**上傳者:** ${executor ? executor.tag : '未知'}\n快用它來讚美本王！汪！\n${emoji}`)
             .setThumbnail(emoji.url)
-            .setColor(0x00FF00)
+            .setColor(UI_COLORS.SUCCESS)
             .setTimestamp();
         
         sendLog(emoji.guild, embed, 'server');
@@ -105,7 +105,7 @@ export function register(client) {
             .setTitle('🐕😢 表情包少了一個...')
             .setDescription(`**名稱:** ${emoji.name}\n**執行者:** ${executor ? executor.tag : '未知'}`)
             .setThumbnail(emoji.url)
-            .setColor(0xFF0000)
+            .setColor(UI_COLORS.DANGER)
             .setTimestamp();
         
         sendLog(emoji.guild, embed, 'server');
@@ -123,7 +123,7 @@ export function register(client) {
                     { name: '現在是', value: '```ansi\n' + fmt(COLORS.BLUE, newGuild.name) + '\n```' },
                     { name: '誰改的', value: executor ? executor.tag : '未知', inline: false }
                 )
-                .setDescription('喔！原來只是改名啊！嚇死本王了！').setColor(0x0099FF).setTimestamp();
+                .setDescription('喔！原來只是改名啊！嚇死本王了！').setColor(UI_COLORS.INFO).setTimestamp();
             sendLog(newGuild, embed, 'server');
         }
         if (oldGuild.icon !== newGuild.icon) {
@@ -131,7 +131,7 @@ export function register(client) {
                 .setTitle('🐕🖼️ 城堡掛上了新畫像！')
                 .setDescription(`本王喜歡這個新風格！汪！\n**執行者:** ${executor ? executor.tag : '未知'}`)
                 .setThumbnail(newGuild.iconURL())
-                .setColor(0x0099FF).setTimestamp();
+                .setColor(UI_COLORS.INFO).setTimestamp();
             sendLog(newGuild, embed, 'server');
         }
     });

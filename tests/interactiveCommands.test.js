@@ -11,6 +11,7 @@ import {
 import {
     buildGiveawayErrorPayload,
     buildGiveawayModal,
+    buildGiveawayPayload,
     data as giveawayData,
     helpOnly as giveawayHelpOnly,
 } from '../src/commands/fun/giveaway.js';
@@ -59,6 +60,19 @@ test('giveaway invalid input response supports rebuilding the modal', () => {
     assert.equal((error.flags & MessageFlags.Ephemeral) !== 0, true);
     assert.match(text, /重新建立抽獎/);
     assert.match(text, /giveaway:draw:retry/);
+});
+
+test('giveaway public card displays the creator without broad mentions', () => {
+    const payload = buildGiveawayPayload('Steam 禮物卡', 60, 1, Date.now() + 60_000, {
+        creatorId: 'creator123',
+        creatorName: '吉吉國王',
+    });
+    const text = serialize(payload);
+
+    assert.match(text, /發起子民/);
+    assert.match(text, /吉吉國王/);
+    assert.equal(text.includes('<@creator123>'), false);
+    assert.equal(payload.allowedMentions.parse.length, 0);
 });
 
 test('reminder success and manager views provide creation and deletion controls', () => {

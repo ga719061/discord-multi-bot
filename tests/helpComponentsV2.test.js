@@ -145,6 +145,9 @@ test('interactive help pages offer direct launch buttons instead of command-entr
         assert.match(detailText, detailHint);
         assert.match(detailText, new RegExp(expectedLabel));
         assert.match(detailText, new RegExp(expectedId));
+        assert.equal(categoryText.includes(`\`/${category.commands[0].name}\``), false);
+        assert.equal(detailText.includes(`/${category.commands[0].name}`), false);
+        assert.equal(detailText.includes(`[指令] ${category.commands[0].name}`), false);
         assert.equal(countComponents(detail) <= 40, true);
     }
 
@@ -167,6 +170,72 @@ test('interactive help pages offer direct launch buttons instead of command-entr
     assert.match(funCategory, /皇家占卜/);
     assert.equal(funCategory.includes('### 正式投票'), false);
     assert.equal(funCategory.includes('### 皇家抽獎'), false);
+});
+
+test('help home opens Steam and stats directly while other features stay categorized', () => {
+    const context = {
+        userId: 'viewer',
+        canOpenSettings: false,
+        catalog: [
+            {
+                id: 'general',
+                label: '一般',
+                emoji: '📘',
+                description: '皇家提醒。',
+                group: 'public',
+                commands: [createCommand('提醒', '提醒系統')],
+            },
+            {
+                id: 'steam',
+                label: 'Steam',
+                emoji: '🎮',
+                description: '皇家採購。',
+                group: 'public',
+                commands: [createCommand('特價查詢', '皇家採購查詢')],
+            },
+            {
+                id: 'esports',
+                label: '戰績',
+                emoji: '📊',
+                description: '皇家戰報。',
+                group: 'public',
+                commands: [createCommand('戰績', '皇家戰報查詢')],
+            },
+            {
+                id: 'fun',
+                label: '娛樂',
+                emoji: '🎲',
+                description: '皇家互動。',
+                group: 'public',
+                commands: [
+                    { ...createCommand('投票', '正式投票'), helpOnly: true },
+                    { ...createCommand('抽獎', '皇家抽獎'), helpOnly: true },
+                ],
+            },
+        ],
+    };
+
+    const view = helpViewTesting.renderHome(context);
+    const payload = ephemeralV2Payload(view.components);
+    const container = view.components[0].toJSON();
+    const rows = container.components.filter((component) => component.type === ComponentType.ActionRow);
+    const launchButtons = rows
+        .flatMap((row) => row.components)
+        .filter((button) => button.custom_id?.startsWith('help:viewer:launch:'));
+    const categoryButtons = rows
+        .flatMap((row) => row.components)
+        .filter((button) => button.custom_id?.startsWith('help:viewer:cat:'));
+
+    assert.equal((payload.flags & MessageFlags.IsComponentsV2) !== 0, true);
+    assert.equal(rows.every((row) => row.components.length >= 1 && row.components.length <= 5), true);
+    assert.equal(launchButtons.length, 2);
+    assert.equal(categoryButtons.length, 2);
+    assert.match(JSON.stringify(container), /help:viewer:cat:general/);
+    assert.match(JSON.stringify(container), /help:viewer:launch:steam/);
+    assert.match(JSON.stringify(container), /help:viewer:launch:stats/);
+    assert.equal(JSON.stringify(container).includes('help:viewer:cat:steam'), false);
+    assert.equal(JSON.stringify(container).includes('help:viewer:cat:esports'), false);
+    assert.equal(countComponents(container) <= 40, true);
 });
 
 test('help expiration disables every interactive control and adds a V2 status notice', () => {

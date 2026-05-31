@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { fmt, COLORS } from '../../utils/style.js';
+import { fmt, COLORS, UI_COLORS } from '../../utils/style.js';
 import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
@@ -14,14 +14,14 @@ export const data = new SlashCommandBuilder()
     );
 
 const fortunes = [
-    { luck: '🌟 大吉', text: '汪！！本王感應到你今天會超級幸運！去買彩券吧子民！', color: 0xFFD700 },
-    { luck: '✨ 中吉', text: '嗯～本王覺得你今天運氣不錯！會有好事發生喔～汪！', color: 0x57F287 },
-    { luck: '☀️ 小吉', text: '本王占卜的結果是...還不錯啦！平穩的一天～', color: 0x3498DB },
-    { luck: '🌤️ 吉', text: '普普通通的運勢，但本王相信你可以靠實力創造好運！汪！', color: 0x99AAB5 },
-    { luck: '☁️ 末吉', text: '嗯...運氣普通，但只要有本王在就沒問題！放心吧子民～', color: 0xB0BEC5 },
-    { luck: '🌧️ 凶', text: '汪...本王覺得你今天要小心一點...不過別怕！本王會保護你的！', color: 0xE67E22 },
-    { luck: '⛈️ 大凶', text: '汪嗚...本王感應到不好的氣息...今天最好待在家裡摸本王就好！', color: 0xED4245 },
-    { luck: '🐕👑 國王特別獎', text: '汪汪汪！！本王特別賜予你今天的好運！你是本王最愛的子民！\n*開心地轉了三圈*', color: 0xFF69B4 },
+    { luck: '🌟 大吉', text: '汪！！本王感應到你今天會超級幸運！去買彩券吧子民！', color: UI_COLORS.ROYAL },
+    { luck: '✨ 中吉', text: '嗯～本王覺得你今天運氣不錯！會有好事發生喔～汪！', color: UI_COLORS.SUCCESS },
+    { luck: '☀️ 小吉', text: '本王占卜的結果是...還不錯啦！平穩的一天～', color: UI_COLORS.INFO },
+    { luck: '🌤️ 吉', text: '普普通通的運勢，但本王相信你可以靠實力創造好運！汪！', color: UI_COLORS.MUTED },
+    { luck: '☁️ 末吉', text: '嗯...運氣普通，但只要有本王在就沒問題！放心吧子民～', color: UI_COLORS.MUTED },
+    { luck: '🌧️ 凶', text: '汪...本王覺得你今天要小心一點...不過別怕！本王會保護你的！', color: UI_COLORS.WARNING },
+    { luck: '⛈️ 大凶', text: '汪嗚...本王感應到不好的氣息...今天最好待在家裡摸本王就好！', color: UI_COLORS.DANGER },
+    { luck: '🐕👑 國王特別獎', text: '汪汪汪！！本王特別賜予你今天的好運！你是本王最愛的子民！\n*開心地轉了三圈*', color: UI_COLORS.FUN },
 ];
 
 const yesNoAnswers = [
@@ -62,7 +62,7 @@ export async function execute(interaction) {
         { name: '👑 國王的話', value: fortune.text }
     );
 
-    embed.setFooter({ text: `🐕 本王的占卜準確率高達... 嗯... 汪！` });
+    embed.setFooter({ text: '🐕🔮 皇家占卜準確率高達... 嗯... 汪！' });
 
     await interaction.reply(embedsToV2Payload([embed]));
 }

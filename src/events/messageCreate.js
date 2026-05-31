@@ -32,28 +32,28 @@ function startCleanupInterval() {
 // ========== 吉吉國王互動系統 ==========
 
 const patReactions = [
-    { text: '🐕👑 汪～好舒服...本王允許你再摸一次！', mood: '😊', color: 0xFFD700 },
-    { text: '🐕💢 汪！！你...你竟敢摸本王的頭！？\n...再摸一下啦...', mood: '😤', color: 0xFF6B6B },
-    { text: '🐕✨ *搖尾巴* 嗯...本王今天心情不錯，賞你摸！', mood: '🥰', color: 0x57F287 },
-    { text: '🐕💤 zzZ...本王正在午睡...你還摸？\n*翻了個身繼續睡*', mood: '😴', color: 0x99AAB5 },
-    { text: '🐕👑 哼！本王才不是因為喜歡才讓你摸的！\n...只是今天特別恩准而已！汪！', mood: '😳', color: 0xFFA500 },
-    { text: '🐕🎵 *開心地轉圈圈* 汪汪汪！本王最喜歡被摸了～\n...啊不對！本王是威嚴的國王！咳咳！', mood: '🤩', color: 0xFF69B4 },
+    { text: '🐕👑 汪～好舒服...本王允許你再摸一次！', mood: '😊', color: UI_COLORS.ROYAL },
+    { text: '🐕💢 汪！！你...你竟敢摸本王的頭！？\n...再摸一下啦...', mood: '😤', color: UI_COLORS.DANGER },
+    { text: '🐕✨ *搖尾巴* 嗯...本王今天心情不錯，賞你摸！', mood: '🥰', color: UI_COLORS.SUCCESS },
+    { text: '🐕💤 zzZ...本王正在午睡...你還摸？\n*翻了個身繼續睡*', mood: '😴', color: UI_COLORS.MUTED },
+    { text: '🐕👑 哼！本王才不是因為喜歡才讓你摸的！\n...只是今天特別恩准而已！汪！', mood: '😳', color: UI_COLORS.WARNING },
+    { text: '🐕🎵 *開心地轉圈圈* 汪汪汪！本王最喜歡被摸了～\n...啊不對！本王是威嚴的國王！咳咳！', mood: '🤩', color: UI_COLORS.FUN },
 ];
 
 const hugReactions = [
-    { text: '🐕💕 汪～好溫暖...本王勉強讓你抱一下...\n*小小的身體縮在你懷裡* 嗯...不準放開。', color: 0xFF69B4 },
-    { text: '🐕👑 哼！堂堂國王怎麼可以被人抱！\n...但你的懷抱好舒服...本王再待一下就好...汪。', color: 0xFFD700 },
-    { text: '🐕✨ *瘋狂搖尾巴* 汪汪汪！抱抱！本王最喜歡抱抱了！！\n*在你臉上瘋狂舔*', color: 0x57F287 },
-    { text: '🐕💤 *在你懷裡睡著了* zzZ...汪...zzZ...\n（看起來國王睡得很香）', color: 0x99AAB5 },
+    { text: '🐕💕 汪～好溫暖...本王勉強讓你抱一下...\n*小小的身體縮在你懷裡* 嗯...不準放開。', color: UI_COLORS.FUN },
+    { text: '🐕👑 哼！堂堂國王怎麼可以被人抱！\n...但你的懷抱好舒服...本王再待一下就好...汪。', color: UI_COLORS.ROYAL },
+    { text: '🐕✨ *瘋狂搖尾巴* 汪汪汪！抱抱！本王最喜歡抱抱了！！\n*在你臉上瘋狂舔*', color: UI_COLORS.SUCCESS },
+    { text: '🐕💤 *在你懷裡睡著了* zzZ...汪...zzZ...\n（看起來國王睡得很香）', color: UI_COLORS.MUTED },
 ];
 
 const fortuneLuck = [
-    { luck: '🌟 大吉', text: '汪！！本王感應到你今天超幸運！', color: 0xFFD700 },
-    { luck: '✨ 中吉', text: '本王覺得你今天運氣不錯！汪！', color: 0x57F287 },
-    { luck: '☀️ 小吉', text: '還不錯的一天～本王祝福你！', color: 0x3498DB },
-    { luck: '☁️ 末吉', text: '普通的運勢，多摸摸本王帶來好運！', color: 0xB0BEC5 },
-    { luck: '🌧️ 凶', text: '今天要小心...不過有本王在別怕！汪！', color: 0xE67E22 },
-    { luck: '🐕👑 國王特別獎', text: '汪汪！本王特別賜福給你！你是最棒的子民！', color: 0xFF69B4 },
+    { luck: '🌟 大吉', text: '汪！！本王感應到你今天超幸運！', color: UI_COLORS.ROYAL },
+    { luck: '✨ 中吉', text: '本王覺得你今天運氣不錯！汪！', color: UI_COLORS.SUCCESS },
+    { luck: '☀️ 小吉', text: '還不錯的一天～本王祝福你！', color: UI_COLORS.INFO },
+    { luck: '☁️ 末吉', text: '普通的運勢，多摸摸本王帶來好運！', color: UI_COLORS.MUTED },
+    { luck: '🌧️ 凶', text: '今天要小心...不過有本王在別怕！汪！', color: UI_COLORS.WARNING },
+    { luck: '🐕👑 國王特別獎', text: '汪汪！本王特別賜福給你！你是最棒的子民！', color: UI_COLORS.FUN },
 ];
 
 const dailyQuotes = [
@@ -185,7 +185,7 @@ function handleKingInteraction(message) {
         const quote = dailyQuotes[Math.abs(hash) % dailyQuotes.length];
         const luckyNum = (Math.abs(hash) % 100) + 1;
         const embed = new EmbedBuilder()
-            .setColor(0xFFD700)
+            .setColor(UI_COLORS.ROYAL)
             .setTitle('🐕👑 吉吉國王的每日金句')
             .setDescription(`> ${quote}\n\n— 吉吉國王`)
             .addFields({ name: '🍀 幸運指數', value: `${'⭐'.repeat(Math.ceil(luckyNum / 20))} (${luckyNum}/100)` })

@@ -1,7 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import { getGuildSettings } from '../utils/database.js';
 import { logger } from '../utils/logger.js';
-import { fmt, COLORS, ansiBlock } from '../utils/style.js';
+import { fmt, COLORS, UI_COLORS, ansiBlock } from '../utils/style.js';
 import { embedsToV2Payload } from '../utils/componentsV2.js';
 
 export function register(client) {
@@ -45,7 +45,7 @@ export function register(client) {
                 : null;
 
             const embed = new EmbedBuilder()
-                .setColor(0xFFD700)
+                .setColor(UI_COLORS.ROYAL)
                 .setAuthor({ name: '👑 王國入境管理處', iconURL: member.guild.iconURL() })
                 .setTitle(`🐕👋 歡迎新子民入城！`)
                 .setThumbnail(member.user.displayAvatarURL({ size: 256 }))
@@ -60,7 +60,7 @@ export function register(client) {
                         value: '> 打「**摸摸國王**」或「**抱抱國王**」跟本王互動\n> 輸入 `/幫助` 查看所有王國法令'
                     }
                 )
-                .setFooter({ text: '🐕👑 吉吉國王：汪！又多了一個可以摸摸的人類了！' })
+                .setFooter({ text: '🐕👑 吉吉國王：汪！又多了一位可以一起生活的子民了！' })
                 .setTimestamp();
 
             await channel.send(embedsToV2Payload([embed], {

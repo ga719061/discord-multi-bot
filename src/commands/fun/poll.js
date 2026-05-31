@@ -106,7 +106,7 @@ export async function openPollComposer(interaction) {
             collector.stop('published');
             await optionsSubmit.editReply(v2EditPayload(v2Notice(
                 '📊 國是會議已頒布',
-                '本王已將投票公布於目前頻道，子民們可以開始表決了。',
+                '本王已將投票公布於目前頻道，子民們可以開始排隊表決了，汪！',
                 UI_COLORS.SUCCESS
             )));
         } catch (error) {
@@ -153,11 +153,13 @@ export function buildPollOptionCountPayload(sessionId, question, disabled = fals
                 .setDisabled(disabled)
         )
     );
-    const panel = v2Panel(disabled ? UI_COLORS.MUTED : UI_COLORS.INFO)
+    const panel = v2Panel(disabled ? UI_COLORS.MUTED : UI_COLORS.ROYAL)
         .addTextDisplayComponents(v2Text([
             '# 📊 皇家國是會議',
             `議題：**${question}**`,
-            disabled ? '## ⌛ 建立流程已逾時\n請從 `/幫助` 重新開啟新的皇家投票。' : '請選擇這場投票要提供幾個選項；若關閉彈窗，可再次重新選擇。',
+            disabled
+                ? '## ⌛ 建立流程已逾時\n請從 `/幫助` 重新開啟新的皇家投票。'
+                : '請選擇這場投票要提供幾個選項；本王會接著開啟選項填寫卷軸。',
         ].join('\n')))
         .addActionRowComponents(row);
     return ephemeralV2Payload([panel]);
@@ -203,10 +205,13 @@ export function buildPollPayload({ question, options, votes, creatorId, creatorN
 
     return v2Payload([
         v2Card({
-            title: `📊 國是會議：${question}`,
-            description: ansiBlock(pollLines.join('\n\n')),
-            accentColor: UI_COLORS.INFO,
-            footer: `建立者：${creator} | 總計 ${totalVotes} 票`,
+            title: `📊 皇家國是會議：${question}`,
+            description: [
+                '汪！請選擇你的立場，本王會把每一票都記進王國會議簿。',
+                ansiBlock(pollLines.join('\n\n')),
+            ].join('\n\n'),
+            accentColor: UI_COLORS.ROYAL,
+            footer: `建立者：${creator} | 總計 ${totalVotes} 票 | 吉吉國王御前表決`,
             actionRows: [row],
         }),
     ], { withResponse });

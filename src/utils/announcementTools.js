@@ -20,7 +20,7 @@ export function buildAnnouncementPayload(draft, { preview = false, actionRows = 
     const panel = v2Card({
         title: preview ? '📜 聖旨預覽' : '📜 【致全境子民：國王御旨】',
         description: [heading, `**${draft.title}**\n\n${mention}${draft.content}`].filter(Boolean).join('\n\n'),
-        accentColor: UI_COLORS.DANGER,
+        accentColor: UI_COLORS.ANNOUNCEMENT,
         thumbnail: preview ? undefined : 'attachment://stamp.png',
         images: draft.images || [],
         footer: `${draft.footer ? `${draft.footer} | ` : ''}🔱 王國正版授權印記`,

@@ -7,6 +7,7 @@ import {
     ModalBuilder,
     SlashCommandBuilder,
     StringSelectMenuBuilder,
+    TextDisplayBuilder,
     TextInputBuilder,
     TextInputStyle,
 } from 'discord.js';
@@ -109,16 +110,19 @@ export async function execute(interaction) {
 }
 
 export function buildSteamSearchModal(sessionId) {
+    const description = new TextDisplayBuilder()
+        .setContent('**功能說明**\n輸入 Steam 遊戲名稱後，本王會列出候選清單；選取遊戲即可查看台灣價格、折扣、上市日與評分，並可一鍵發布到目前頻道。');
     const input = new TextInputBuilder()
         .setCustomId('game_name')
-        .setLabel('想查詢的遊戲名稱')
-        .setPlaceholder('例如 Stardew Valley')
+        .setLabel('請輸入 Steam 遊戲名稱')
+        .setPlaceholder('例如：Stardew Valley、Palworld、Monster Hunter')
         .setStyle(TextInputStyle.Short)
         .setMaxLength(120)
         .setRequired(true);
     return new ModalBuilder()
         .setCustomId(steamId(sessionId, 'submit'))
         .setTitle('皇家採購簿 | Steam 搜尋')
+        .addTextDisplayComponents(description)
         .addComponents(new ActionRowBuilder().addComponents(input));
 }
 
@@ -134,11 +138,11 @@ export function buildSteamSelectionPayload(sessionId, query, candidates, disable
             description: truncateOption(`Steam App ${game.id} | 選取後查看目前價格`, 100),
             value: String(game.id),
         })));
-    const panel = v2Panel(UI_COLORS.ROYAL)
+    const panel = v2Panel(UI_COLORS.STEAM)
         .addTextDisplayComponents(v2Text([
             '# 🐕🎮 皇家採購搜尋結果',
-            `本王找到了與 **${query}** 相符的遊戲，請挑選要查閱的一款。`,
-            '-# 選定後會私下呈上目前價格與商店入口。',
+            `本王在 Steam 倉庫裡翻到了與 **${query}** 相符的遊戲，請挑選要查閱的一款。`,
+            '-# 選定後會私下呈上目前價格、評價與商店入口。',
         ].join('\n')))
         .addSeparatorComponents(v2Divider())
         .addActionRowComponents(new ActionRowBuilder().addComponents(select));
@@ -153,17 +157,17 @@ export function buildSteamSearchResultPayload(appId, details, options = {}) {
     const isFree = details.is_free;
     const releaseDate = details.release_date?.date;
     let statusLine = '';
-    let color = 0x0099FF;
+    let color = UI_COLORS.STEAM;
 
     if (isFree) {
         statusLine = fmt(COLORS.GREEN, '🆓 本王宣布：全體子民免費開玩！');
-        color = 0x00FF00;
+        color = UI_COLORS.SUCCESS;
     } else if (price) {
         const finalPrice = price.final_formatted;
         const discount = price.discount_percent;
         if (discount > 0) {
             statusLine = fmt(COLORS.GOLD, `🔥 皇家大促銷：現省 ${discount}%！只要 ${finalPrice}`);
-            color = 0x00FF00;
+            color = UI_COLORS.SUCCESS;
         } else {
             statusLine = fmt(COLORS.GRAY, `💰 皇家公定價：${finalPrice} (目前無特價)`);
         }
@@ -179,7 +183,7 @@ export function buildSteamSearchResultPayload(appId, details, options = {}) {
     ]);
     const buttons = [
         new ButtonBuilder()
-            .setLabel('覲見 Steam 商店')
+            .setLabel('前往 Steam 商店')
             .setStyle(ButtonStyle.Link)
             .setURL(`https://store.steampowered.com/app/${appId}/`),
     ];

@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { fmt, COLORS } from '../../utils/style.js';
+import { fmt, COLORS, UI_COLORS } from '../../utils/style.js';
 import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
@@ -78,7 +78,7 @@ export async function execute(interaction) {
     const replyColor = isAggressive ? COLORS.RED : isPositive ? COLORS.GOLD : COLORS.CYAN;
 
     const embed = new EmbedBuilder()
-        .setColor(isPositive ? 0xFFD700 : isAggressive ? 0xED4245 : 0x0099FF)
+        .setColor(isPositive ? UI_COLORS.ROYAL : isAggressive ? UI_COLORS.DANGER : UI_COLORS.INFO)
         .setTitle('🐕👑 吉吉國王的回覆')
         .addFields(
             { name: `💬 ${interaction.user.displayName} 說`, value: content },

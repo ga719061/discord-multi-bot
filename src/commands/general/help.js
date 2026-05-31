@@ -35,6 +35,11 @@ const DIRECT_QUERY_ACTIONS = {
 const EXTRA_DIRECT_ACTIONS = {
     提醒: [{ action: 'reminder_manage', label: '管理我的提醒', style: ButtonStyle.Secondary }],
 };
+const HOME_DIRECT_CATEGORY_ACTIONS = {
+    steam: 'steam',
+    esports: 'stats',
+};
+const TEXTLESS_HELP_COMMANDS = new Set(['特價查詢', '戰績', '提醒']);
 
 const CATEGORY_META = {
     general: {
@@ -365,8 +370,10 @@ function routeButton(customId, context) {
 function renderHome(context) {
     const publicCategories = context.catalog.filter((category) => category.group !== 'admin');
     const adminCategories = context.catalog.filter((category) => category.group === 'admin');
-    const commandCount = context.catalog.reduce((total, category) => total + category.commands.length, 0);
+    const commandCount = context.catalog.reduce((total, category) => total + category.commands.filter((command) => !command.helpOnly).length, 0);
+    const interactiveCount = context.catalog.reduce((total, category) => total + category.commands.filter((command) => command.helpOnly).length, 0);
     const viewMode = context.canOpenSettings || adminCategories.length > 0 ? '管理模式' : '一般模式';
+    const firstCategory = context.catalog[0];
 
     const panel = v2Panel(UI_COLORS.ROYAL)
         .addTextDisplayComponents(v2Text([
@@ -376,30 +383,28 @@ function renderHome(context) {
         .addSeparatorComponents(v2Divider());
 
     const statusText = [
-        '## 📊 目前視圖',
+        '## ✨ 今日御前狀態',
         ansiBlock([
             { color: context.canOpenSettings || adminCategories.length > 0 ? COLORS.GOLD : COLORS.CYAN, text: `[模式] ${viewMode}` },
             { color: COLORS.WHITE, text: `[分類] ${context.catalog.length} 個可瀏覽分類` },
-            { color: COLORS.WHITE, text: `[入口] ${commandCount} 個可使用功能` },
-            { color: COLORS.GRAY, text: `[操作] 按分類按鈕可翻頁、查看詳情、返回首頁` }
+            { color: COLORS.WHITE, text: `[指令] ${commandCount} 個可使用指令` },
+            { color: COLORS.WHITE, text: `[活動] ${interactiveCount} 個按鈕入口` },
+            { color: COLORS.GRAY, text: '[操作] 按分類按鈕可翻頁、查看詳情、返回首頁' }
         ]),
     ].join('\n');
-    const firstCategory = context.catalog[0];
     if (firstCategory) {
-        const firstDirectAction = firstCategory.commands.length === 1
-            ? DIRECT_QUERY_ACTIONS[firstCategory.commands[0].name]
-            : null;
+        const firstCategoryAction = getHomeCategoryAction(firstCategory);
         panel.addSectionComponents(
             new SectionBuilder()
                 .addTextDisplayComponents(v2Text(statusText))
                 .setButtonAccessory(
                     new ButtonBuilder()
-                        .setCustomId(firstDirectAction
-                            ? makeCustomId(context, 'launch', firstDirectAction.action)
+                        .setCustomId(firstCategoryAction
+                            ? makeCustomId(context, 'launch', firstCategoryAction)
                             : `${makeCustomId(context, 'cat', firstCategory.id, 0)}:featured`)
-                        .setLabel(firstDirectAction ? '立即查詢' : '開始瀏覽')
+                        .setLabel('開始瀏覽')
                         .setEmoji('📖')
-                        .setStyle(firstDirectAction?.style ?? ButtonStyle.Primary)
+                        .setStyle(ButtonStyle.Primary)
                 )
         );
     } else {
@@ -409,7 +414,7 @@ function renderHome(context) {
     if (publicCategories.length > 0) {
         panel
             .addSeparatorComponents(v2Divider())
-            .addTextDisplayComponents(v2Text(`## 📘 一般功能\n${formatCategoryList(publicCategories)}`));
+            .addTextDisplayComponents(v2Text(`## 📚 瀏覽全部功能\n${formatCategoryList(publicCategories)}`));
     }
 
     if (adminCategories.length > 0) {
@@ -492,10 +497,10 @@ function renderCategory(context, category, page) {
         panel
             .addSeparatorComponents(v2Divider())
             .addTextDisplayComponents(v2Text([
-                `### ${command.mention} | ${command.label}`,
+                getCategoryCommandHeading(command),
                 command.description,
                 getCategoryUsageText(command),
-                command.subcommands.length > 0 ? `子指令：${formatSubcommandMentions(command).join('、')}` : null
+                !shouldHideCommandText(command) && command.subcommands.length > 0 ? `子指令：${formatSubcommandMentions(command).join('、')}` : null
             ].filter(Boolean).join('\n')));
 
         if (command.name === '提醒') {
@@ -516,7 +521,7 @@ function renderCategory(context, category, page) {
 
     panel
         .addSeparatorComponents(v2Divider())
-        .addTextDisplayComponents(v2Text('-# 藍色 slash command 可直接點擊；按「詳情」可看本頁第一個指令。'))
+        .addTextDisplayComponents(v2Text('-# 可用按鈕直接操作；按「詳情」可看本頁第一個項目。'))
         .addActionRowComponents(...buildCategoryNavigationRows(context, category, safePage, pageCommands));
 
     return {
@@ -532,6 +537,7 @@ function renderDetail(context, category, page, commandIndex) {
     const command = pageCommands[safeCommandIndex];
 
     if (!command) return renderCategory(context, category, safePage);
+    const hideCommandText = shouldHideCommandText(command);
 
     const panel = v2Panel(UI_COLORS.ROYAL)
         .addTextDisplayComponents(v2Text([
@@ -540,19 +546,19 @@ function renderDetail(context, category, page, commandIndex) {
         ].join('\n')))
         .addSeparatorComponents(v2Divider())
         .addTextDisplayComponents(v2Text([
-            command.helpOnly ? '## 📌 御前互動資訊' : '## 📌 御前指令資訊',
+            command.helpOnly || hideCommandText ? '## 📌 御前互動資訊' : '## 📌 御前指令資訊',
             ansiBlock([
-                { color: COLORS.GOLD, text: command.helpOnly ? `[入口] /幫助按鈕` : `[指令] ${command.name}` },
+                { color: COLORS.GOLD, text: command.helpOnly || hideCommandText ? '[入口] 互動按鈕' : `[指令] ${command.name}` },
                 { color: COLORS.CYAN, text: `[分類] ${category.label}` },
                 { color: COLORS.WHITE, text: `[權限] ${formatPermission(command.permission)}` },
-                { color: COLORS.WHITE, text: command.helpOnly ? '[用法] 點擊下方建立按鈕' : `[用法] ${command.usage}` }
+                { color: COLORS.WHITE, text: command.helpOnly || hideCommandText ? '[用法] 點擊下方按鈕' : `[用法] ${command.usage}` }
             ]),
         ].join('\n')))
         .addSeparatorComponents(v2Divider())
         .addTextDisplayComponents(v2Text([
             DIRECT_QUERY_ACTIONS[command.name] ? '## 🚪 直接開始' : '## 🔗 快速使用',
             getDetailLaunchText(command),
-            command.subcommands.length > 0 ? `子指令：${formatSubcommandMentions(command).join('、')}` : null
+            !hideCommandText && command.subcommands.length > 0 ? `子指令：${formatSubcommandMentions(command).join('、')}` : null
         ].filter(Boolean).join('\n')));
 
     const parameterLines = formatOptions(command.options);
@@ -565,7 +571,7 @@ function renderDetail(context, category, page, commandIndex) {
                 : parameterLines.length > 0 ? parameterLines.join('\n') : '這個指令不需要額外參數。',
         ].join('\n')));
 
-    if (command.subcommands.length > 0) {
+    if (!hideCommandText && command.subcommands.length > 0) {
         panel
             .addSeparatorComponents(v2Divider())
             .addTextDisplayComponents(v2Text([
@@ -605,16 +611,14 @@ function formatCategoryList(categories) {
 
 function buildCategoryRows(context) {
     const buttons = context.catalog.slice(0, 20).map((category) => {
-        const directAction = category.commands.length === 1
-            ? DIRECT_QUERY_ACTIONS[category.commands[0].name]
-            : null;
+        const directAction = getHomeCategoryAction(category);
         return new ButtonBuilder()
             .setCustomId(directAction
-                ? makeCustomId(context, 'launch', directAction.action)
+                ? makeCustomId(context, 'launch', directAction)
                 : makeCustomId(context, 'cat', category.id, 0))
             .setLabel(category.label)
             .setEmoji(category.emoji)
-            .setStyle(directAction?.style ?? (category.group === 'admin' ? ButtonStyle.Secondary : ButtonStyle.Primary));
+            .setStyle(category.group === 'admin' ? ButtonStyle.Secondary : ButtonStyle.Primary);
     });
 
     return chunk(buttons, 5).map((buttonChunk) =>
@@ -702,7 +706,9 @@ function buildDirectQueryRows(context, commands) {
             .setCustomId(makeCustomId(context, 'launch', action.action))
             .setLabel(action.label)
             .setStyle(action.style));
-    return buttons.length ? [new ActionRowBuilder().addComponents(buttons)] : [];
+    return chunk(buttons, 5).map((buttonChunk) =>
+        new ActionRowBuilder().addComponents(buttonChunk)
+    );
 }
 
 function getDirectActions(commandName) {
@@ -725,11 +731,25 @@ function getCategoryUsageText(command) {
 
 function getDetailLaunchText(command) {
     if (command.name === '提醒') {
-        return '按下方按鈕新增提醒或管理待發送項目；也可直接使用 `/提醒` 開始新增。';
+        return '按下方按鈕新增提醒或管理待發送項目。';
     }
     return DIRECT_QUERY_ACTIONS[command.name]
         ? '按下方按鈕即可開啟互動介面，不必再輸入指令。'
         : command.mention;
+}
+
+function getHomeCategoryAction(category) {
+    return HOME_DIRECT_CATEGORY_ACTIONS[category?.id];
+}
+
+function getCategoryCommandHeading(command) {
+    return shouldHideCommandText(command)
+        ? `### ${command.label}`
+        : `### ${command.mention} | ${command.label}`;
+}
+
+function shouldHideCommandText(command) {
+    return TEXTLESS_HELP_COMMANDS.has(command?.name);
 }
 
 function disableComponents(components) {

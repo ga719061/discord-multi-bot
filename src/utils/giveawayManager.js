@@ -113,9 +113,9 @@ export async function endGiveaway(giveaway) {
 
         const resultEmbed = new EmbedBuilder()
             .setTitle('🐕🎊 本王欽點的幸運兒出爐了！')
-            .setDescription(`恭喜 ${winnerMentionList} 領受本王賞賜！\n\n${resultAnsi}`)
-            .setColor(0x00FF00)
-            .setFooter({ text: '🐕 吉吉國王官方認證抽獎' })
+            .setDescription(`恭喜 ${winnerMentionList} 領受本王賞賜！快來王座前領獎，汪！\n\n${resultAnsi}`)
+            .setColor(UI_COLORS.SUCCESS)
+            .setFooter({ text: '🐕👑 吉吉國王官方認證抽獎' })
             .setTimestamp();
 
         await channel.send(embedsToV2Payload([resultEmbed], {
@@ -131,13 +131,13 @@ export async function endGiveaway(giveaway) {
                 .setTitle('🐕🎉 抽獎活動 (已結束)')
                 .setDescription(`本次賞賜已揭曉：**${giveaway.prize}**\n得主：${winnerNameList}`)
                 .setColor(UI_COLORS.MUTED)
-                .setFooter({ text: '🐕 謝謝所有參與的子民！' });
+                .setFooter({ text: '🐕 謝謝所有參與的子民！下次宴會也要來喔！' });
             const endedPayload = embedsToV2Payload([endedEmbed]);
             await message.edit({ components: endedPayload.components }).catch(() => {});
         } else if (message.embeds[0]) {
             const endedEmbed = EmbedBuilder.from(message.embeds[0])
                 .setTitle('🐕🎉 抽獎活動 (已結束)')
-                .setColor(0x99AAB5)
+                .setColor(UI_COLORS.MUTED)
                 .setThumbnail('attachment://stamp.png')
                 .setImage(null);
             await message.edit({ embeds: [endedEmbed] }).catch(() => {});

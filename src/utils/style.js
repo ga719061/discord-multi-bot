@@ -38,6 +38,23 @@ export const UI_COLORS = {
     DANGER: 0xE74C3C,
     SPECIAL: 0x9B59B6,
     MUTED: 0x95A5A6,
+    STEAM: 0x1B75D0,
+    VALORANT: 0xFA4454,
+    LEAGUE: 0x0AC8B9,
+    BOOST: 0xF47FFF,
+    FUN: 0xFF69B4,
+    FOOD: 0xFF9F43,
+    ANNOUNCEMENT: 0xC0392B,
+    ROYAL_SOFT: 0xF0C66A,
+    BRONZE: 0xCD7F32,
+    SILVER: 0xC0C0C0,
+};
+
+export const ROYAL_COPY = {
+    brand: '🐕👑 吉吉國王',
+    seal: '🐕👑 吉吉國王御用印記',
+    private: '🐕 這份御前情報只給你看，汪！',
+    timeout: '請重新召喚本王開啟新的操作頁。',
 };
 
 // 戰鬥傷害類型顏色對應

@@ -17,9 +17,9 @@ export async function execute(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor(0xFFD700)
+        .setColor(UI_COLORS.ROYAL)
         .setTitle('🏆 吉吉王國・皇家封神榜')
-        .setDescription('汪！這些是受到本王最高恩寵的子民們！')
+        .setDescription('汪！這些是最近在王國裡最閃亮的功勳子民，本王親自蓋章表揚！')
         .setThumbnail(interaction.guild.iconURL())
         .setTimestamp();
 

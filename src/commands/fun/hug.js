@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { embedsToV2Payload } from '../../utils/componentsV2.js';
+import { UI_COLORS } from '../../utils/style.js';
 
 export const data = new SlashCommandBuilder()
     .setName('抱抱')
@@ -13,12 +14,12 @@ export const data = new SlashCommandBuilder()
     );
 
 const hugKingReactions = [
-    { text: '🐕💕 汪～好溫暖...本王勉強讓你抱一下...\n*小小的身體縮在你懷裡* 嗯...不準放開。', color: 0xFF69B4 },
-    { text: '🐕👑 哼！堂堂國王怎麼可以被人抱！\n...但你的懷抱好舒服...本王再待一下就好...汪。', color: 0xFFD700 },
-    { text: '🐕✨ *瘋狂搖尾巴* 汪汪汪！抱抱！本王最喜歡抱抱了！！\n*在你臉上瘋狂舔*', color: 0x57F287 },
-    { text: '🐕😤 你...你太大力了啦！本王是嬌小的吉娃娃欸！\n...但是不討厭就是了。汪。', color: 0xFFA500 },
-    { text: '🐕💤 *在你懷裡睡著了* zzZ...汪...zzZ...\n（看起來國王睡得很香）', color: 0x99AAB5 },
-    { text: '🐕🥺 汪...今天本王有點累...謝謝你的抱抱...\n*把小鼻子埋在你的衣服裡*', color: 0xE6E6FA },
+    { text: '🐕💕 汪～好溫暖...本王勉強讓你抱一下...\n*小小的身體縮在你懷裡* 嗯...不準放開。', color: UI_COLORS.FUN },
+    { text: '🐕👑 哼！堂堂國王怎麼可以被人抱！\n...但你的懷抱好舒服...本王再待一下就好...汪。', color: UI_COLORS.ROYAL },
+    { text: '🐕✨ *瘋狂搖尾巴* 汪汪汪！抱抱！本王最喜歡抱抱了！！\n*在你臉上瘋狂舔*', color: UI_COLORS.SUCCESS },
+    { text: '🐕😤 你...你太大力了啦！本王是嬌小的吉娃娃欸！\n...但是不討厭就是了。汪。', color: UI_COLORS.WARNING },
+    { text: '🐕💤 *在你懷裡睡著了* zzZ...汪...zzZ...\n（看起來國王睡得很香）', color: UI_COLORS.MUTED },
+    { text: '🐕🥺 汪...今天本王有點累...謝謝你的抱抱...\n*把小鼻子埋在你的衣服裡*', color: UI_COLORS.SPECIAL },
 ];
 
 const jealousReactions = [
@@ -36,7 +37,7 @@ export async function execute(interaction) {
         const jealous = jealousReactions[Math.floor(Math.random() * jealousReactions.length)];
 
         const embed = new EmbedBuilder()
-            .setColor(0xED4245)
+            .setColor(UI_COLORS.DANGER)
             .setTitle('🐕💔 吉吉國王吃醋了！')
             .setDescription(`${interaction.user} 抱了 ${target}...\n\n${jealous}`)
             .setFooter({ text: '🐕 本王的醋罈子打翻了！汪！' });

@@ -147,14 +147,14 @@ export function buildSteamDealsPayload(deals, options = {}) {
   const footer = options.footer || '🐕 吉吉國王每日採購聖旨 | 台灣區價格';
   const rankedDeals = deals.slice(0, 10);
   const publishedAt = getTaipeiDateTime(options.publishedAt || new Date());
-  const firstPanel = v2Panel(UI_COLORS.ROYAL)
+  const firstPanel = v2Panel(UI_COLORS.STEAM)
     .addTextDisplayComponents(v2Text(
       `# ${title}\n${intro}\n-# Steam 台灣區熱門排行 | 名次沿用 Steam 顯示順序`
     ))
     .addSeparatorComponents(v2Divider());
-  const secondPanel = v2Panel(UI_COLORS.ROYAL)
+  const secondPanel = v2Panel(UI_COLORS.STEAM)
     .addTextDisplayComponents(v2Text('## 📜 皇家採購續榜'));
-  const thirdPanel = v2Panel(UI_COLORS.ROYAL)
+  const thirdPanel = v2Panel(UI_COLORS.STEAM)
     .addTextDisplayComponents(v2Text('## 📜 皇家採購末卷'));
 
   rankedDeals.forEach((game, index) => {
@@ -235,7 +235,7 @@ export function buildSteamDealDetailPayload(appId, details, options = {}) {
     v2Card({
       title: `🎮 ${escapeMarkdown(details.name || 'Steam 遊戲情報')}`,
       description: escapeMarkdown(details.short_description || 'Steam 暫未提供遊戲簡介。'),
-      accentColor: UI_COLORS.INFO,
+      accentColor: UI_COLORS.STEAM,
       fields,
       images: details.header_image ? [details.header_image] : [],
       footer: `🐕 即時查詢 ${checkedAt.date} ${checkedAt.time} | Steam 台灣區價格`,
@@ -366,10 +366,10 @@ function getRankMedal(index) {
 }
 
 function getDealColor(index) {
-  if (index === 0) return 0xFFD700;
-  if (index === 1) return 0xC0C0C0;
-  if (index === 2) return 0xCD7F32;
-  return 0x3498DB;
+  if (index === 0) return UI_COLORS.ROYAL;
+  if (index === 1) return UI_COLORS.SILVER;
+  if (index === 2) return UI_COLORS.BRONZE;
+  return UI_COLORS.STEAM;
 }
 
 function formatSteamPrice(value) {
