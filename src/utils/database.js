@@ -28,7 +28,11 @@ export function initDatabase() {
       steam_deal_channel TEXT DEFAULT NULL,
       steam_deal_time TEXT DEFAULT NULL,
       steam_deal_enabled INTEGER DEFAULT 0,
-      steam_deal_last_post_date TEXT DEFAULT NULL
+      steam_deal_last_post_date TEXT DEFAULT NULL,
+      steam_free_channel TEXT DEFAULT NULL,
+      steam_free_time TEXT DEFAULT NULL,
+      steam_free_enabled INTEGER DEFAULT 0,
+      steam_free_last_post_date TEXT DEFAULT NULL
     );
 
     CREATE TABLE IF NOT EXISTS user_levels (
@@ -126,6 +130,18 @@ export function initDatabase() {
   if (!guildColumns.includes('steam_deal_last_post_date')) {
     db.prepare('ALTER TABLE guild_settings ADD COLUMN steam_deal_last_post_date TEXT DEFAULT NULL').run();
   }
+  if (!guildColumns.includes('steam_free_channel')) {
+    db.prepare('ALTER TABLE guild_settings ADD COLUMN steam_free_channel TEXT DEFAULT NULL').run();
+  }
+  if (!guildColumns.includes('steam_free_time')) {
+    db.prepare('ALTER TABLE guild_settings ADD COLUMN steam_free_time TEXT DEFAULT NULL').run();
+  }
+  if (!guildColumns.includes('steam_free_enabled')) {
+    db.prepare('ALTER TABLE guild_settings ADD COLUMN steam_free_enabled INTEGER DEFAULT 0').run();
+  }
+  if (!guildColumns.includes('steam_free_last_post_date')) {
+    db.prepare('ALTER TABLE guild_settings ADD COLUMN steam_free_last_post_date TEXT DEFAULT NULL').run();
+  }
 
   const aiSettingsInfo = db.pragma('table_info(ai_settings)');
   const aiColumns = aiSettingsInfo.map(c => c.name);
@@ -188,6 +204,10 @@ const ALLOWED_GUILD_KEYS = [
   'steam_deal_time',
   'steam_deal_enabled',
   'steam_deal_last_post_date',
+  'steam_free_channel',
+  'steam_free_time',
+  'steam_free_enabled',
+  'steam_free_last_post_date',
 ];
 
 export function updateGuildSetting(guildId, key, value) {

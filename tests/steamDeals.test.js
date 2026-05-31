@@ -5,8 +5,10 @@ import { countV2Components } from '../src/utils/componentsV2.js';
 import {
   buildSteamDealDetailPayload,
   buildSteamDealsPayload,
+  buildSteamFreeGamesPayload,
   fetchSteamAppDetails,
   fetchSteamJson,
+  fetchSteamLimitedFreeGames,
   getSteamFailureMessage,
   isValidSteamDealTime,
 } from '../src/utils/steamDeals.js';
@@ -89,4 +91,50 @@ test('fetchSteamAppDetails and detail payload provide private interactive game i
   assert.match(JSON.stringify(components), /Royal Game/);
   assert.match(JSON.stringify(components), /NT\$ 200/);
   assert.equal(row.components[0].url, 'https://store.steampowered.com/app/42/');
+});
+
+test('fetchSteamLimitedFreeGames keeps only temporary 100 percent free discounts', async () => {
+  const html = [
+    '<a data-ds-appid="101" data-price-final="0" data-discount="100"><img src="https://cdn.example.test/free.jpg"><span class="title">Limited Free</span><div class="discount_original_price">NT$ 500</div></a>',
+    '<a data-ds-appid="102" data-price-final="0" data-discount="0"><img src="https://cdn.example.test/f2p.jpg"><span class="title">Always Free</span></a>',
+    '<a data-ds-appid="103" data-price-final="25000" data-discount="50"><img src="https://cdn.example.test/deal.jpg"><span class="title">Half Off</span><div class="discount_original_price">NT$ 500</div></a>',
+    '<a data-ds-appid="104" data-price-final="0" data-discount="100"><img src="https://cdn.example.test/no-original.jpg"><span class="title">No Original Price</span></a>',
+  ].join('');
+
+  const games = await fetchSteamLimitedFreeGames(10, async () => ({
+    ok: true,
+    json: async () => ({ results_html: html }),
+  }));
+
+  assert.equal(games.length, 1);
+  assert.equal(games[0].id, 101);
+  assert.equal(games[0].name, 'Limited Free');
+  assert.equal(games[0].final_price, 0);
+  assert.equal(games[0].original_price, 50000);
+});
+
+test('buildSteamFreeGamesPayload displays limited free games with media and detail selector', () => {
+  const games = Array.from({ length: 3 }, (_, index) => ({
+    id: index + 1,
+    name: `Free Game ${index + 1}`,
+    discount_percent: 100,
+    original_price: 50000,
+    final_price: 0,
+    large_capsule_image: `https://cdn.example.test/free-${index + 1}.jpg`,
+  }));
+
+  const payload = buildSteamFreeGamesPayload(games);
+  const children = payload.components.flatMap((panel) => panel.toJSON().components);
+  const galleries = children.filter((component) => component.type === ComponentType.MediaGallery);
+  const actionRow = children.find((component) => component.type === ComponentType.ActionRow);
+  const selector = actionRow.components[0];
+  const text = JSON.stringify(payload.components.map((panel) => panel.toJSON()));
+
+  assert.equal((payload.flags & MessageFlags.IsComponentsV2) !== 0, true);
+  assert.equal(galleries.length, 3);
+  assert.match(text, /限時免費/);
+  assert.match(text, /https:\/\/store\.steampowered\.com\/app\/1/);
+  assert.equal(selector.custom_id, 'steam_deal_detail');
+  assert.equal(selector.options.length, 3);
+  assert.equal(countV2Components(payload.components) <= 40, true);
 });

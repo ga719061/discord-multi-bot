@@ -11,6 +11,9 @@ function createSettings(overrides = {}) {
     steam_deal_channel: 'deals',
     steam_deal_time: '20:00',
     steam_deal_enabled: 1,
+    steam_free_channel: 'freebies',
+    steam_free_time: '21:00',
+    steam_free_enabled: 1,
     ...overrides,
   };
 }
@@ -24,8 +27,8 @@ test('buildGuildDiagnostics reports healthy configured features', () => {
     settings: createSettings(),
     aiSettings: { model: 'gemini-2.5-flash-lite' },
     reactionRoles: [{ channel_id: 'roles' }],
-    availableChannelIds: new Set(['welcome', 'logs', 'deals', 'roles']),
-    channelNames: new Map([['welcome', '迎賓大廳'], ['logs', '史官館'], ['deals', '皇家採購'], ['roles', '身分領取']]),
+    availableChannelIds: new Set(['welcome', 'logs', 'deals', 'freebies', 'roles']),
+    channelNames: new Map([['welcome', '迎賓大廳'], ['logs', '史官館'], ['deals', '皇家採購'], ['freebies', '免費情報'], ['roles', '身分領取']]),
     hasDiscordToken: true,
     hasGoogleAiKey: true,
     hasAiAdminPassword: true,
@@ -35,12 +38,13 @@ test('buildGuildDiagnostics reports healthy configured features', () => {
   assert.match(byLabel(diagnostics, '史官日誌').detail, /#史官館/);
   assert.match(byLabel(diagnostics, '皇家迎賓佈告').detail, /#迎賓大廳/);
   assert.match(byLabel(diagnostics, '皇家採購推播').detail, /#皇家採購 每日 20:00/);
+  assert.match(byLabel(diagnostics, 'Steam 限時免費推播').detail, /#免費情報 每日 21:00/);
   assert.equal(JSON.stringify(diagnostics).includes('<#'), false);
 });
 
 test('buildGuildDiagnostics identifies missing channels and AI environment settings', () => {
   const diagnostics = buildGuildDiagnostics({
-    settings: createSettings({ steam_deal_time: 'tomorrow' }),
+    settings: createSettings({ steam_deal_time: 'tomorrow', steam_free_time: 'later' }),
     aiSettings: { model: 'gemini-2.5-flash-lite' },
     reactionRoles: [{ channel_id: 'deleted-role-channel' }],
     availableChannelIds: new Set(['welcome', 'deals']),
@@ -51,6 +55,7 @@ test('buildGuildDiagnostics identifies missing channels and AI environment setti
   assert.equal(byLabel(diagnostics, '大內環境配置').status, '設定異常');
   assert.equal(byLabel(diagnostics, '皇家反應身分站').status, '設定異常');
   assert.equal(byLabel(diagnostics, '皇家採購推播').status, '設定異常');
+  assert.equal(byLabel(diagnostics, 'Steam 限時免費推播').status, '設定異常');
 });
 
 test('buildGuildDiagnostics distinguishes optional features that are not configured', () => {
@@ -61,6 +66,8 @@ test('buildGuildDiagnostics distinguishes optional features that are not configu
       selfrole_roles: '[]',
       steam_deal_channel: null,
       steam_deal_enabled: 0,
+      steam_free_channel: null,
+      steam_free_enabled: 0,
     }),
     aiSettings: { model: 'gemini-2.5-flash-lite' },
     hasDiscordToken: true,
@@ -73,4 +80,5 @@ test('buildGuildDiagnostics distinguishes optional features that are not configu
   assert.equal(byLabel(diagnostics, '皇家自助身分領取').status, '未設定');
   assert.equal(byLabel(diagnostics, '皇家反應身分站').status, '未設定');
   assert.equal(byLabel(diagnostics, '皇家採購推播').status, '未設定');
+  assert.equal(byLabel(diagnostics, 'Steam 限時免費推播').status, '未設定');
 });

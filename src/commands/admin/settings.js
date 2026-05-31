@@ -35,7 +35,14 @@ import { AI_MODELS, DEFAULT_AI_MODEL } from '../../utils/aiConfig.js';
 import { buildGuildDiagnostics } from '../../utils/guildDiagnostics.js';
 import { parseJsonObject } from '../../utils/jsonUtils.js';
 import { normalizeSelfRoleSettings, validateAssignableRole } from '../../utils/roleSettings.js';
-import { buildSteamDealsPayload, fetchSteamSpecialDeals, getSteamFailureMessage, isValidSteamDealTime } from '../../utils/steamDeals.js';
+import {
+  buildSteamDealsPayload,
+  buildSteamFreeGamesPayload,
+  fetchSteamLimitedFreeGames,
+  fetchSteamSpecialDeals,
+  getSteamFailureMessage,
+  isValidSteamDealTime,
+} from '../../utils/steamDeals.js';
 import { ansiBlock, COLORS, UI_COLORS } from '../../utils/style.js';
 import { ephemeralV2Payload, v2Divider, v2EditPayload, v2Notice, v2Panel, v2Payload, v2Text } from '../../utils/componentsV2.js';
 
@@ -216,6 +223,10 @@ async function handleChannelSelect(component, context, action) {
     updateGuildSetting(context.guild.id, 'steam_deal_channel', channelId);
     context.notice = '皇家採購推播頻道已更新。';
   }
+  if (action === 'steam_free_channel') {
+    updateGuildSetting(context.guild.id, 'steam_free_channel', channelId);
+    context.notice = 'Steam 限時免費推播頻道已更新。';
+  }
   if (action === 'self_publish_channel') context.pending.selfPublishChannel = channelId;
   if (action === 'reaction_channel') context.pending.reactionChannel = channelId;
   if (action === 'ai_party_channel') context.pending.aiPartyChannel = channelId;
@@ -296,6 +307,10 @@ async function handleButton(component, context, action, value) {
   if (action === 'steam_toggle') {
     updateGuildSetting(context.guild.id, 'steam_deal_enabled', value === 'on' ? 1 : 0);
     context.notice = '皇家採購推播狀態已更新。';
+  }
+  if (action === 'steam_free_toggle') {
+    updateGuildSetting(context.guild.id, 'steam_free_enabled', value === 'on' ? 1 : 0);
+    context.notice = 'Steam 限時免費推播狀態已更新。';
   }
   if (action === 'self_add') {
     if (!context.pending.selfTarget) {
@@ -378,6 +393,14 @@ async function openModal(component, context, type) {
     updateGuildSetting(context.guild.id, 'steam_deal_time', time);
     context.notice = '皇家每日採購推播時間已更新。';
   }
+  if (type === 'steam_free_time') {
+    const time = submit.fields.getTextInputValue('value').trim();
+    if (!isValidSteamDealTime(time)) {
+      return submit.reply(v2Notice('Steam 限時免費時間格式錯誤', '請使用 `HH:mm` 格式，例如 `21:00`。', UI_COLORS.WARNING));
+    }
+    updateGuildSetting(context.guild.id, 'steam_free_time', time);
+    context.notice = 'Steam 限時免費每日推播時間已更新。';
+  }
   if (type === 'self_description') context.pending.selfDescription = submit.fields.getTextInputValue('value').trim();
   if (type === 'reaction_create') {
     if (!context.pending.reactionChannel) {
@@ -414,6 +437,10 @@ function buildModal(context, type) {
   if (type === 'steam_time') {
     const current = getGuildSettings(context.guild.id).steam_deal_time || '20:00';
     return modal.setTitle('設定每日推播時間').addComponents(textRow('value', '台灣時間 HH:mm', current, TextInputStyle.Short));
+  }
+  if (type === 'steam_free_time') {
+    const current = getGuildSettings(context.guild.id).steam_free_time || '21:00';
+    return modal.setTitle('設定限時免費推播時間').addComponents(textRow('value', '台灣時間 HH:mm', current, TextInputStyle.Short));
   }
   if (type === 'self_description') {
     return modal.setTitle('皇家自助身分領取佈告').addComponents(textRow('value', '領取頁介紹', context.pending.selfDescription || '子民請從下方選單選擇想領取或取消的身分組。', TextInputStyle.Paragraph));
@@ -467,6 +494,23 @@ async function executeConfirmation(component, context) {
       await publishSteamDeals(context.guild);
     } catch (error) {
       await component.followUp(v2Notice('🛒 皇家採購榜投放失敗', getSteamFailureMessage(error), UI_COLORS.WARNING));
+    }
+    context.pending.confirm = null;
+    context.view = 'steam';
+    const page = await renderView(context);
+    context.currentComponents = page.components;
+    await context.editResponse(v2EditPayload(ephemeralV2Payload(page.components)));
+    return;
+  }
+  if (type === 'steam_free_publish') {
+    await component.deferUpdate();
+    try {
+      const count = await publishSteamFreeGames(context.guild);
+      if (count === 0) {
+        await component.followUp(v2Notice('Steam 限時免費目前沒有結果', '本王巡過 Steam 商店了，現在沒有符合 100% 折扣到免費的遊戲。', UI_COLORS.WARNING));
+      }
+    } catch (error) {
+      await component.followUp(v2Notice('Steam 限時免費投放失敗', getSteamFailureMessage(error), UI_COLORS.WARNING));
     }
     context.pending.confirm = null;
     context.view = 'steam';
@@ -593,16 +637,32 @@ function renderLeveling(context) {
 
 function renderSteam(context) {
   const settings = getGuildSettings(context.guild.id);
-  const status = settings.steam_deal_enabled === 1 ? '開啟' : '關閉';
-  const panel = modulePanel(context, 'Steam 推播', `皇家採購聖旨：**${status}**\n投放頻道：${settings.steam_deal_channel ? `<#${settings.steam_deal_channel}>` : '尚未設定'}\n每日投放時辰：${settings.steam_deal_time || '尚未設定'} (Asia/Taipei)`)
+  const dealStatus = settings.steam_deal_enabled === 1 ? '開啟' : '關閉';
+  const freeStatus = settings.steam_free_enabled === 1 ? '開啟' : '關閉';
+  const panel = modulePanel(context, 'Steam 推播', [
+    `特價榜：**${dealStatus}** | 頻道：${settings.steam_deal_channel ? `<#${settings.steam_deal_channel}>` : '尚未設定'} | 時間：${settings.steam_deal_time || '尚未設定'} (Asia/Taipei)`,
+    `限時免費：**${freeStatus}** | 頻道：${settings.steam_free_channel ? `<#${settings.steam_free_channel}>` : '尚未設定'} | 時間：${settings.steam_free_time || '尚未設定'} (Asia/Taipei)`,
+  ].join('\n'))
+    .addTextDisplayComponents(v2Text('## Steam 特價榜'))
     .addActionRowComponents(new ActionRowBuilder().addComponents(
-      new ChannelSelectMenuBuilder().setCustomId(id(context, 'steam_channel')).setPlaceholder('選擇推播頻道').addChannelTypes(ChannelType.GuildText)
+      new ChannelSelectMenuBuilder().setCustomId(id(context, 'steam_channel')).setPlaceholder('選擇特價榜推播頻道').addChannelTypes(ChannelType.GuildText)
     ))
     .addActionRowComponents(actionButtons(context, [
-      ['modal:steam_time', '設定時間', ButtonStyle.Primary],
-      ['steam_toggle:on', '啟用', ButtonStyle.Success],
-      ['steam_toggle:off', '停用', ButtonStyle.Secondary],
-      ['prepare_confirm:steam_publish', '立即投放', ButtonStyle.Danger],
+      ['modal:steam_time', '特價時間', ButtonStyle.Primary],
+      ['steam_toggle:on', '啟用特價', ButtonStyle.Success],
+      ['steam_toggle:off', '停用特價', ButtonStyle.Secondary],
+      ['prepare_confirm:steam_publish', '立即投放特價', ButtonStyle.Danger],
+    ]))
+    .addSeparatorComponents(v2Divider())
+    .addTextDisplayComponents(v2Text('## Steam 限時免費'))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ChannelSelectMenuBuilder().setCustomId(id(context, 'steam_free_channel')).setPlaceholder('選擇限時免費推播頻道').addChannelTypes(ChannelType.GuildText)
+    ))
+    .addActionRowComponents(actionButtons(context, [
+      ['modal:steam_free_time', '免費時間', ButtonStyle.Primary],
+      ['steam_free_toggle:on', '啟用免費', ButtonStyle.Success],
+      ['steam_free_toggle:off', '停用免費', ButtonStyle.Secondary],
+      ['prepare_confirm:steam_free_publish', '立即投放免費', ButtonStyle.Danger],
     ]));
   return { components: [finishPanel(panel, context)] };
 }
@@ -923,6 +983,7 @@ function renderConfirm(context) {
     reaction_create: `將在 ${context.pending.reactionChannel ? `<#${context.pending.reactionChannel}>` : '選取的頻道'} 建立新的皇家反應身分站。`,
     reaction_delete: `將撤除皇家反應身分站公開訊息 \`${context.pending.reactionDeleteMessage || '尚未選取'}\` 與其設定。`,
     steam_publish: '將立即在已設定的推播頻道頒布 Steam 皇家特價榜。',
+    steam_free_publish: '將立即在已設定的限時免費頻道頒布 Steam 限時免費榜。',
     ai_party: `將在 ${context.pending.aiPartyChannel ? `<#${context.pending.aiPartyChannel}>` : '選取頻道'} 啟動 AI 派對模式並公開發送通知。`,
   };
   const message = labels[context.pending.confirm] || '此操作會產生公開變更。';
@@ -1016,6 +1077,7 @@ async function getDiagnostics(guild) {
     settings.welcome_channel,
     settings.log_channel,
     settings.steam_deal_channel,
+    settings.steam_free_channel,
     ...reactionRoles.map((entry) => entry.channel_id),
   ].filter(Boolean);
   const availableChannelIds = new Set();
@@ -1127,6 +1189,16 @@ async function publishSteamDeals(guild) {
   await channel.send(buildSteamDealsPayload(deals));
 }
 
+async function publishSteamFreeGames(guild) {
+  const settings = getGuildSettings(guild.id);
+  const channel = await guild.channels.fetch(settings.steam_free_channel).catch(() => null);
+  if (!channel?.isTextBased()) throw new Error('尚未設定可用的 Steam 限時免費推播頻道。');
+  const games = await fetchSteamLimitedFreeGames(10);
+  if (games.length === 0) return 0;
+  await channel.send(buildSteamFreeGamesPayload(games));
+  return games.length;
+}
+
 async function startAiParty(guild, channelId, minutes) {
   const channel = await guild.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased()) throw new Error('派對頻道不存在或無法發送訊息。');
@@ -1148,6 +1220,7 @@ function closePanel(components) {
 export const settingsViewTesting = {
   renderHome,
   renderWelcome,
+  renderSteam,
   renderSelfRole,
   renderAi,
   renderServerInfo,

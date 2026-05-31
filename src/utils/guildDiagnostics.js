@@ -106,6 +106,7 @@ export function buildGuildDiagnostics({
   }
 
   diagnostics.push(steamDiagnostic(settings, availableChannelIds, channelNames));
+  diagnostics.push(steamFreeDiagnostic(settings, availableChannelIds, channelNames));
   return diagnostics;
 }
 
@@ -158,6 +159,39 @@ function steamDiagnostic(settings, channelIds, channelNames) {
     label: '皇家採購推播',
     status: '正常',
     detail: `${displayChannelName(settings.steam_deal_channel, channelNames)} 每日 ${settings.steam_deal_time}`,
+    fix: null,
+  };
+}
+
+function steamFreeDiagnostic(settings, channelIds, channelNames) {
+  if (settings.steam_free_enabled !== 1) {
+    return {
+      label: 'Steam 限時免費推播',
+      status: '未設定',
+      detail: settings.steam_free_channel ? '目前已關閉' : '尚未啟用',
+      fix: '在 `/設定` 的 Steam 頁啟用限時免費推播。',
+    };
+  }
+  if (!settings.steam_free_channel || !channelIds.has(settings.steam_free_channel)) {
+    return {
+      label: 'Steam 限時免費推播',
+      status: '設定異常',
+      detail: '推播頻道不存在或無法存取',
+      fix: '在 `/設定` 的 Steam 頁重新選擇限時免費推播頻道。',
+    };
+  }
+  if (!isValidSteamDealTime(settings.steam_free_time)) {
+    return {
+      label: 'Steam 限時免費推播',
+      status: '設定異常',
+      detail: '每日推播時間格式錯誤',
+      fix: '在 `/設定` 的 Steam 頁將限時免費時間設為 `HH:mm` 格式。',
+    };
+  }
+  return {
+    label: 'Steam 限時免費推播',
+    status: '正常',
+    detail: `${displayChannelName(settings.steam_free_channel, channelNames)} 每日 ${settings.steam_free_time}`,
     fix: null,
   };
 }

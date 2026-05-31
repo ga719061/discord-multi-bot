@@ -51,6 +51,35 @@ test('announcement page includes publishing target and mutually exclusive mentio
   assert.match(text, /返回總覽/);
 });
 
+test('Steam panel exposes independent limited-free push controls', () => {
+  initDatabase();
+  const guildId = `settings-steam-free-${process.pid}`;
+  const context = { userId: 'admin', guild: { id: guildId }, view: 'steam', pending: {}, notice: null };
+  const panel = settingsViewTesting.renderSteam(context).components[0].toJSON();
+  const text = JSON.stringify(panel);
+  const actionIds = panel.components
+    .filter((component) => component.type === ComponentType.ActionRow)
+    .flatMap((row) => row.components)
+    .map((component) => component.custom_id)
+    .filter(Boolean);
+  const modal = settingsViewTesting.buildModal(context, 'steam_free_time').toJSON();
+
+  assert.match(text, /Steam 限時免費/);
+  assert.equal(actionIds.some((id) => id.includes('steam_channel')), true);
+  assert.equal(actionIds.some((id) => id.includes('steam_free_channel')), true);
+  assert.equal(actionIds.some((id) => id.includes('steam_free_toggle:on')), true);
+  assert.equal(actionIds.some((id) => id.includes('prepare_confirm:steam_free_publish')), true);
+  assert.match(JSON.stringify(modal), /steam_free_time/);
+});
+
+test('confirmation page describes limited-free Steam publish action', () => {
+  const context = { userId: 'admin', pending: { confirm: 'steam_free_publish' } };
+  const view = settingsViewTesting.renderConfirm(context);
+  const text = JSON.stringify(view.components[0].toJSON());
+
+  assert.match(text, /Steam 限時免費/);
+});
+
 test('locked AI page provides control-center verification with a primary login action', () => {
   initDatabase();
   const guildId = `settings-ai-locked-${process.pid}`;

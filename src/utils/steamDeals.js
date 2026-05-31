@@ -12,6 +12,7 @@ import { UI_COLORS } from './style.js';
 
 const STEAM_FEATURED_URL = 'https://store.steampowered.com/api/featuredcategories?l=tchinese&cc=tw';
 const STEAM_SEARCH_SPECIALS_URL = 'https://store.steampowered.com/search/results/?query&start=0&count=50&dynamic_data=&sort_by=_ASC&specials=1&cc=tw&l=tchinese&infinite=1';
+const STEAM_SEARCH_LIMITED_FREE_URL = 'https://store.steampowered.com/search/results/?query&start=0&count=50&dynamic_data=&sort_by=_ASC&specials=1&maxprice=free&cc=tw&l=tchinese&infinite=1';
 const TAIPEI_TIME_ZONE = 'Asia/Taipei';
 const REQUEST_TIMEOUT_MS = 10_000;
 
@@ -91,6 +92,16 @@ export async function fetchSteamSpecialDeals(limit = 10) {
   const fallbackItems = await fetchSteamSearchSpecialDeals();
   const filledDeals = uniqueSteamDeals([...unique, ...fallbackItems], limit);
   return hydrateSteamDealImages(filledDeals);
+}
+
+export async function fetchSteamLimitedFreeGames(limit = 10, fetchImpl = fetch) {
+  const data = await fetchSteamJson(STEAM_SEARCH_LIMITED_FREE_URL, fetchImpl);
+  if (typeof data?.results_html !== 'string') {
+    throw new SteamServiceError('invalid_data', 'Steam returned no limited free results');
+  }
+
+  const games = parseSteamSearchDeals(data.results_html).filter(isLimitedFreeSteamGame);
+  return uniqueSteamDeals(games, limit).map(cleanDeal);
 }
 
 export function buildSteamDealsEmbeds(deals, options = {}) {
@@ -190,6 +201,59 @@ export function buildSteamDealsPayload(deals, options = {}) {
     .addTextDisplayComponents(v2Text('## 🔎 查看目前情報\n選取一款遊戲，本王會私下呈上 Steam 目前價格與商店入口。'))
     .addActionRowComponents(selectRow)
     .addTextDisplayComponents(v2Text(`-# ${footer} | 發布 ${publishedAt.date} ${publishedAt.time} | 特價可能隨時變動`));
+
+  return v2Payload([firstPanel, secondPanel, thirdPanel]);
+}
+
+export function buildSteamFreeGamesPayload(games, options = {}) {
+  const title = options.title || 'Steam 限時免費情報';
+  const intro = options.intro || '皇家採購廳巡到 Steam 目前 100% 折扣的限時免費遊戲，想領就快進商店確認。';
+  const footer = options.footer || 'Steam 台灣區限時免費推播';
+  const rankedGames = games.slice(0, 10);
+  const publishedAt = getTaipeiDateTime(options.publishedAt || new Date());
+  const firstPanel = v2Panel(UI_COLORS.STEAM)
+    .addTextDisplayComponents(v2Text(
+      `# ${title}\n${intro}\n-# 只列入原價遊戲目前折扣到免費的項目，不包含永久免費遊玩。`
+    ))
+    .addSeparatorComponents(v2Divider());
+  const secondPanel = v2Panel(UI_COLORS.STEAM)
+    .addTextDisplayComponents(v2Text('## 限時免費候選'));
+  const thirdPanel = v2Panel(UI_COLORS.STEAM)
+    .addTextDisplayComponents(v2Text('## 更多限時免費'));
+
+  rankedGames.forEach((game, index) => {
+    const targetPanel = index < 4 ? firstPanel : (index < 8 ? secondPanel : thirdPanel);
+    const rowText = buildRankedFreeGameText(game, index);
+    const image = game.large_capsule_image || game.header_image;
+    targetPanel.addTextDisplayComponents(v2Text(rowText));
+    if (image) {
+      targetPanel.addMediaGalleryComponents(
+        new MediaGalleryBuilder().addItems({
+          media: { url: image },
+          description: `${getRankMedal(index)} ${game.name}`,
+        })
+      );
+    }
+  });
+
+  const selectRow = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('steam_deal_detail')
+      .setPlaceholder('選一款限時免費遊戲查看目前 Steam 情報')
+      .addOptions(
+        rankedGames.map((game, index) => ({
+          label: truncateMenuText(`${getRankMedal(index)} ${game.name}`, 100),
+          description: truncateMenuText(buildFreeMenuDescription(game), 100),
+          value: String(game.id),
+        }))
+      )
+  );
+
+  thirdPanel
+    .addSeparatorComponents(v2Divider())
+    .addTextDisplayComponents(v2Text('## 查看目前情報\n選取一款遊戲，本王會私下呈上 Steam 目前價格與商店入口。'))
+    .addActionRowComponents(selectRow)
+    .addTextDisplayComponents(v2Text(`-# ${footer} | 發布 ${publishedAt.date} ${publishedAt.time} | 免費活動會隨 Steam 商店更新而變動`));
 
   return v2Payload([firstPanel, secondPanel, thirdPanel]);
 }
@@ -330,9 +394,12 @@ function matchClass(html, className) {
 }
 
 function parseSteamPriceText(text) {
-  const digits = String(text).replace(/[^\d]/g, '');
+  const normalized = String(text).replace(/,/g, '');
+  const decimalMatch = normalized.match(/(\d+)\.(\d{2})/);
+  if (decimalMatch) return Number(decimalMatch[1]) * 100 + Number(decimalMatch[2]);
+  const digits = normalized.replace(/[^\d]/g, '');
   if (!digits) return null;
-  return Number(digits);
+  return Number(digits) * 100;
 }
 
 function estimateOriginalPrice(finalPrice, discount) {
@@ -372,6 +439,12 @@ function getDealColor(index) {
   return UI_COLORS.STEAM;
 }
 
+function isLimitedFreeSteamGame(game) {
+  return Number(game.discount_percent) >= 100
+    && Number(game.final_price) === 0
+    && Number(game.original_price) > 0;
+}
+
 function formatSteamPrice(value) {
   const cents = Number(value);
   if (!Number.isFinite(cents)) return '尚未呈報';
@@ -392,9 +465,19 @@ function buildRankedDealText(game, index) {
     `📉 **-${discount}%**${originalText} → **${final}**`;
 }
 
+function buildRankedFreeGameText(game, index) {
+  const original = formatSteamPrice(game.original_price);
+  return `## ${getRankMedal(index)} [${escapeMarkdown(game.name)}](https://store.steampowered.com/app/${game.id})\n` +
+    `限時免費 **-${Number(game.discount_percent) || 100}%** ~~${original}~~ -> **免費領取**`;
+}
+
 function buildMenuDescription(game) {
   const discount = Number(game.discount_percent) || 0;
   return `折扣 -${discount}% | 現價 ${formatSteamPrice(game.final_price)}`;
+}
+
+function buildFreeMenuDescription(game) {
+  return `限時免費 | 原價 ${formatSteamPrice(game.original_price)}`;
 }
 
 function truncateMenuText(text, maxLength) {
