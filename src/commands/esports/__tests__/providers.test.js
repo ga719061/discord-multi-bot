@@ -41,14 +41,16 @@ test('parseOpggValorantData extracts detailed All Modes stats, player card and t
   assert.equal(stats.timePlayed, '10 小時 20 分鐘');
   assert.equal(stats.highestKills, '41');
   assert.deepEqual(stats.topAgents[0], {
+    id: 'agent-jett',
     name: 'Jett',
     games: '5',
     winRate: '80.0%',
     kda: '2.50',
     averageScore: '233.3',
   });
-  assert.deepEqual(stats.weapons[0], { name: 'Vandal', kills: '98', headshot: '40.0%' });
+  assert.deepEqual(stats.weapons[0], { id: 'weapon-vandal', name: 'Vandal', kills: '98', headshot: '40.0%' });
   assert.deepEqual(stats.maps[0], {
+    id: 'map-split',
     name: 'Split',
     games: '4',
     record: '3勝 0和 1敗',

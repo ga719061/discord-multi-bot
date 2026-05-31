@@ -3,6 +3,7 @@ FROM node:20-slim
 # better-sqlite3 編譯工具與 LiveKit 依存
 RUN apt-get update && apt-get install -y \
     build-essential \
+    fonts-noto-cjk \
     python3 \
     && rm -rf /var/lib/apt/lists/*
 

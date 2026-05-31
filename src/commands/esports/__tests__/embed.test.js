@@ -2,14 +2,44 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ComponentType, MessageFlags } from 'discord.js';
 import { buildStatsReply } from '../lib/embed.js';
+import { buildStatsSvg, renderStatsImage, resolveStatsAssets } from '../lib/statsImage.js';
 import { buildStatsModal, data } from '../stats.js';
+
+const tinyPng = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+  'base64'
+);
 
 function serializedCard(payload) {
   return JSON.stringify(payload.components.map((component) => component.toJSON()));
 }
 
-test('buildStatsReply creates a serializable OP.GG Valorant All Modes card with detailed fields', () => {
-  const payload = buildStatsReply({
+async function mockAssetFetch(url) {
+  const href = String(url);
+  if (href.includes('valorant-api.com/v1/agents')) {
+    return jsonResponse({ data: [{ uuid: 'agent-jett', displayName: 'Jett', displayIcon: 'https://assets.test/jett.png' }] });
+  }
+  if (href.includes('valorant-api.com/v1/weapons')) {
+    return jsonResponse({ data: [{ uuid: 'weapon-vandal', displayName: 'Vandal', displayIcon: 'https://assets.test/vandal.png' }] });
+  }
+  if (href.includes('valorant-api.com/v1/maps')) {
+    return jsonResponse({ data: [{ uuid: 'map-split', displayName: 'Split', splash: 'https://assets.test/split.png' }] });
+  }
+  if (href.includes('ddragon.leagueoflegends.com/api/versions.json')) {
+    return jsonResponse(['15.1.1']);
+  }
+  if (href.includes('ddragon.leagueoflegends.com/cdn/15.1.1/data/en_US/champion.json')) {
+    return jsonResponse({ data: { Aurora: { id: 'Aurora', name: 'Aurora', image: { full: 'Aurora.png' } } } });
+  }
+  return new Response(tinyPng, { status: 200, headers: { 'content-type': 'image/png' } });
+}
+
+function jsonResponse(payload) {
+  return new Response(JSON.stringify(payload), { status: 200, headers: { 'content-type': 'application/json' } });
+}
+
+test('buildStatsReply creates a Valorant image card with attachment and source actions', async () => {
+  const result = {
     game: 'valorant',
     status: 'ok',
     source: 'OP.GG',
@@ -39,25 +69,35 @@ test('buildStatsReply creates a serializable OP.GG Valorant All Modes card with 
       legshot: '10.0%',
       highestKills: '41',
       timePlayed: '10 小時 20 分鐘',
-      topAgents: [{ name: 'Jett', games: '5', winRate: '80.0%', kda: '2.50', averageScore: '233.3' }],
-      weapons: [{ name: 'Vandal', kills: '98', headshot: '40.0%' }],
-      maps: [{ name: 'Split', record: '3勝 0和 1敗', winRate: '75.0%' }],
+      topAgents: [{ id: 'agent-jett', name: 'Jett', games: '5', winRate: '80.0%', kda: '2.50', averageScore: '233.3' }],
+      weapons: [{ id: 'weapon-vandal', name: 'Vandal', kills: '98', headshot: '40.0%' }],
+      maps: [{ id: 'map-split', name: 'Split', record: '3勝 0和 1敗', winRate: '75.0%' }],
     },
-  }, 'SEN Tenz', '2906');
+  };
+  const assets = await resolveStatsAssets(result, { fetchImpl: mockAssetFetch });
+  const payload = await buildStatsReply(result, 'SEN Tenz', '2906', { fetchImpl: mockAssetFetch });
   const card = serializedCard(payload);
+  const svg = buildStatsSvg(result, assets);
 
-  assert.match(card, /OP\.GG All Modes/);
-  assert.match(card, /PlayerCards\/CARD_small\.png/);
-  assert.match(card, /武器表現[\s\S]*Vandal/);
-  assert.match(card, /地圖表現[\s\S]*Split/);
-  assert.match(card, /總 K \/ D \/ A[\s\S]*180 \/ 100 \/ 50/);
+  assert.match(card, /attachment:\/\/stats-card\.png/);
   assert.match(card, /op\.gg\/valorant/);
+  assert.equal(payload.files[0].name, 'stats-card.png');
+  assert.equal((svg.match(/data-icon=/g) || []).length >= 6, true);
+  assert.match(svg, /<image href="data:image\/png;base64/);
+  assert.match(svg, /data-image-layout="wide"/);
+  assert.match(svg, /preserveAspectRatio="xMidYMid meet"/);
+  assert.match(svg, /皇家戰報/);
+  assert.match(svg, /VALORANT/);
+  assert.match(svg, /常用特務/);
+  assert.match(svg, /武器表現/);
+  assert.match(svg, /地圖勝率/);
+  assert.equal(svg.includes('網站未呈報</text>'), false);
   assert.equal('embeds' in payload, false);
   assert.equal((payload.flags & MessageFlags.IsComponentsV2) !== 0, true);
 });
 
-test('buildStatsReply labels a ValoCheck fallback and links the actual source', () => {
-  const payload = buildStatsReply({
+test('buildStatsReply labels a ValoCheck fallback and links the actual source', async () => {
+  const result = {
     game: 'valorant',
     status: 'ok',
     source: 'ValoCheck',
@@ -74,16 +114,18 @@ test('buildStatsReply labels a ValoCheck fallback and links the actual source', 
       topAgents: [],
       recentHighlights: [],
     },
-  }, 'SEN Tenz', '2906');
+  };
+  const payload = await buildStatsReply(result, 'SEN Tenz', '2906', { fetchImpl: async () => new Response('', { status: 404 }) });
   const card = serializedCard(payload);
+  const svg = buildStatsSvg(result);
 
-  assert.match(card, /ValoCheck All Modes/);
-  assert.match(card, /皇家備援情報[\s\S]*OP\.GG 未呈上可顯示的公開資料/);
+  assert.match(card, /attachment:\/\/stats-card\.png/);
   assert.match(card, /www\.valocheck\.com/);
+  assert.match(svg, /ValoCheck fallback/);
 });
 
-test('buildStatsReply creates a fallback card when a source is blocked', () => {
-  const payload = buildStatsReply({
+test('buildStatsReply creates a fallback card when a source is blocked', async () => {
+  const payload = await buildStatsReply({
     game: 'lol',
     status: 'blocked',
     source: 'OP.GG',
@@ -93,6 +135,7 @@ test('buildStatsReply creates a fallback card when a source is blocked', () => {
 
   assert.match(card, /情報使者暫時被來源網站擋下/);
   assert.equal(payload.components.length, 1);
+  assert.equal('files' in payload, false);
 });
 
 test('/戰績 opens one direct modal containing game selection and Riot ID fields', () => {
@@ -123,7 +166,7 @@ test('/戰績 opens one direct modal containing game selection and Riot ID field
   assert.deepEqual(textInputs.map((input) => input.custom_id), ['player_name', 'tag']);
 });
 
-test('private successful stats reply offers one-time publishing while public reply does not', () => {
+test('private successful stats reply offers one-time publishing while public reply does not', async () => {
   const result = {
     game: 'lol',
     status: 'ok',
@@ -131,28 +174,30 @@ test('private successful stats reply offers one-time publishing while public rep
     sourceUrl: 'https://op.gg/lol/summoners/tw/test-TW2',
     stats: { playerId: 'test#TW2', rank: 'Gold', region: 'TW', topChampions: [] },
   };
-  const privatePayload = buildStatsReply(result, 'test', 'TW2', {
+  const privatePayload = await buildStatsReply(result, 'test', 'TW2', {
     ephemeral: true,
     publishCustomId: 'stats:query-session:publish',
+    fetchImpl: mockAssetFetch,
   });
-  const publishedPayload = buildStatsReply(result, 'test', 'TW2', {
+  const publishedPayload = await buildStatsReply(result, 'test', 'TW2', {
     ephemeral: true,
     publishCustomId: 'stats:query-session:publish',
     published: true,
+    fetchImpl: mockAssetFetch,
   });
-  const publicPayload = buildStatsReply(result, 'test', 'TW2');
+  const publicPayload = await buildStatsReply(result, 'test', 'TW2', { fetchImpl: mockAssetFetch });
   const publicCard = serializedCard(publicPayload);
 
   assert.equal((privatePayload.flags & MessageFlags.Ephemeral) !== 0, true);
-  assert.equal(publicCard.includes('](https://op.gg'), false);
+  assert.match(publicCard, /attachment:\/\/stats-card\.png/);
   assert.match(publicCard, /"url":"https:\/\/op\.gg\/lol\/summoners\/tw\/test-TW2"/);
   assert.match(serializedCard(privatePayload), /頒布至目前頻道/);
   assert.match(serializedCard(publishedPayload), /戰報已頒布/);
   assert.equal(serializedCard(publicPayload).includes('頒布至目前頻道'), false);
 });
 
-test('buildStatsReply includes detailed League season and champion fields', () => {
-  const payload = buildStatsReply({
+test('buildStatsReply includes League image theme and champion sections', async () => {
+  const result = {
     game: 'lol',
     status: 'ok',
     source: 'OP.GG',
@@ -173,11 +218,129 @@ test('buildStatsReply includes detailed League season and champion fields', () =
       topChampions: [{ name: 'Aurora', wins: '29', losses: '22', winRate: '57%', kda: '2.99:1' }],
       flex: { rank: 'Emerald 4', lp: '20', winRate: '20%' },
     },
-  }, 'hide on bush', '1401');
+  };
+  const assets = await resolveStatsAssets(result, { fetchImpl: mockAssetFetch });
+  const payload = await buildStatsReply(result, 'hide on bush', '1401', { fetchImpl: mockAssetFetch });
   const card = serializedCard(payload);
+  const svg = buildStatsSvg(result, assets);
 
-  assert.match(card, /賽季場次/);
-  assert.match(card, /profileIcon1134\.jpg/);
-  assert.match(card, /常用英雄表現[\s\S]*Aurora/);
-  assert.match(card, /彈性積分[\s\S]*Emerald 4/);
+  assert.match(card, /attachment:\/\/stats-card\.png/);
+  assert.match(svg, /<image href="data:image\/png;base64/);
+  assert.match(svg, /LEAGUE OF LEGENDS/);
+  assert.match(svg, /峽谷榮耀/);
+  assert.match(svg, /常用英雄/);
+  assert.match(svg, /單雙 \/ 彈性牌位/);
+  assert.match(svg, /賽季摘要/);
+  assert.match(svg, /data-icon="crown"/);
+});
+
+test('renderStatsImage returns a non-empty PNG buffer for missing optional fields', async () => {
+  const { buffer, filename } = await renderStatsImage({
+    game: 'lol',
+    status: 'ok',
+    source: 'OP.GG',
+    sourceUrl: 'https://op.gg/lol/summoners/tw/test-TW2',
+    stats: { playerId: 'test#TW2', rank: 'Unranked', region: 'TW' },
+  }, {
+    fetchImpl: async () => new Response('', { status: 404 }),
+  });
+
+  assert.equal(filename, 'stats-card.png');
+  assert.equal(buffer.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+  assert.equal(buffer.length > 1000, true);
+});
+
+test('renderer keeps long Valorant values inside fixed metric and row columns', async () => {
+  const result = {
+    game: 'valorant',
+    status: 'ok',
+    source: 'OP.GG',
+    sourceUrl: 'https://op.gg/valorant/profile/test',
+    stats: {
+      playerId: '爆漿起司豬#635',
+      avatarUrl: 'https://assets.test/avatar.png',
+      server: 'AP',
+      rank: 'Unranked',
+      updatedAt: '2026-05-24T13:48:05+00:00',
+      kd: '1.13',
+      kad: '1.65',
+      winRate: '48.1%',
+      acs: '227.0',
+      headshot: '15.9%',
+      adr: '118.4',
+      topAgents: [{ name: 'Miks', games: '45', winRate: '44.4%' }],
+      weapons: [{ name: 'Vandal', kills: '202', headshot: '15.7%' }],
+      maps: [{ name: 'Lotus', record: '6勝 0和 8敗', winRate: '42.9%' }],
+    },
+  };
+  const svg = buildStatsSvg(result, await resolveStatsAssets(result, { fetchImpl: mockAssetFetch }));
+
+  assert.match(svg, /2026-05-24 21:48|2026-05-24 13:48/);
+  assert.match(svg, /font-size="38"[^>]*>48\.1%/);
+  assert.match(svg, />227\.0</);
+  assert.match(svg, />118\.4</);
+  assert.equal(svg.includes('網站未呈報</text>'), false);
+});
+
+test('renderer fetches only needed Valorant asset indexes and keeps weapon thumbnails contained', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(String(url));
+    return mockAssetFetch(url);
+  };
+  const result = {
+    game: 'valorant',
+    status: 'ok',
+    source: 'OP.GG',
+    stats: {
+      playerId: 'test#TW2',
+      rank: 'Unranked',
+      weapons: [{ name: 'Vandal', kills: '155', headshot: '15.6%' }],
+      topAgents: [],
+      maps: [],
+    },
+  };
+  const svg = buildStatsSvg(result, await resolveStatsAssets(result, { fetchImpl }));
+
+  assert.equal(calls.some((call) => call.includes('/v1/weapons')), true);
+  assert.equal(calls.some((call) => call.includes('/v1/agents')), false);
+  assert.equal(calls.some((call) => call.includes('/v1/maps')), false);
+  assert.match(svg, /data-image-layout="wide"/);
+  assert.match(svg, /width="90" height="42" preserveAspectRatio="xMidYMid meet"/);
+});
+
+test('renderer keeps long League names, ranks and KDA values from colliding', async () => {
+  const result = {
+    game: 'lol',
+    status: 'ok',
+    source: 'OP.GG',
+    sourceUrl: 'https://op.gg/lol/summoners/tw/library-TW2',
+    stats: {
+      playerId: '蘭德索爾圖書館#tw2',
+      avatarUrl: 'https://assets.test/avatar.png',
+      region: 'TW',
+      updatedAt: '19 hours ago',
+      rank: 'Bronze 1',
+      lp: '10',
+      wins: '2',
+      losses: '3',
+      winRate: '40%',
+      kda: '2.48:1',
+      averageKda: '8.2 / 6.1 / 6.9',
+      seasonGames: '9',
+      topChampions: [
+        { name: 'Xerath', wins: '1', losses: '0', winRate: '100%', kda: '8.1:1' },
+        { name: 'Xin Zhao', wins: '1', losses: '0', winRate: '100%', kda: '3.2:1' },
+        { name: 'Viktor', wins: '1', losses: '0', winRate: '100%', kda: '2.8:1' },
+      ],
+      flex: { rank: null, lp: null, winRate: null },
+    },
+  };
+  const svg = buildStatsSvg(result, await resolveStatsAssets(result, { fetchImpl: mockAssetFetch }));
+
+  assert.match(svg, /蘭德索爾圖書館#/);
+  assert.match(svg, />Bronze 1</);
+  assert.match(svg, />8\.2\/6\.1/);
+  assert.doesNotMatch(svg, /Bronze\.\.\./);
+  assert.doesNotMatch(svg, /8\.2 \/ \.\.\./);
 });

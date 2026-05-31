@@ -190,6 +190,7 @@ export function parseOpggValorantData(profile, statistics, html = '') {
   const hitTotal = summary.headShots + summary.bodyShots + summary.legShots;
   const totalGames = summary.gameCount;
   const topAgents = topItems(statistics.playerCharacterStatistics).map((agent) => ({
+    id: agent.characterId,
     name: labels.characters.get(agent.characterId) || agent.characterId.slice(0, 8),
     games: String(agent.gameCount),
     winRate: percentage(agent.wins, agent.gameCount),
@@ -227,11 +228,13 @@ export function parseOpggValorantData(profile, statistics, html = '') {
     topAgent: topAgents[0]?.name || null,
     topAgents,
     weapons: topItems(statistics.playerWeaponStatistics).map((weapon) => ({
+      id: weapon.weaponId,
       name: labels.weapons.get(weapon.weaponId) || weapon.weaponId.slice(0, 8),
       kills: String(weapon.kills),
       headshot: percentage(weapon.headShots, weapon.headShots + weapon.bodyShots + weapon.legShots),
     })),
     maps: topItems(statistics.playerMapStatistics).map((map) => ({
+      id: map.mapId,
       name: labels.maps.get(map.mapId) || map.mapId.slice(0, 8),
       games: String(map.gameCount),
       record: `${map.wins}勝 ${map.draws}和 ${map.defeats}敗`,

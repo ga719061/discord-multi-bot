@@ -52,7 +52,7 @@ export async function execute(interaction) {
     ? fetchValorantStats(state.playerName, state.tag)
     : fetchLolStats(state.playerName, state.tag, region));
 
-  await submit.editReply(v2EditPayload(buildStatsReply(state.result, state.playerName, state.tag, {
+  await submit.editReply(v2EditPayload(await buildStatsReply(state.result, state.playerName, state.tag, {
     ephemeral: true,
     publishCustomId: statsId(sessionId, 'publish'),
   })));
@@ -83,9 +83,9 @@ export async function execute(interaction) {
           ));
         }
         await component.deferUpdate();
-        await interaction.channel.send(buildStatsReply(state.result, state.playerName, state.tag));
+        await interaction.channel.send(await buildStatsReply(state.result, state.playerName, state.tag));
         state.published = true;
-        return component.editReply(v2EditPayload(buildStatsReply(state.result, state.playerName, state.tag, {
+        return component.editReply(v2EditPayload(await buildStatsReply(state.result, state.playerName, state.tag, {
           ephemeral: true,
           publishCustomId: statsId(sessionId, 'publish'),
           published: true,
@@ -99,13 +99,14 @@ export async function execute(interaction) {
   });
 
   collector.on('end', () => {
-    const expired = buildStatsReply(state.result, state.playerName, state.tag, {
+    buildStatsReply(state.result, state.playerName, state.tag, {
       ephemeral: true,
       publishCustomId: statsId(sessionId, 'publish'),
       published: state.published,
       expired: true,
-    });
-    submit.editReply(v2EditPayload(expired)).catch(() => {});
+    })
+      .then((expired) => submit.editReply(v2EditPayload(expired)))
+      .catch(() => {});
   });
 }
 
