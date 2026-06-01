@@ -1,68 +1,101 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { fmt, COLORS, UI_COLORS } from '../../utils/style.js';
-import { embedsToV2Payload } from '../../utils/componentsV2.js';
+import { SlashCommandBuilder } from 'discord.js';
+import { UI_COLORS } from '../../utils/style.js';
+import { getTaiwanDateKey, seededRandom } from '../../utils/deterministicRandom.js';
+import { renderFortuneCardImage } from './lib/funImage.js';
 
 export const data = new SlashCommandBuilder()
     .setName('占卜')
-    .setDescription('🔮 皇家占卜：讓國王透過神秘的狗骨頭為你卜算吉凶')
-    .setDescriptionLocalizations({ 'zh-TW': '🔮 皇家占卜：讓國王透過神秘的狗骨頭為你卜算吉凶' })
+    .setDescription('請吉吉國王替你抽一張皇家運勢')
+    .setDescriptionLocalizations({ 'zh-TW': '請吉吉國王替你抽一張皇家運勢' })
     .addStringOption((opt) =>
         opt.setName('問題')
-            .setDescription('想問國王什麼？（選填）')
-            .setDescriptionLocalizations({ 'zh-TW': '想問國王什麼？（選填）' })
+            .setDescription('想請吉吉國王判決的問題，不填則查看今日整體運勢')
+            .setDescriptionLocalizations({ 'zh-TW': '想請吉吉國王判決的問題，不填則查看今日整體運勢' })
             .setRequired(false)
     );
 
-const fortunes = [
-    { luck: '🌟 大吉', text: '汪！！本王感應到你今天會超級幸運！去買彩券吧子民！', color: UI_COLORS.ROYAL },
-    { luck: '✨ 中吉', text: '嗯～本王覺得你今天運氣不錯！會有好事發生喔～汪！', color: UI_COLORS.SUCCESS },
-    { luck: '☀️ 小吉', text: '本王占卜的結果是...還不錯啦！平穩的一天～', color: UI_COLORS.INFO },
-    { luck: '🌤️ 吉', text: '普普通通的運勢，但本王相信你可以靠實力創造好運！汪！', color: UI_COLORS.MUTED },
-    { luck: '☁️ 末吉', text: '嗯...運氣普通，但只要有本王在就沒問題！放心吧子民～', color: UI_COLORS.MUTED },
-    { luck: '🌧️ 凶', text: '汪...本王覺得你今天要小心一點...不過別怕！本王會保護你的！', color: UI_COLORS.WARNING },
-    { luck: '⛈️ 大凶', text: '汪嗚...本王感應到不好的氣息...今天最好待在家裡摸本王就好！', color: UI_COLORS.DANGER },
-    { luck: '🐕👑 國王特別獎', text: '汪汪汪！！本王特別賜予你今天的好運！你是本王最愛的子民！\n*開心地轉了三圈*', color: UI_COLORS.FUN },
+const fortuneTiers = [
+    { min: 95, luck: '皇家奇蹟', text: '今天有奇妙順風，適合把重要願望往前推一格。', color: UI_COLORS.ROYAL },
+    { min: 80, luck: '大吉', text: '氣勢漂亮，做決定前補一口水就能穩穩出招。', color: UI_COLORS.ROYAL },
+    { min: 65, luck: '中吉', text: '好運正在靠近，保持節奏就能接住機會。', color: UI_COLORS.SUCCESS },
+    { min: 50, luck: '小吉', text: '整體順手，適合處理小任務與溫和推進。', color: UI_COLORS.INFO },
+    { min: 35, luck: '平穩', text: '今天不必硬衝，穩穩完成基本盤就是勝利。', color: UI_COLORS.MUTED },
+    { min: 20, luck: '混沌', text: '事情可能有點打結，先釐清順序再行動。', color: UI_COLORS.FUN },
+    { min: 8, luck: '小凶', text: '先避開衝動與嘴快，晚點再做大決定。', color: UI_COLORS.WARNING },
+    { min: 1, luck: '需要點心', text: '能量偏低，先補充體力，本王准你慢慢來。', color: UI_COLORS.DANGER },
 ];
 
 const yesNoAnswers = [
-    '🐕 汪！本王覺得可以！去做吧！',
-    '🐕 嗯...本王的直覺說不太妙...',
-    '🐕 本王正在考慮...再問一次吧！汪！',
-    '🐕 當然可以！本王支持你！',
-    '🐕 本王建議你三思而後行...汪。',
-    '🐕 汪汪！毫無疑問！衝就對了！',
-    '🐕 本王的水晶球說...明天再決定吧！',
-    '🐕 哼！這還用問嗎？答案很明顯吧！...好吧本王也不知道。汪。',
-    '🐕 本王占卜的結果是...YES！大膽去做吧子民！',
-    '🐕 汪...最好不要...本王有不好的預感...',
+    '可以，但記得先喝水。連敗兩場就休息，本王不准你硬拚。',
+    '可以嘗試，小步開始比空想更有魔法。',
+    '暫緩一下，等心情比較穩再出手。',
+    '可以問問信任的人，王國會議不丟臉。',
+    '先不要，現在的線索還不夠亮。',
+    '有機會，但要設停損，不准一路莽到底。',
+    '答案偏向是，不過要保持禮貌與界線。',
+    '答案偏向否，先把自己照顧好。',
+    '今天適合觀察，不適合衝動宣布。',
+    '可以，前提是你願意承擔後續整理工作。',
 ];
+
+export function buildFortuneCardData({
+    userId = 'anonymous',
+    question,
+    date = new Date(),
+    rng,
+} = {}) {
+    const dateKey = getTaiwanDateKey(date);
+    const normalizedQuestion = String(question ?? '').trim();
+    const roll = normalizedQuestion
+        ? (rng || Math.random)
+        : seededRandom(`fortune:${dateKey}:${userId}`);
+    const aura = Math.floor(roll() * 100) + 1;
+    const fortune = fortuneForAura(aura);
+    const answer = normalizedQuestion
+        ? pick(yesNoAnswers, roll)
+        : fortune.text;
+
+    return {
+        date: dateKey,
+        question: normalizedQuestion || '今日整體運勢',
+        fortune: fortune.luck,
+        answer,
+        answerLabel: normalizedQuestion ? '本王判決' : '今日解讀',
+        aura,
+        color: fortune.color,
+    };
+}
+
+export function fortuneForAura(aura) {
+    const value = Math.max(1, Math.min(100, Number(aura) || 1));
+    return fortuneTiers.find((tier) => value >= tier.min) || fortuneTiers.at(-1);
+}
 
 export async function execute(interaction) {
     const question = interaction.options.getString('問題');
-    const fortune = fortunes[Math.floor(Math.random() * fortunes.length)];
+    const cardData = buildFortuneCardData({
+        userId: interaction.user.id,
+        question,
+    });
+    const card = await renderFortuneCardImage({
+        displayName: displayNameFor(interaction),
+        ...cardData,
+    });
 
-    const embed = new EmbedBuilder()
-        .setColor(fortune.color)
-        .setTitle('🐕🔮 吉吉國王的占卜')
-        .setDescription(`*國王閉上眼睛，搖了搖小尾巴...*\n*水晶球發出了光芒...*`);
+    await interaction.reply({
+        files: [card.attachment],
+        allowedMentions: { parse: [] },
+    });
+}
 
-    if (question) {
-        const answer = yesNoAnswers[Math.floor(Math.random() * yesNoAnswers.length)];
-        embed.addFields(
-            { name: '❓ 你的問題', value: question },
-            { name: '🐕 國王的回答', value: answer }
-        );
-    }
+function pick(items, rng) {
+    return items[Math.floor(rng() * items.length)];
+}
 
-    const luckColor = fortune.luck.includes('大吉') || fortune.luck.includes('獎') ? COLORS.GOLD :
-        fortune.luck.includes('凶') ? COLORS.RED : COLORS.CYAN;
-
-    embed.addFields(
-        { name: '🔮 今日運勢', value: '```ansi\n' + fmt(luckColor, fortune.luck) + '\n```' },
-        { name: '👑 國王的話', value: fortune.text }
-    );
-
-    embed.setFooter({ text: '🐕🔮 皇家占卜準確率高達... 嗯... 汪！' });
-
-    await interaction.reply(embedsToV2Payload([embed]));
+function displayNameFor(interaction) {
+    return interaction.member?.displayName
+        || interaction.user?.displayName
+        || interaction.user?.globalName
+        || interaction.user?.username
+        || '神秘旅人';
 }

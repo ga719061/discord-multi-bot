@@ -11,7 +11,7 @@
     "start": "node src/bot.js",
     "deploy": "node scripts/deploy-commands.js",
     "dev": "node --watch src/bot.js",
-    "test": "node --test tests/jsonUtils.test.js tests/guildDiagnostics.test.js tests/steamDeals.test.js tests/steamSearch.test.js tests/commandManifest.test.js tests/commandSync.test.js tests/aiMentions.test.js tests/aiChat.test.js tests/serverKnowledge.test.js tests/helpComponentsV2.test.js tests/componentsV2Migration.test.js tests/interactiveCommands.test.js tests/settingsPanel.test.js tests/scheduledJobs.test.js tests/healthServer.test.js src/commands/esports/__tests__/embed.test.js src/commands/esports/__tests__/providers.test.js",
+    "test": "node --test tests/jsonUtils.test.js tests/guildDiagnostics.test.js tests/steamDeals.test.js tests/steamSearch.test.js tests/commandManifest.test.js tests/commandSync.test.js tests/aiMentions.test.js tests/aiChat.test.js tests/serverKnowledge.test.js tests/customIds.test.js tests/funImage.test.js tests/helpComponentsV2.test.js tests/componentsV2Migration.test.js tests/interactiveCommands.test.js tests/settingsPanel.test.js tests/scheduledJobs.test.js tests/healthServer.test.js src/commands/esports/__tests__/embed.test.js src/commands/esports/__tests__/providers.test.js",
     "verify:commands": "node scripts/verify-import.js",
     "check": "npm run test && npm run verify:commands",
     "postinstall": "npm rebuild better-sqlite3"

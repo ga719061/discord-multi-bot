@@ -28,6 +28,16 @@ test('confirmation page is private Components V2 UI with confirm and cancel acti
   assert.match(JSON.stringify(panel), /Steam/);
 });
 
+test('settings custom ids preserve the existing wire format and owner checks', () => {
+  const context = { userId: 'admin' };
+  const viewId = settingsViewTesting.id(context, 'view:steam');
+
+  assert.equal(settingsViewTesting.id(context, 'ai_model'), 'settings:admin:ai_model');
+  assert.equal(viewId, 'settings:admin:view:steam');
+  assert.deepEqual(settingsViewTesting.parseSettingsCustomId(viewId, context), ['view', 'steam']);
+  assert.equal(settingsViewTesting.parseSettingsCustomId(viewId, { userId: 'other' }), null);
+});
+
 test('self-role settings normalize legacy string entries and preserve requirements', () => {
   assert.deepEqual(normalizeSelfRoleSettings('["role-a"]'), [{ id: 'role-a', requirement: null }]);
   assert.deepEqual(

@@ -70,6 +70,18 @@ test('help home renders a Components V2 payload with navigational admin styling'
     assert.equal(countComponents(container) <= 40, true);
 });
 
+test('help custom ids preserve the existing wire format and owner checks', () => {
+    const context = createContext();
+    const detailId = helpViewTesting.makeCustomId(context, 'detail', 'general', 2, 1);
+
+    assert.equal(helpViewTesting.makeCustomId(context, 'home'), 'help:viewer:home');
+    assert.equal(helpViewTesting.makeCustomId(context, 'settings'), 'help:viewer:settings');
+    assert.equal(helpViewTesting.makeCustomId(context, 'launch', 'steam'), 'help:viewer:launch:steam');
+    assert.equal(detailId, 'help:viewer:detail:general:2:1');
+    assert.deepEqual(helpViewTesting.parseHelpCustomId(detailId, context), ['detail', 'general', '2', '1']);
+    assert.equal(helpViewTesting.parseHelpCustomId(detailId, { ...context, userId: 'other' }), null);
+});
+
 test('help home omits management console shortcut for non-administrators', () => {
     const context = { ...createContext(), canOpenSettings: false };
     const text = JSON.stringify(helpViewTesting.renderHome(context).components[0].toJSON());

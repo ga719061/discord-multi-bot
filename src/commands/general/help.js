@@ -13,6 +13,7 @@ import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
 import { ansiBlock, COLORS, UI_COLORS } from '../../utils/style.js';
 import { ephemeralV2Payload, v2Divider, v2EditPayload, v2Panel, v2Text } from '../../utils/componentsV2.js';
+import { parseScopedCustomId, scopedCustomId } from '../../utils/customIds.js';
 import { openSettingsPanelFromHelp } from '../admin/settings.js';
 import { execute as openSteamSearch } from '../steam/steam.js';
 import { execute as openStatsSearch } from '../esports/stats.js';
@@ -347,20 +348,20 @@ function normalizeCommand(commandJson, appCommandId, category, helpOnly = false)
 }
 
 function routeButton(customId, context) {
-    const parts = customId.split(':');
-    if (parts[0] !== 'help' || parts[1] !== context.userId) return null;
+    const parts = parseHelpCustomId(customId, context);
+    if (!parts) return null;
 
-    const view = parts[2];
+    const view = parts[0];
     if (view === 'home') return renderHome(context);
 
-    const category = context.catalog.find((item) => item.id === parts[3]);
+    const category = context.catalog.find((item) => item.id === parts[1]);
     if (!category) return renderHome(context);
 
-    const page = Number.parseInt(parts[4] ?? '0', 10) || 0;
+    const page = Number.parseInt(parts[2] ?? '0', 10) || 0;
     if (view === 'cat') return renderCategory(context, category, page);
 
     if (view === 'detail') {
-        const commandIndex = Number.parseInt(parts[5] ?? '0', 10) || 0;
+        const commandIndex = Number.parseInt(parts[3] ?? '0', 10) || 0;
         return renderDetail(context, category, page, commandIndex);
     }
 
@@ -783,11 +784,15 @@ function renderNotice(title, message) {
 }
 
 function makeCustomId(context, view, category = 'home', page = 0, commandIndex = 0) {
-    if (view === 'home') return `help:${context.userId}:home`;
-    if (view === 'settings') return `help:${context.userId}:settings`;
-    if (view === 'launch') return `help:${context.userId}:launch:${category}`;
-    if (view === 'detail') return `help:${context.userId}:detail:${category}:${page}:${commandIndex}`;
-    return `help:${context.userId}:cat:${category}:${page}`;
+    if (view === 'home') return scopedCustomId('help', context.userId, 'home');
+    if (view === 'settings') return scopedCustomId('help', context.userId, 'settings');
+    if (view === 'launch') return scopedCustomId('help', context.userId, 'launch', category);
+    if (view === 'detail') return scopedCustomId('help', context.userId, 'detail', category, page, commandIndex);
+    return scopedCustomId('help', context.userId, 'cat', category, page);
+}
+
+function parseHelpCustomId(customId, context) {
+    return parseScopedCustomId(customId, 'help', context.userId);
 }
 
 function getPageCommands(category, page) {
@@ -873,6 +878,8 @@ export const helpViewTesting = {
     renderHome,
     renderCategory,
     renderDetail,
+    makeCustomId,
+    parseHelpCustomId,
     disableComponents,
     closeHelpBook,
 };

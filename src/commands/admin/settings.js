@@ -45,6 +45,7 @@ import {
 } from '../../utils/steamDeals.js';
 import { ansiBlock, COLORS, UI_COLORS } from '../../utils/style.js';
 import { ephemeralV2Payload, v2Divider, v2EditPayload, v2Notice, v2Panel, v2Payload, v2Text } from '../../utils/componentsV2.js';
+import { parseScopedCustomId, scopedCustomId } from '../../utils/customIds.js';
 
 const PANEL_TIMEOUT = 10 * 60_000;
 const LOG_TYPES = [
@@ -159,16 +160,16 @@ function attachPanelCollector(message, context) {
 }
 
 async function routeComponent(component, context) {
-  const parts = component.customId.split(':');
-  if (parts[0] !== 'settings' || parts[1] !== context.userId) return;
-  const action = parts[2];
+  const parts = parseSettingsCustomId(component.customId, context);
+  if (!parts) return;
+  const action = parts[0];
 
   if (action === 'help_home' && context.onReturnToHelp) {
     context.stopPanel?.('help');
     return context.onReturnToHelp(component);
   }
   if (action === 'view') {
-    context.view = parts[3];
+    context.view = parts[1];
     context.pending.confirm = null;
     context.notice = null;
     return updateView(component, context);
@@ -1051,7 +1052,11 @@ function textRow(customId, label, value, style, required = true) {
 }
 
 function id(context, action) {
-  return `settings:${context.userId}:${action}`;
+  return scopedCustomId('settings', context.userId, ...String(action).split(':'));
+}
+
+function parseSettingsCustomId(customId, context) {
+  return parseScopedCustomId(customId, 'settings', context.userId);
 }
 
 function isAdministrator(interaction) {
@@ -1228,6 +1233,8 @@ export const settingsViewTesting = {
   renderAnnouncement,
   renderMemberLookup,
   renderConfirm,
+  id,
+  parseSettingsCustomId,
   buildModal,
   openModal,
   closePanel,

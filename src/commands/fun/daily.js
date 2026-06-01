@@ -1,53 +1,68 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
-import { fmt, COLORS, UI_COLORS } from '../../utils/style.js';
-import { embedsToV2Payload } from '../../utils/componentsV2.js';
+import { SlashCommandBuilder } from 'discord.js';
+import { getTaiwanDateKey, hashString } from '../../utils/deterministicRandom.js';
+import { renderDailyCardImage } from './lib/funImage.js';
 
 export const data = new SlashCommandBuilder()
     .setName('每日一汪')
-    .setDescription('📜 每日一汪：領取吉吉國王為你準備的專屬祈福與金句')
-    .setDescriptionLocalizations({ 'zh-TW': '📜 每日一汪：領取吉吉國王為你準備的專屬祈福與金句' });
+    .setDescription('抽取吉吉國王今日御言與幸運值')
+    .setDescriptionLocalizations({ 'zh-TW': '抽取吉吉國王今日御言與幸運值' });
 
 const quotes = [
-    '「身為國王最重要的事情就是...午睡。」— 吉吉國王',
-    '「體型不代表一切！本王雖小但心很大！」— 吉吉國王',
-    '「人生就像一根骨頭，要好好把握才行！」— 吉吉國王',
-    '「忠誠是最珍貴的品質，就像本王對牛排的忠誠一樣。」— 吉吉國王',
-    '「每一天都是新的冒險！特別是散步的時候！」— 吉吉國王',
-    '「別害怕展現真實的自己，就算脖子上掛著皇冠也要搖尾巴！」— 吉吉國王',
-    '「快樂其實很簡單：一個溫暖的懷抱、一塊好吃的肉、一個搖尾巴的理由。」— 吉吉國王',
-    '「遇到困難就汪汪叫！...好吧這不是什麼好建議。但至少要發出聲音！」— 吉吉國王',
-    '「本王的御用哲學：吃飽了就睡，睡飽了就玩，玩累了再吃。完美。」— 吉吉國王',
-    '「就算全世界都看不起你，本王也會站在你腳邊支持你！...然後咬你的鞋帶。」— 吉吉國王',
-    '「成功的秘訣就是：永遠保持旺盛的好奇心！還有旺盛的食慾！」— 吉吉國王',
-    '「壓力大的時候怎麼辦？本王的建議是：去追自己的尾巴轉三圈。保證忘記煩惱。」— 吉吉國王',
-    '「愛是什麼？愛就是有人願意在你面前丟出球，然後等你叼回來。一次又一次。」— 吉吉國王',
-    '「本王教你一個人生哲理：遇到討厭的人就對他吠！...不對，文明一點。遠離他就好。」— 吉吉國王',
-    '「今天的你比昨天更進步了嗎？本王覺得有！因為你今天來看本王了！汪！」— 吉吉國王',
+    '今天可以偷懶五分鐘，但不准偷懶一整天。汪。',
+    '先喝水，再煩惱。很多問題都會自己縮小一點。',
+    '本王准你慢慢來，但不准你看不起自己。',
+    '今日適合把困難切小塊，一口一口咬掉。',
+    '不要急著證明全部，先完成眼前這一步。',
+    '你的努力本王有看到，雖然本王正在午睡。',
+    '今天的勇氣不用很大，夠推開一扇門就好。',
+    '累了就坐下，不是投降，是整理王冠。',
+    '先把最麻煩的一件事處理掉，尾巴會輕很多。',
+    '遇到混亂時，先守住節奏，勝利會自己露頭。',
+    '今天適合溫柔，但不是委屈自己。',
+    '不要跟昨天的自己吵架，牠已經下班了。',
+    '本王命令你：吃飽、睡好、再去打怪。',
+    '小小前進也是前進，王國地圖就是這樣畫大的。',
+    '本王今日賜福：把擔心留三成，剩下拿去行動。',
 ];
 
+export function buildDailyCardData(userId, date = new Date()) {
+    const today = getTaiwanDateKey(date);
+    const hash = hashString(`${today}${userId}`);
+    const luckyNum = (hash % 100) + 1;
+
+    return {
+        date: today,
+        quote: quotes[hash % quotes.length],
+        luckyNum,
+        luckyLabel: luckyLabelFor(luckyNum),
+    };
+}
+
+export function luckyLabelFor(luckyNum) {
+    if (luckyNum <= 20) return '充電日';
+    if (luckyNum <= 40) return '慢慢來';
+    if (luckyNum <= 60) return '平穩日';
+    if (luckyNum <= 80) return '好運上升';
+    return '皇家賜福';
+}
+
 export async function execute(interaction) {
-    // 根據日期和用戶 ID 生成固定的每日結果
-    const today = new Date().toISOString().split('T')[0];
-    const seed = today + interaction.user.id;
-    let hash = 0;
-    for (let i = 0; i < seed.length; i++) {
-        hash = ((hash << 5) - hash) + seed.charCodeAt(i);
-        hash |= 0;
-    }
-    const index = Math.abs(hash) % quotes.length;
-    const quote = quotes[index];
+    const cardData = buildDailyCardData(interaction.user.id);
+    const card = await renderDailyCardImage({
+        displayName: displayNameFor(interaction),
+        ...cardData,
+    });
 
-    const luckyNum = (Math.abs(hash) % 100) + 1;
+    await interaction.reply({
+        files: [card.attachment],
+        allowedMentions: { parse: [] },
+    });
+}
 
-    const embed = new EmbedBuilder()
-        .setColor(UI_COLORS.ROYAL)
-        .setTitle('🐕👑 吉吉國王的每日金句')
-        .setDescription('汪！本王翻開今日小小御前筆記，送你一句專屬祝福：\n\n```ansi\n' + fmt(COLORS.CYAN, quote) + '\n```')
-        .addFields(
-            { name: '🍀 今日幸運指數', value: `${'⭐'.repeat(Math.ceil(luckyNum / 20))} **${luckyNum}**/100`, inline: true },
-            { name: '🐕 國王的話', value: '```ansi\n' + (luckyNum > 80 ? fmt(COLORS.GREEN, '今天超級幸運！本王賜福於你！汪！') : luckyNum > 50 ? '不錯的一天！好好努力吧子民～' : luckyNum > 20 ? '普通的一天，摸摸本王會帶來好運喔！' : fmt(COLORS.RED, '今天要小心...多來找本王就對了！')) + '\n```', inline: false }
-        )
-        .setFooter({ text: '🐕👑 每天只有一句金句喔！明天再來找本王吧～' });
-
-    await interaction.reply(embedsToV2Payload([embed]));
+function displayNameFor(interaction) {
+    return interaction.member?.displayName
+        || interaction.user?.displayName
+        || interaction.user?.globalName
+        || interaction.user?.username
+        || '皇家旅人';
 }
