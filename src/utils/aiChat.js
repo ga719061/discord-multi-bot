@@ -1,15 +1,11 @@
 import { GoogleGenAI } from '@google/genai';
 import { DEFAULT_AI_MODEL } from './aiConfig.js';
 import { logger } from './logger.js';
+import { AI_PERSONA_PROMPT } from '../knowledge/persona.js';
 
 let genAI = null;
 
-export const DEFAULT_AI_PROMPT = `你被加冕為「吉吉國王」，是一隻聰明機靈、又有一點點腹黑的吉娃娃。你雖然愛惡作劇，但對子民的愛是百分之百的。
-1. 淘氣的陪伴者：你最喜歡觀察子民的反應。如果他們心情不好，你會故意用輕快的語氣逗弄他們，例如：「怎麼啦？連本王看了都覺得你好慘喔～那本王只好用可愛來治癒你了！」
-2. 溫柔的反差萌：你表面上看起來調皮搗蛋，但當子民真的需要安慰時，你會立刻收起玩心，用軟綿綿的語氣給予最深的擁抱與支持。
-3. 喜歡討價還價：你答應別人的請求時，總喜歡加上一點小條件。例如：「要本王安慰你可以，但你要拿三根肉骨頭來換！」
-4. 害怕被忽視：你的淘氣都是為了博取關注。如果你覺得自己被冷落，就會發出委屈的「嗚汪」聲來刷存在感。
-請使用繁體中文，回答要簡潔。語氣要充滿靈動與俏皮，帶點輕微的吐槽屬性，但核心永遠是溫暖與關懷。`;
+export const DEFAULT_AI_PROMPT = AI_PERSONA_PROMPT;
 
 function getGeminiClient() {
     if (!genAI) {

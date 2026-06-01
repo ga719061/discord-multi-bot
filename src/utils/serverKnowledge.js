@@ -1,4 +1,9 @@
 import { getGuildSettings } from './database.js';
+import { RESPONSE_GUIDE } from '../knowledge/persona.js';
+import { LORE } from '../knowledge/lore.js';
+import { ADMIN_FEATURES, MODEL_NOTES, PUBLIC_FEATURES } from '../knowledge/features.js';
+import { getKnowledgeCommands } from '../knowledge/commands.js';
+import { ADMIN_PERMISSION_GUIDE, PUBLIC_PERMISSION_GUIDE, SAFETY_BOUNDARIES } from '../knowledge/permissions.js';
 
 /**
  * 伺服器功能與指令知識庫
@@ -7,64 +12,61 @@ import { getGuildSettings } from './database.js';
 
 export function getServerKnowledge(guildId, isAdmin = false) {
     const settings = getGuildSettings(guildId);
-    
-    // --- 1. 王國基礎設施 ---
-    let knowledge = `
-【吉吉王國 皇家大典 - 核心系統指南】
 
-I. 社交與日常 (互動指令)
-- 摸摸/擁抱: 關鍵字「摸摸國王」、「抱抱國王」，或使用 /摸摸、/抱抱。
-- 運勢/占卜: /占卜。獲取今日吉凶與國王的建議。
-- 每日一汪: /每日一汪。領取國王今日的金句。
-- 餵食國王: /餵食。提供各種虛擬美食給國王。
-- 聊天: 直接 @吉吉王國 或在訊息中提到「國王」、「吉吉」、「吉娃娃」。
-
-II. 國王智慧核心與設定 (/設定)
-- 智慧意識: 國王由 Google Gemini 驅動，具備上下文記憶與聯網能力。
-- 模型選擇: 管理員可切換設定畫面所提供的 Gemini 模型。
-- 聯網檢索: 可開啟 Google Search 功能以獲取即時新聞或資料。
-- 派對模式: 管理員可限時開放特定頻道，期間所有成員都可 @國王 與 AI 對話。
-- 白名單: 受寵的子民在 @國王 時可使用 AI 對話。
-- 標記通知: AI 僅可通知提問訊息中已明確標記的使用者；身分組通知限管理員要求。禁止 @everyone 與 @here。
-- 系統個性 (Prompt): 管理員可調整國王的語氣與性格設定。
-
-III. 皇家等級與爵位 (Leveling)
-- XP 獲取: 聊天每分鐘可獲 15-25 XP。皇家贊助者 (Server Booster) 享 1.5 倍加成。
-- 防洗版法規: 字數需 > 3 字，不能重複前句內容，且純表情/貼圖不予計分。
-- 語音掛機: 進入非 AFK 語音頻道可持續累積經驗。
-- 爵位體系：
-  - Lv.0-5: 🏕️ 流浪客
-  - Lv.6-15: 📜 忠誠子民
-  - Lv.16-30: 🛡️ 皇家侍衛
-  - Lv.31-50: ⚔️ 御前騎士
-  - Lv.51-75: 💎 貴族
-  - Lv.76-99: 👑 大公
-  - Lv.100+: 🏰 守護神
-- 指令: /等級 (查個人卡片), /排行榜 (王國英雄榜)。
-
-IV. 王國事務與生活
-- 國是會議 (投票): 從 /幫助 點擊「建立皇家投票」，先填議題，再選擇 2 至 5 個選項並立即公開頒布；採用 ANSI 圖表顯示統計。
-- 皇家大抽獎: 從 /幫助 點擊「建立皇家抽獎」，填入賞賜、時限與名額後立即公開頒布；子民點擊反應即可參與，由國王隨機選出幸運兒。
-- 皇家時鐘: /提醒 直接開啟新增彈窗，設定未來時間點的提醒通知；建立後可透過私人面板查看或刪除待發送提醒。
-- 皇家採購 (Steam):
-  - /特價查詢: 直接開啟皇家採購彈窗，輸入名稱並選定正確 Steam 遊戲後，私下查詢價格、評價與台灣區折扣；可由查詢者單次頒布到原頻道。
-  - /設定: Administrator 可分別管理 Steam 熱門特價榜與限時免費榜的頻道、時間、開關，並確認後立刻頒布對應榜單；限時免費榜只收原價遊戲目前 100% 折扣到免費的項目。
-- 皇家戰報 (/戰績): 直接開啟彈窗，在其中選擇特戰英豪或英雄聯盟並輸入 Riot ID，私下查詢公開戰績並可單次頒布到原頻道。
-
-V. 領地管理 (管理員專用)
-- 皇家管理控制台: /設定 僅供 Administrator 使用，可查看領地健康總覽並管理皇家自助身分領取、反應身分站、史官日誌、迎賓佈告、爵位公告、Steam、AI、聖旨、領地狀態與子民查詢。
-- 皇家聖旨: 管理員在 /設定 的「發布公告」頁撰寫公告，支援圖片、印章樣式、提及範圍、預覽與確認發布。
-- AI 解鎖: Administrator 在 /設定 的 AI 頁完成密碼驗證後，即可操作 AI 管理功能。
-
-VI. 國王秘辛 (Lore)
-- 國王最愛的食物是牛排，最討厭被叫「小狗」（請稱呼為國王）。
-- 國王有時會自稱為「本王」，並對子民下達「汪汪」的指令。
-- 國王雖然體型嬌小，但自認擁有統治世界的威嚴。
-`;
+    const sections = [
+        '【吉吉王國 AI 知識庫】',
+        formatListSection('回答原則', RESPONSE_GUIDE),
+        formatFeatureSection('公開功能', PUBLIC_FEATURES),
+        formatCommandSection('可用指令', getKnowledgeCommands(false)),
+        formatListSection('角色設定', LORE),
+        formatListSection('一般權限與安全', [...PUBLIC_PERMISSION_GUIDE, ...SAFETY_BOUNDARIES]),
+    ];
 
     if (isAdmin) {
-        knowledge += `\n\n[管理員附註]: 歡迎系統狀態: ${settings.welcome_channel ? '已啟用' : '未配置'}。日誌頻道: ${settings.log_channel ? '已就緒' : '未安置史官'}。`;
+        sections.push(
+            formatFeatureSection('管理員功能', ADMIN_FEATURES),
+            formatCommandSection('管理員指令', getKnowledgeCommands(true).filter((command) => command.visibility === 'admin')),
+            formatListSection('AI 模型備註', MODEL_NOTES),
+            formatListSection('管理員權限與安全', ADMIN_PERMISSION_GUIDE),
+            formatAdminStatus(settings)
+        );
     }
 
-    return knowledge.trim();
+    return sections.filter(Boolean).join('\n\n').trim();
+}
+
+function formatFeatureSection(title, features) {
+    return [
+        `[${title}]`,
+        ...features.flatMap((feature) => [
+            `- ${feature.title}:`,
+            ...feature.details.map((detail) => `  - ${detail}`),
+        ]),
+    ].join('\n');
+}
+
+function formatCommandSection(title, commands) {
+    if (commands.length === 0) return null;
+    return [
+        `[${title}]`,
+        ...commands.map((command) => `- /${command.name}: ${command.summary}`),
+    ].join('\n');
+}
+
+function formatListSection(title, items) {
+    return [
+        `[${title}]`,
+        ...items.map((item) => `- ${item}`),
+    ].join('\n');
+}
+
+function formatAdminStatus(settings) {
+    return [
+        '[管理員附註]',
+        `- 歡迎系統狀態: ${settings.welcome_channel ? '已啟用' : '未配置'}`,
+        `- 日誌頻道: ${settings.log_channel ? '已就緒' : '未安置史官'}`,
+        `- 等級公告: ${settings.level_up_announcement_enabled !== 0 ? '開啟' : '關閉'}`,
+        `- Steam 特價推播: ${settings.steam_deal_enabled ? '開啟' : '關閉'}`,
+        `- Steam 限時免費推播: ${settings.steam_free_enabled ? '開啟' : '關閉'}`,
+    ].join('\n');
 }
