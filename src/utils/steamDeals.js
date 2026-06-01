@@ -15,6 +15,8 @@ const STEAM_SEARCH_SPECIALS_URL = 'https://store.steampowered.com/search/results
 const STEAM_SEARCH_LIMITED_FREE_URL = 'https://store.steampowered.com/search/results/?query&start=0&count=50&dynamic_data=&sort_by=_ASC&specials=1&maxprice=free&cc=tw&l=tchinese&infinite=1';
 const TAIPEI_TIME_ZONE = 'Asia/Taipei';
 const REQUEST_TIMEOUT_MS = 10_000;
+const STEAM_APP_DETAILS_CACHE_TTL_MS = 10 * 60_000;
+const steamAppDetailsCache = new Map();
 
 export class SteamServiceError extends Error {
   constructor(code, message) {
@@ -52,9 +54,9 @@ export async function fetchSteamJson(url, fetchImpl = fetch) {
 
 export function getSteamFailureMessage(error) {
   if (error?.code === 'invalid_data') {
-    return '🐕📜 汪... Steam 傳來的資料格式不完整，本王暫時讀不懂，請稍後再試。';
+    return '🐕📜 汪... Steam 傳來的資料格式不完整，本王暫時讀不懂，請子民稍後再試。';
   }
-  return '🐕💥 汪！Steam 目前無法連線或回應過慢，請稍後再試。';
+  return '🐕💥 汪！Steam 領地目前無法連線或回應過慢，請子民稍後再試。';
 }
 
 export function isValidSteamDealTime(time) {
@@ -153,40 +155,25 @@ export function buildSteamDealsEmbeds(deals, options = {}) {
 }
 
 export function buildSteamDealsPayload(deals, options = {}) {
-  const title = options.title || 'Steam 特價情報';
-  const intro = options.intro || 'Steam 台灣區目前的熱門特價遊戲如下，價格與折扣可能會隨商店更新而變動。';
-  const footer = options.footer || 'Steam 台灣區特價推播';
+  const title = options.title || '🐕👑 吉吉王國・御用特價情報';
+  const intro = options.intro || '汪！本王巡視 Steam 領地，為子民帶來今日的熱門特價清單！價格與折扣可能會隨商店更新而變動，欲購從速！';
+  const footer = options.footer || '吉吉王國皇家特價推播';
   const rankedDeals = deals.slice(0, 10);
   const publishedAt = getTaipeiDateTime(options.publishedAt || new Date());
-  const firstPanel = v2Panel(UI_COLORS.STEAM)
+  const panel = v2Panel(UI_COLORS.STEAM)
     .addTextDisplayComponents(v2Text(
-      `# ${title}\n${intro}\n-# 名次沿用 Steam 目前顯示順序，實際價格以商店頁面為準。`
+      `# ${title}\n${intro}\n-# 最多顯示 10 款遊戲，名次沿用 Steam 目前顯示順序，實際價格以商店頁面為準。`
     ))
     .addSeparatorComponents(v2Divider());
-  const secondPanel = v2Panel(UI_COLORS.STEAM)
-    .addTextDisplayComponents(v2Text('## 特價候選'));
-  const thirdPanel = v2Panel(UI_COLORS.STEAM)
-    .addTextDisplayComponents(v2Text('## 更多特價'));
 
   rankedDeals.forEach((game, index) => {
-    const targetPanel = index < 4 ? firstPanel : (index < 8 ? secondPanel : thirdPanel);
-    const rowText = buildRankedDealText(game, index);
-    const image = game.large_capsule_image || game.header_image;
-    targetPanel.addTextDisplayComponents(v2Text(rowText));
-    if (image) {
-      targetPanel.addMediaGalleryComponents(
-        new MediaGalleryBuilder().addItems({
-          media: { url: image },
-          description: `${getRankMedal(index)} ${game.name}`,
-        })
-      );
-    }
+    addSteamListItem(panel, game, index, buildRankedDealText(game, index));
   });
 
   const selectRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId('steam_deal_detail')
-      .setPlaceholder('選一款特價遊戲查看目前 Steam 情報')
+      .setPlaceholder('挑選一款特價遊戲，覲見皇家情報')
       .addOptions(
         rankedDeals.map((game, index) => ({
           label: truncateMenuText(`${getRankMedal(index)} ${game.name}`, 100),
@@ -196,50 +183,35 @@ export function buildSteamDealsPayload(deals, options = {}) {
       )
   );
 
-  thirdPanel
+  panel
     .addSeparatorComponents(v2Divider())
-    .addTextDisplayComponents(v2Text('## 查看目前情報\n選取一款遊戲，系統會私下顯示 Steam 目前價格與商店入口。'))
+    .addTextDisplayComponents(v2Text('## 覲見詳細情報\n挑選一款遊戲，本王將私下恩賜該遊戲的詳細情報與傳送門。'))
     .addActionRowComponents(selectRow)
     .addTextDisplayComponents(v2Text(`-# ${footer} | 發布 ${publishedAt.date} ${publishedAt.time} | 特價活動會隨 Steam 商店更新而變動`));
 
-  return v2Payload([firstPanel, secondPanel, thirdPanel]);
+  return v2Payload([panel]);
 }
 
 export function buildSteamFreeGamesPayload(games, options = {}) {
-  const title = options.title || 'Steam 限時免費情報';
-  const intro = options.intro || '皇家採購廳巡到 Steam 目前 100% 折扣的限時免費遊戲，想領就快進商店確認。';
-  const footer = options.footer || 'Steam 台灣區限時免費推播';
+  const title = options.title || '🐕👑 吉吉王國・限時免費御賜情報';
+  const intro = options.intro || '本王發現 Steam 商店正開放免費進貢！以下是 100% 折扣的限時免費遊戲，子民們速速領取領賞！汪！';
+  const footer = options.footer || '吉吉王國限時免費聖旨';
   const rankedGames = games.slice(0, 10);
   const publishedAt = getTaipeiDateTime(options.publishedAt || new Date());
-  const firstPanel = v2Panel(UI_COLORS.STEAM)
+  const panel = v2Panel(UI_COLORS.STEAM)
     .addTextDisplayComponents(v2Text(
-      `# ${title}\n${intro}\n-# 只列入原價遊戲目前折扣到免費的項目，不包含永久免費遊玩。`
+      `# ${title}\n${intro}\n-# 最多顯示 10 款遊戲；只列入原價遊戲目前折扣到免費的項目，不包含永久免費遊玩。`
     ))
     .addSeparatorComponents(v2Divider());
-  const secondPanel = v2Panel(UI_COLORS.STEAM)
-    .addTextDisplayComponents(v2Text('## 限時免費候選'));
-  const thirdPanel = v2Panel(UI_COLORS.STEAM)
-    .addTextDisplayComponents(v2Text('## 更多限時免費'));
 
   rankedGames.forEach((game, index) => {
-    const targetPanel = index < 4 ? firstPanel : (index < 8 ? secondPanel : thirdPanel);
-    const rowText = buildRankedFreeGameText(game, index);
-    const image = game.large_capsule_image || game.header_image;
-    targetPanel.addTextDisplayComponents(v2Text(rowText));
-    if (image) {
-      targetPanel.addMediaGalleryComponents(
-        new MediaGalleryBuilder().addItems({
-          media: { url: image },
-          description: `${getRankMedal(index)} ${game.name}`,
-        })
-      );
-    }
+    addSteamListItem(panel, game, index, buildRankedFreeGameText(game, index));
   });
 
   const selectRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId('steam_deal_detail')
-      .setPlaceholder('選一款限時免費遊戲查看目前 Steam 情報')
+      .setPlaceholder('挑選一款限時免費遊戲查看皇家情報')
       .addOptions(
         rankedGames.map((game, index) => ({
           label: truncateMenuText(`${getRankMedal(index)} ${game.name}`, 100),
@@ -249,21 +221,38 @@ export function buildSteamFreeGamesPayload(games, options = {}) {
       )
   );
 
-  thirdPanel
+  panel
     .addSeparatorComponents(v2Divider())
-    .addTextDisplayComponents(v2Text('## 查看目前情報\n選取一款遊戲，系統會私下顯示 Steam 目前價格與商店入口。'))
+    .addTextDisplayComponents(v2Text('## 覲見詳細情報\n挑選一款遊戲，本王將私下恩賜該遊戲的詳細情報與傳送門。'))
     .addActionRowComponents(selectRow)
     .addTextDisplayComponents(v2Text(`-# ${footer} | 發布 ${publishedAt.date} ${publishedAt.time} | 免費活動會隨 Steam 商店更新而變動`));
 
-  return v2Payload([firstPanel, secondPanel, thirdPanel]);
+  return v2Payload([panel]);
 }
 
-export async function fetchSteamAppDetails(appId, fetchImpl = fetch) {
+export async function fetchSteamAppDetails(appId, fetchImpl = fetch, options = {}) {
+  const cacheKey = String(appId);
+  const now = options.now || Date.now();
+  const cached = steamAppDetailsCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) return cached.details;
+  if (cached) steamAppDetailsCache.delete(cacheKey);
+
   const data = await fetchSteamJson(
     `https://store.steampowered.com/api/appdetails?appids=${appId}&cc=tw&l=tchinese`,
     fetchImpl
   );
-  return data?.[appId]?.success ? data[appId].data : null;
+  const details = data?.[appId]?.success ? data[appId].data : null;
+  if (details) {
+    steamAppDetailsCache.set(cacheKey, {
+      details,
+      expiresAt: now + STEAM_APP_DETAILS_CACHE_TTL_MS,
+    });
+  }
+  return details;
+}
+
+export function clearSteamAppDetailsCacheForTests() {
+  steamAppDetailsCache.clear();
 }
 
 export function buildSteamDealDetailPayload(appId, details, options = {}) {
@@ -271,14 +260,14 @@ export function buildSteamDealDetailPayload(appId, details, options = {}) {
   const storeUrl = `https://store.steampowered.com/app/${appId}/`;
   const actionRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setLabel('前往 Steam 商店')
+      .setLabel('前往 Steam 商店覲見')
       .setStyle(ButtonStyle.Link)
       .setURL(storeUrl)
   );
   const price = details.price_overview;
-  let priceLine = '價格資料暫未提供';
+  let priceLine = '價格資料暫未呈報';
   if (details.is_free) {
-    priceLine = '**免費遊玩**';
+    priceLine = '**免費進貢**';
   } else if (price) {
     const discount = Number(price.discount_percent) || 0;
     const original = price.initial_formatted && price.initial_formatted !== price.final_formatted
@@ -286,23 +275,23 @@ export function buildSteamDealDetailPayload(appId, details, options = {}) {
       : '';
     priceLine = discount > 0
       ? `📉 **-${discount}%**${original} → **${price.final_formatted}**`
-      : `💰 **${price.final_formatted}**（目前無特價）`;
+      : `💰 **${price.final_formatted}**（目前無特價，子民再等等）`;
   }
   const fields = [{
-    name: '即時價格',
+    name: '即時價格呈報',
     value: `${priceLine}\n` +
-      `📅 發售日期：${details.release_date?.date || '尚未公布'}\n` +
-      `🏅 Metacritic：${details.metacritic?.score ?? '尚無資料'}`,
+      `📅 發行日期：${details.release_date?.date || '尚未面世'}\n` +
+      `🏅 Metacritic 評價：${details.metacritic?.score ?? '尚無評價'}`,
   }];
 
   return ephemeralV2Payload([
     v2Card({
-      title: `🎮 ${escapeMarkdown(details.name || 'Steam 遊戲情報')}`,
-      description: escapeMarkdown(details.short_description || 'Steam 暫未提供遊戲簡介。'),
+      title: `🎮 ${escapeMarkdown(details.name || 'Steam 遊戲情報覲見')}`,
+      description: escapeMarkdown(details.short_description || 'Steam 暫未呈報遊戲簡介。'),
       accentColor: UI_COLORS.STEAM,
       fields,
       images: details.header_image ? [details.header_image] : [],
-      footer: `🐕 即時查詢 ${checkedAt.date} ${checkedAt.time} | Steam 台灣區價格`,
+      footer: `🐕 皇家即時查詢 ${checkedAt.date} ${checkedAt.time} | Steam 台灣區價格`,
       actionRows: [actionRow],
     }),
   ]);
@@ -362,7 +351,7 @@ function parseSteamSearchDeal(itemHtml) {
 
 async function hydrateSteamDealImages(deals) {
   return Promise.all(deals.map(async (deal) => {
-    if (!deal.needs_image_details && (deal.large_capsule_image || deal.header_image)) return deal;
+    if (!deal.needs_image_details && deal.header_image) return deal;
 
     const details = await fetchSteamAppDetails(deal.id).catch(() => null);
     return cleanDeal({
@@ -376,6 +365,23 @@ async function hydrateSteamDealImages(deals) {
 function cleanDeal(deal) {
   const { needs_image_details, ...cleaned } = deal;
   return cleaned;
+}
+
+function addSteamListItem(panel, game, index, rowText) {
+  const image = game.header_image || game.large_capsule_image;
+  if (!image) {
+    panel.addTextDisplayComponents(v2Text(rowText));
+    return;
+  }
+
+  panel
+    .addTextDisplayComponents(v2Text(rowText))
+    .addMediaGalleryComponents(
+      new MediaGalleryBuilder().addItems({
+        media: { url: image },
+        description: `${getRankMedal(index)} ${game.name}`,
+      })
+  );
 }
 
 function matchAttr(html, attr) {
@@ -468,18 +474,17 @@ function buildRankedDealText(game, index) {
 function buildRankedFreeGameText(game, index) {
   const original = formatSteamPrice(game.original_price);
   return `## ${getRankMedal(index)} [${escapeMarkdown(game.name)}](https://store.steampowered.com/app/${game.id})\n` +
-    `限時免費 **-${Number(game.discount_percent) || 100}%** ~~${original}~~ -> **免費領取**`;
+    `限時免費 **-${Number(game.discount_percent) || 100}%** ~~${original}~~ -> **免費進貢**`;
 }
 
 function buildMenuDescription(game) {
   const discount = Number(game.discount_percent) || 0;
-  return `折扣 -${discount}% | 現價 ${formatSteamPrice(game.final_price)}`;
+  return `折扣 -${discount}% | 皇家特價 ${formatSteamPrice(game.final_price)}`;
 }
 
 function buildFreeMenuDescription(game) {
   return `限時免費 | 原價 ${formatSteamPrice(game.original_price)}`;
 }
-
 function truncateMenuText(text, maxLength) {
   const value = String(text || '-');
   return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1)}…`;

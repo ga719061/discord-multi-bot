@@ -6,6 +6,7 @@ import {
   buildSteamDealDetailPayload,
   buildSteamDealsPayload,
   buildSteamFreeGamesPayload,
+  clearSteamAppDetailsCacheForTests,
   fetchSteamAppDetails,
   fetchSteamJson,
   fetchSteamLimitedFreeGames,
@@ -35,13 +36,14 @@ test('getSteamFailureMessage gives distinct feedback for malformed data', () => 
   assert.match(getSteamFailureMessage({ code: 'unavailable' }), /無法連線/);
 });
 
-test('buildSteamDealsPayload displays a full media card and detail selector for all ten ranked deals', () => {
+test('buildSteamDealsPayload displays up to ten ranked deal rows with capsule images and detail selector', () => {
   const deals = Array.from({ length: 10 }, (_, index) => ({
     id: index + 1,
     name: `Game ${index + 1}`,
     discount_percent: 50,
     original_price: 50000,
     final_price: 25000,
+    header_image: `https://cdn.example.test/header-${index + 1}.jpg`,
     large_capsule_image: `https://cdn.example.test/game-${index + 1}.jpg`,
   }));
 
@@ -53,14 +55,14 @@ test('buildSteamDealsPayload displays a full media card and detail selector for 
   const text = JSON.stringify(payload.components.map((panel) => panel.toJSON()));
 
   assert.equal((payload.flags & MessageFlags.IsComponentsV2) !== 0, true);
-  assert.equal(payload.components.length, 3);
+  assert.equal(payload.components.length, 1);
   assert.equal(galleries.length, 10);
-  assert.equal(galleries[0].items[0].media.url, 'https://cdn.example.test/game-1.jpg');
-  assert.equal(galleries[9].items[0].media.url, 'https://cdn.example.test/game-10.jpg');
-  assert.match(text, /Steam 特價情報/);
-  assert.match(text, /特價候選/);
-  assert.match(text, /更多特價/);
-  assert.match(text, /選一款特價遊戲查看目前 Steam 情報/);
+  assert.equal(galleries[0].items[0].media.url, 'https://cdn.example.test/header-1.jpg');
+  assert.equal(galleries[9].items[0].media.url, 'https://cdn.example.test/header-10.jpg');
+  assert.match(text, /吉吉王國・御用特價情報/);
+  assert.equal(text.includes('候選'), false);
+  assert.equal(text.includes('更多特價'), false);
+  assert.match(text, /挑選一款特價遊戲，覲見皇家情報/);
   assert.equal(text.includes('皇家採購'), false);
   assert.equal(selector.custom_id, 'steam_deal_detail');
   assert.equal(selector.options.length, 10);
@@ -68,6 +70,7 @@ test('buildSteamDealsPayload displays a full media card and detail selector for 
 });
 
 test('fetchSteamAppDetails and detail payload provide private interactive game information', async () => {
+  clearSteamAppDetailsCacheForTests();
   const details = await fetchSteamAppDetails(42, async () => ({
     ok: true,
     json: async () => ({
@@ -99,6 +102,31 @@ test('fetchSteamAppDetails and detail payload provide private interactive game i
   assert.equal(row.components[0].url, 'https://store.steampowered.com/app/42/');
 });
 
+test('fetchSteamAppDetails reuses fresh cached details for repeated lookups', async () => {
+  clearSteamAppDetailsCacheForTests();
+
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return {
+      ok: true,
+      json: async () => ({
+        777: {
+          success: true,
+          data: { name: `Cached Game ${calls}` },
+        },
+      }),
+    };
+  };
+
+  const first = await fetchSteamAppDetails(777, fetchImpl, { now: 1000 });
+  const second = await fetchSteamAppDetails(777, fetchImpl, { now: 2000 });
+
+  assert.equal(calls, 1);
+  assert.equal(first, second);
+  assert.equal(second.name, 'Cached Game 1');
+});
+
 test('fetchSteamLimitedFreeGames keeps only temporary 100 percent free discounts', async () => {
   const html = [
     '<a data-ds-appid="101" data-price-final="0" data-discount="100"><img src="https://cdn.example.test/free.jpg"><span class="title">Limited Free</span><div class="discount_original_price">NT$ 500</div></a>',
@@ -119,8 +147,8 @@ test('fetchSteamLimitedFreeGames keeps only temporary 100 percent free discounts
   assert.equal(games[0].original_price, 50000);
 });
 
-test('buildSteamFreeGamesPayload displays limited free games with media and detail selector', () => {
-  const games = Array.from({ length: 3 }, (_, index) => ({
+test('buildSteamFreeGamesPayload displays up to ten ranked free-game rows with capsule images and detail selector', () => {
+  const games = Array.from({ length: 12 }, (_, index) => ({
     id: index + 1,
     name: `Free Game ${index + 1}`,
     discount_percent: 100,
@@ -137,10 +165,14 @@ test('buildSteamFreeGamesPayload displays limited free games with media and deta
   const text = JSON.stringify(payload.components.map((panel) => panel.toJSON()));
 
   assert.equal((payload.flags & MessageFlags.IsComponentsV2) !== 0, true);
-  assert.equal(galleries.length, 3);
+  assert.equal(payload.components.length, 1);
+  assert.equal(galleries.length, 10);
+  assert.equal(galleries[0].items[0].media.url, 'https://cdn.example.test/free-1.jpg');
+  assert.equal(galleries[9].items[0].media.url, 'https://cdn.example.test/free-10.jpg');
   assert.match(text, /限時免費/);
   assert.match(text, /https:\/\/store\.steampowered\.com\/app\/1/);
+  assert.equal(text.includes('候選'), false);
   assert.equal(selector.custom_id, 'steam_deal_detail');
-  assert.equal(selector.options.length, 3);
+  assert.equal(selector.options.length, 10);
   assert.equal(countV2Components(payload.components) <= 40, true);
 });

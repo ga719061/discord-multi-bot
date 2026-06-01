@@ -982,8 +982,8 @@ function renderConfirm(context) {
     self_publish: `將在 ${context.pending.selfPublishChannel ? `<#${context.pending.selfPublishChannel}>` : '選取的頻道'} 張貼新的皇家自助身分領取佈告。`,
     reaction_create: `將在 ${context.pending.reactionChannel ? `<#${context.pending.reactionChannel}>` : '選取的頻道'} 建立新的皇家反應身分站。`,
     reaction_delete: `將撤除皇家反應身分站公開訊息 \`${context.pending.reactionDeleteMessage || '尚未選取'}\` 與其設定。`,
-    steam_publish: '將立即在已設定的推播頻道頒布 Steam 皇家特價榜。',
-    steam_free_publish: '將立即在已設定的限時免費頻道頒布 Steam 限時免費榜。',
+    steam_publish: '將立即在已設定的推播頻道頒布 Steam 皇家特價榜聖旨。',
+    steam_free_publish: '將立即在已設定的限時免費頻道頒布 Steam 限時免費御賜聖旨。',
     ai_party: `將在 ${context.pending.aiPartyChannel ? `<#${context.pending.aiPartyChannel}>` : '選取頻道'} 啟動 AI 派對模式並公開發送通知。`,
   };
   const message = labels[context.pending.confirm] || '此操作會產生公開變更。';

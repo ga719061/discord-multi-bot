@@ -74,7 +74,7 @@ test('Steam result is private until the owner publishes it once', () => {
   assert.match(publicCard, /"url":"https:\/\/store\.steampowered\.com\/app\/42\/"/);
   assert.match(serialize(privatePayload), /皇家採購廳/);
   assert.match(serialize(privatePayload), /頒布至目前頻道/);
-  assert.match(serialize(publishedPayload), /情報已頒布/);
+  assert.match(serialize(publishedPayload), /聖旨已頒布/);
   assert.equal(serialize(publicPayload).includes('頒布至目前頻道'), false);
   assert.match(serialize(publicPayload), /公開採購情報/);
   assert.equal(serialize(publicPayload).includes('私人情報呈報'), false);

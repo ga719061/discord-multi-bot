@@ -46,8 +46,8 @@ export async function execute(interaction) {
         try {
             if (component.user.id !== interaction.user.id) {
                 return component.reply(v2Notice(
-                    '🐕🛒 這份採購情報不屬於你',
-                    '請使用 `/特價查詢` 開啟自己的皇家採購簿。',
+                    '🐕🛒 汪！這份皇家採購情報不屬於你',
+                    '請子民自行使用 `/特價查詢` 翻閱自己的皇家採購簿！',
                     UI_COLORS.WARNING
                 ));
             }
@@ -56,8 +56,8 @@ export async function execute(interaction) {
                 const candidate = candidates.find((game) => game.id === appId);
                 if (!candidate) {
                     return component.reply(v2Notice(
-                        '🛒 採購選項已失效',
-                        '這筆候選遊戲已無法辨識，請重新使用 `/特價查詢`。',
+                        '🐕📜 皇家採購選項已失效',
+                        '汪！這筆候選遊戲已無法辨識，請子民重新使用 `/特價查詢`。',
                         UI_COLORS.WARNING
                     ));
                 }
@@ -74,8 +74,8 @@ export async function execute(interaction) {
             if (!state.result) return;
             if (state.published) {
                 return component.reply(v2Notice(
-                    '🛒 情報已頒布',
-                    '本王已將這份採購情報張貼至原頻道，不會重複發布。',
+                    '🐕👑 聖旨已頒布',
+                    '汪！本王已將這份採購情報張貼至原頻道，不得重複頒布！',
                     UI_COLORS.WARNING
                 ));
             }
@@ -90,7 +90,7 @@ export async function execute(interaction) {
             })));
         } catch (error) {
             logger.warn(`[SteamSearch] 發布失敗 guild=${interaction.guildId} code=${error.code || 'unavailable'}: ${error.message}`);
-            const notice = v2Notice('🐕💥 採購情報發布失敗', '本王暫時無法將情報張貼到頻道，請稍後再試。', UI_COLORS.DANGER);
+            const notice = v2Notice('🐕💥 皇家採購情報發布失敗', '汪！本王暫時無法將情報張貼到頻道，請子民稍後再試。', UI_COLORS.DANGER);
             if (component.replied || component.deferred) await component.followUp(notice).catch(() => {});
             else await component.reply(notice).catch(() => {});
         }
@@ -111,10 +111,10 @@ export async function execute(interaction) {
 
 export function buildSteamSearchModal(sessionId) {
     const description = new TextDisplayBuilder()
-        .setContent('**功能說明**\n輸入 Steam 遊戲名稱後，本王會列出候選清單；選取遊戲即可查看台灣價格、折扣、上市日與評分，並可一鍵發布到目前頻道。');
+        .setContent('**功能說明**\n輸入 Steam 遊戲名稱後，本王會列出候選清單；子民選取遊戲即可查看台灣價格、折扣、上市日與評分，並可一鍵頒布到目前頻道。');
     const input = new TextInputBuilder()
         .setCustomId('game_name')
-        .setLabel('請輸入 Steam 遊戲名稱')
+        .setLabel('請子民輸入 Steam 遊戲名稱')
         .setPlaceholder('例如：Stardew Valley、Palworld、Monster Hunter')
         .setStyle(TextInputStyle.Short)
         .setMaxLength(120)
@@ -129,25 +129,25 @@ export function buildSteamSearchModal(sessionId) {
 export function buildSteamSelectionPayload(sessionId, query, candidates, disabled = false) {
     const select = new StringSelectMenuBuilder()
         .setCustomId(steamId(sessionId, 'select'))
-        .setPlaceholder('挑選正確遊戲，查看皇家採購情報')
+        .setPlaceholder('請挑選正確遊戲，查看皇家採購情報')
         .setMinValues(1)
         .setMaxValues(1)
         .setDisabled(disabled)
         .addOptions(candidates.slice(0, 10).map((game) => ({
             label: truncateOption(game.name, 100),
-            description: truncateOption(`Steam App ${game.id} | 選取後查看目前價格`, 100),
+            description: truncateOption(`Steam App ${game.id} | 選取後覲見目前價格`, 100),
             value: String(game.id),
         })));
     const panel = v2Panel(UI_COLORS.STEAM)
         .addTextDisplayComponents(v2Text([
             '# 🐕🎮 皇家採購搜尋結果',
-            `本王在 Steam 倉庫裡翻到了與 **${query}** 相符的遊戲，請挑選要查閱的一款。`,
-            '-# 選定後會私下呈上目前價格、評價與商店入口。',
+            `汪！本王在 Steam 倉庫裡翻到了與 **${query}** 相符的遊戲，請子民挑選要查閱的一款。`,
+            '-# 選定後本王會私下呈上目前價格、評價與商店入口。',
         ].join('\n')))
         .addSeparatorComponents(v2Divider())
         .addActionRowComponents(new ActionRowBuilder().addComponents(select));
     if (disabled) {
-        panel.addTextDisplayComponents(v2Text('## ⌛ 採購查詢已結束\n請重新使用 `/特價查詢` 尋找遊戲。'));
+        panel.addTextDisplayComponents(v2Text('## ⌛ 皇家採購查詢已結束\n請子民重新使用 `/特價查詢` 尋找遊戲。'));
     }
     return ephemeralV2Payload([panel]);
 }
@@ -160,30 +160,30 @@ export function buildSteamSearchResultPayload(appId, details, options = {}) {
     let color = UI_COLORS.STEAM;
 
     if (isFree) {
-        statusLine = fmt(COLORS.GREEN, '🆓 本王宣布：全體子民免費開玩！');
+        statusLine = fmt(COLORS.GREEN, '🆓 本王恩賜：全體子民免費開玩！汪！');
         color = UI_COLORS.SUCCESS;
     } else if (price) {
         const finalPrice = price.final_formatted;
         const discount = price.discount_percent;
         if (discount > 0) {
-            statusLine = fmt(COLORS.GOLD, `🔥 皇家大促銷：現省 ${discount}%！只要 ${finalPrice}`);
+            statusLine = fmt(COLORS.GOLD, `🔥 皇家特大促銷：現省 ${discount}%！只要 ${finalPrice}，汪！`);
             color = UI_COLORS.SUCCESS;
         } else {
-            statusLine = fmt(COLORS.GRAY, `💰 皇家公定價：${finalPrice} (目前無特價)`);
+            statusLine = fmt(COLORS.GRAY, `💰 皇家公定進貢價：${finalPrice} (目前無特價)`);
         }
     } else {
-        statusLine = fmt(COLORS.BLUE, '📅 敬請期待：尚未公布售價或為預售商品');
+        statusLine = fmt(COLORS.BLUE, '📅 敬請期待：尚未面世或尚未公布進貢價格');
     }
 
     const infoBlock = ansiBlock([
-        { color: COLORS.CYAN, text: `發行日期: ${releaseDate || '未知'}` },
-        { color: COLORS.WHITE, text: `媒體評價: ${details.metacritic?.score || '暫無評分'}` },
+        { color: COLORS.CYAN, text: `發行日期: ${releaseDate || '尚未面世'}` },
+        { color: COLORS.WHITE, text: `世人評價: ${details.metacritic?.score || '暫無評分'}` },
         { color: COLORS.GOLD, text: '====================================' },
         { color: COLORS.BLUE, text: statusLine },
     ]);
     const buttons = [
         new ButtonBuilder()
-            .setLabel('前往 Steam 商店')
+            .setLabel('前往 Steam 商店覲見')
             .setStyle(ButtonStyle.Link)
             .setURL(`https://store.steampowered.com/app/${appId}/`),
     ];
@@ -191,7 +191,7 @@ export function buildSteamSearchResultPayload(appId, details, options = {}) {
         buttons.push(
             new ButtonBuilder()
                 .setCustomId(options.publishCustomId)
-                .setLabel(options.published ? '情報已頒布' : options.expired ? '頒布期限已過' : '頒布至目前頻道')
+                .setLabel(options.published ? '聖旨已頒布' : options.expired ? '覲見期限已過' : '頒布至目前頻道')
                 .setStyle(options.published ? ButtonStyle.Success : ButtonStyle.Primary)
                 .setDisabled(Boolean(options.published || options.expired))
         );
@@ -202,8 +202,8 @@ export function buildSteamSearchResultPayload(appId, details, options = {}) {
         .setTitle(`🐕🎮 ${details.name}`)
         .setURL(`https://store.steampowered.com/app/${appId}/`)
         .setImage(details.header_image)
-        .setDescription(`**王國評價：**\n${details.short_description || '本王暫無評語。'}\n\n${infoBlock}`)
-        .setFooter({ text: '🛒 皇家採購手冊 | 汪！把錢錢變成喜歡的樣子吧！' });
+        .setDescription(`**本王點評：**\n${details.short_description || '本王對此遊戲暫無評語，汪！'}\n\n${infoBlock}`)
+        .setFooter({ text: '🛒 皇家採購手冊 | 汪！把錢錢變成喜歡的樣子吧，子民們！' });
 
     return embedsToV2Payload([embed], {
         actionRows: [new ActionRowBuilder().addComponents(buttons)],
@@ -241,7 +241,7 @@ async function fetchSteamDetails(interaction, appId) {
         if (!detailData[appId] || !detailData[appId].success) {
             await interaction.editReply(v2EditPayload(v2Notice(
                 '🎮 皇家卷宗暫不可用',
-                '🐕📜 Steam 找到了遊戲，但暫時沒有可呈上的詳細資料。',
+                '🐕📜 汪！Steam 倉庫找到了遊戲，但暫時沒有可呈上的詳細資料，本王稍後再看。',
                 UI_COLORS.WARNING
             )));
             return null;

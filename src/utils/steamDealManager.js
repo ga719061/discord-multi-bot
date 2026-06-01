@@ -81,9 +81,9 @@ async function postSteamDealsForGuild(client, row, today, db) {
 
     const deals = await fetchSteamSpecialDeals(10);
     const payload = buildSteamDealsPayload(deals, {
-      title: 'Steam 特價情報',
-      intro: `Steam 台灣區目前有 ${deals.length} 款熱門特價遊戲可供參考，價格與折扣可能會隨商店更新而變動。`,
-      footer: `每日 ${row.steam_deal_time} 推播 | Steam 台灣區特價`,
+      title: '🐕👑 吉吉王國・御用特價情報',
+      intro: `汪！本王巡視 Steam 領地，為子民帶來今日的 ${deals.length} 款熱門特價清單！價格與折扣可能會隨商店更新而變動，欲購從速！`,
+      footer: `每日 ${row.steam_deal_time} 聖旨推播 | 吉吉王國皇家特價`,
     });
 
     await channel.send(payload);
@@ -108,9 +108,9 @@ async function postSteamFreeGamesForGuild(client, row, today, db) {
     const games = await fetchSteamLimitedFreeGames(10);
     if (games.length > 0) {
       const payload = buildSteamFreeGamesPayload(games, {
-        title: 'Steam 限時免費情報',
-        intro: `皇家採購廳巡到 ${games.length} 款目前 100% 折扣的 Steam 限時免費遊戲，想領就快進商店確認。`,
-        footer: `每日 ${row.steam_free_time} 御前推播 | Steam 台灣區限時免費`,
+        title: '🐕👑 吉吉王國・限時免費御賜情報',
+        intro: `本王發現 Steam 商店正開放免費進貢！皇家採購廳已巡獲 ${games.length} 款限時免費遊戲，子民們速速領取領賞！汪！`,
+        footer: `每日 ${row.steam_free_time} 聖旨推播 | 吉吉王國限時免費`,
       });
       await channel.send(payload);
       logger.info(`[SteamDealManager] Posted Steam limited free games guild=${row.guild_id}`);

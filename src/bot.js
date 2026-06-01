@@ -1,12 +1,12 @@
 import 'dotenv/config';
 import dns from 'node:dns';
-import http from 'http';
 import { AttachmentBuilder, Client, GatewayIntentBits, Collection, Partials, Events, EmbedBuilder, MessageFlags } from 'discord.js';
 import { loadCommands } from './handlers/commandHandler.js';
 import { loadEvents } from './handlers/eventHandler.js';
 import { initDatabase, getDb, updateGuildSetting, getGuildSettings } from './utils/database.js';
 import { logger } from './utils/logger.js';
-import { initVoiceXpManager } from './utils/voiceXpManager.js';
+import { startHealthServer } from './utils/healthServer.js';
+import { startScheduledJobs } from './utils/scheduledJobs.js';
 import { normalizePollVotes, parseJsonArray } from './utils/jsonUtils.js';
 import { isV2Message, v2EditPayload, v2Notice } from './utils/componentsV2.js';
 import { UI_COLORS } from './utils/style.js';
@@ -34,7 +34,6 @@ client.commands = new Collection();
 client.cooldowns = new Collection();
 // 暫存領地的邀請連結，用於追蹤是誰邀請的
 export const inviteCache = new Collection();
-let healthServer = null;
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.isChatInputCommand()) {
@@ -281,17 +280,9 @@ async function start() {
     await loadEvents(client);
     logger.info('事件註冊完成。');
 
-    const { initReminderManager } = await import('./utils/reminderManager.js');
-    const { initGiveawayManager } = await import('./utils/giveawayManager.js');
-    const { initPartyManager } = await import('./utils/partyManager.js');
-    const { initSteamDealManager } = await import('./utils/steamDealManager.js');
-    initReminderManager(client);
-    initGiveawayManager(client);
-    initPartyManager(client);
-    initSteamDealManager(client);
-    initVoiceXpManager(client);
+    startScheduledJobs(client);
 
-    startHealthServer();
+    startHealthServer({ logger });
     logger.info('機器人已成功登入！');
 
     // 登入後緩存所有邀請碼
@@ -321,20 +312,6 @@ async function start() {
     } catch {}
     process.exitCode = 1;
   }
-}
-
-function startHealthServer() {
-  if (healthServer) return healthServer;
-
-  const port = process.env.PORT || 3000;
-  healthServer = http.createServer((req, res) => {
-    res.writeHead(200);
-    res.end('Bot is alive!');
-  }).listen(port, () => {
-    logger.info(`HTTP 伺服器監聽於連接埠 ${port}。`);
-  });
-
-  return healthServer;
 }
 
 start();
