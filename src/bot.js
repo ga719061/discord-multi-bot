@@ -1,6 +1,6 @@
 import 'dotenv/config';
 import dns from 'node:dns';
-import { AttachmentBuilder, Client, GatewayIntentBits, Collection, Partials, Events, EmbedBuilder, MessageFlags } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, Partials, Events, EmbedBuilder, MessageFlags } from 'discord.js';
 import { loadCommands } from './handlers/commandHandler.js';
 import { loadEvents } from './handlers/eventHandler.js';
 import { initDatabase, getDb, updateGuildSetting, getGuildSettings } from './utils/database.js';
@@ -221,8 +221,15 @@ client.on(Events.InteractionCreate, async (interaction) => {
         if (action === 'publish') {
           await interaction.deferUpdate();
           const targetChannel = await client.channels.fetch(draft.channelId);
-          const stamp = new AttachmentBuilder('./assets/stamp.png', { name: 'stamp.png' });
-          await targetChannel.send(buildAnnouncementPayload(draft, { files: [stamp] }));
+          let payload;
+          try {
+            payload = await buildAnnouncementPayload(draft);
+          } catch (error) {
+            logger.error('公告卷軸產生失敗:', error);
+            const failed = v2Notice('📜 公告產生失敗', '無法讀取公告附圖或產生卷軸，請重新建立公告草稿。', UI_COLORS.WARNING);
+            return interaction.editReply(v2EditPayload(failed));
+          }
+          await targetChannel.send(payload);
           pendingAnnouncements.delete(uuid);
           const completed = v2Notice('📜 公告已發布', `聖旨已正式張貼至 <#${draft.channelId}>。`, UI_COLORS.SUCCESS);
           return interaction.editReply(v2EditPayload(completed));
@@ -255,10 +262,21 @@ client.on(Events.InteractionCreate, async (interaction) => {
           title,
           content,
           footer,
-          images: uploads.map((file) => file.url),
+          images: uploads.map((file) => ({
+            url: file.url,
+            name: file.name,
+            contentType: file.contentType,
+          })),
         });
         const previewButtons = buildAnnouncementPreviewButtons(uuid);
-        const preview = buildAnnouncementPayload(data, { preview: true, actionRows: [previewButtons] });
+        let preview;
+        try {
+          preview = await buildAnnouncementPayload(data, { preview: true, actionRows: [previewButtons] });
+        } catch (error) {
+          logger.error('公告預覽卷軸產生失敗:', error);
+          pendingAnnouncements.delete(uuid);
+          return interaction.editReply(v2EditPayload(v2Notice('📜 公告產生失敗', '無法讀取公告附圖或產生卷軸，請重新建立公告草稿。', UI_COLORS.WARNING)));
+        }
         await interaction.editReply(v2EditPayload(preview));
       }
     } catch (error) {

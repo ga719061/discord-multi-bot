@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import {
     ActionRowBuilder,
+    AttachmentBuilder,
     ButtonBuilder,
     ButtonStyle,
     FileUploadBuilder,
@@ -10,24 +11,43 @@ import {
     TextInputStyle,
 } from 'discord.js';
 import { UI_COLORS } from './style.js';
-import { ephemeralV2Payload, v2Card, v2Payload } from './componentsV2.js';
+import { ephemeralV2Payload, v2Card } from './componentsV2.js';
+import { fetchWithTimeout, trimText } from './imageRendering.js';
+import { renderAnnouncementScrollImage } from './announcementImage.js';
 
 export const pendingAnnouncements = new Map();
 
-export function buildAnnouncementPayload(draft, { preview = false, actionRows = [], files = [] } = {}) {
-    const heading = preview ? '## 預覽模式\n此卡片尚未發布，確認內容後再按下發布。' : null;
-    const mention = draft.mentionText ? `${draft.mentionText}\n\n` : '';
+export async function buildAnnouncementPayload(draft, { preview = false, actionRows = [], fetchImpl = fetch } = {}) {
+    const scroll = await renderAnnouncementScrollImage({
+        title: draft.title,
+        content: draft.content,
+        footer: draft.footer,
+        mentionLabel: mentionLabelFor(draft.mentionText),
+    });
+    const attachedImages = await buildUploadedImageAttachments(draft.images, fetchImpl);
+    const files = [scroll.attachment, ...attachedImages];
+
+    if (!preview) {
+        return {
+            content: draft.mentionText || undefined,
+            allowedMentions: draft.allowedMentions || { parse: [] },
+            files,
+        };
+    }
+
     const panel = v2Card({
-        title: preview ? '📜 聖旨預覽' : '📜 【致全境子民：國王御旨】',
-        description: [heading, `**${draft.title}**\n\n${mention}${draft.content}`].filter(Boolean).join('\n\n'),
+        title: '📜 聖旨預覽',
+        description: [
+            '此卷軸尚未發布，確認圖片內容後再按下發布。',
+            draft.mentionText ? `通知範圍：${draft.mentionText}` : '通知範圍：不提及任何人',
+        ].join('\n'),
         accentColor: UI_COLORS.ANNOUNCEMENT,
-        thumbnail: preview ? undefined : 'attachment://stamp.png',
-        images: draft.images || [],
-        footer: `${draft.footer ? `${draft.footer} | ` : ''}🔱 王國正版授權印記`,
         actionRows,
     });
-    const options = preview ? { allowedMentions: { parse: [] } } : { allowedMentions: draft.allowedMentions, files };
-    return preview ? ephemeralV2Payload([panel]) : v2Payload([panel], options);
+    return ephemeralV2Payload([panel], {
+        allowedMentions: { parse: [] },
+        files,
+    });
 }
 
 export function buildAnnouncementPreviewButtons(uuid) {
@@ -69,15 +89,15 @@ export async function openAnnouncementComposer(interaction, {
                     .setPlaceholder('例如：伺服器維護通知')
                     .setStyle(TextInputStyle.Short)
                     .setRequired(true)
-                    .setMaxLength(256)
+                    .setMaxLength(80)
             ),
             new LabelBuilder().setLabel('公告內容').setTextInputComponent(
                 new TextInputBuilder()
                     .setCustomId('announce_content')
-                    .setPlaceholder('支援 Markdown 語法')
+                    .setPlaceholder('內容會印在直式卷軸上，建議分段但避免過長')
                     .setStyle(TextInputStyle.Paragraph)
                     .setRequired(true)
-                    .setMaxLength(3500)
+                    .setMaxLength(480)
             ),
             new LabelBuilder().setLabel('頁腳文字 (選填)').setTextInputComponent(
                 new TextInputBuilder()
@@ -85,7 +105,7 @@ export async function openAnnouncementComposer(interaction, {
                     .setPlaceholder('顯示在公告底端的小字')
                     .setStyle(TextInputStyle.Short)
                     .setRequired(false)
-                    .setMaxLength(256)
+                    .setMaxLength(80)
             ),
             new LabelBuilder().setLabel('圖片附件 (選填，最多 3 張)').setFileUploadComponent(
                 new FileUploadBuilder()
@@ -97,4 +117,63 @@ export async function openAnnouncementComposer(interaction, {
         );
 
     await interaction.showModal(modal);
+}
+
+async function buildUploadedImageAttachments(images = [], fetchImpl = fetch) {
+    const records = images.map(normalizeUploadedImage).filter((image) => image.url);
+    const attachments = [];
+
+    for (const [index, image] of records.entries()) {
+        const response = await fetchWithTimeout(image.url, fetchImpl, 5000);
+        const contentType = response?.headers?.get?.('content-type') || image.contentType || '';
+        if (!response?.ok || !contentType.startsWith('image/')) {
+            throw new Error(`Unable to fetch announcement image ${index + 1}`);
+        }
+        const buffer = Buffer.from(await response.arrayBuffer());
+        attachments.push(new AttachmentBuilder(buffer, {
+            name: safeImageName(image.name, index, contentType),
+        }));
+    }
+
+    return attachments;
+}
+
+function normalizeUploadedImage(image, index) {
+    if (typeof image === 'string') {
+        return {
+            url: image,
+            name: `announcement-image-${index + 1}.png`,
+            contentType: 'image/png',
+        };
+    }
+    return {
+        url: image?.url,
+        name: image?.name || `announcement-image-${index + 1}.png`,
+        contentType: image?.contentType,
+    };
+}
+
+function safeImageName(name, index, contentType) {
+    const extension = extensionFor(contentType, name);
+    const base = String(name || `announcement-image-${index + 1}`)
+        .replace(/\.[^.]+$/, '')
+        .replace(/[^a-z0-9_-]/gi, '-')
+        .replace(/-+/g, '-')
+        .replace(/^-|-$/g, '')
+        .slice(0, 48) || `announcement-image-${index + 1}`;
+    return `${base}${extension}`;
+}
+
+function extensionFor(contentType, name = '') {
+    const existing = String(name).match(/\.(png|jpe?g|webp|gif)$/i)?.[0]?.toLowerCase();
+    if (existing) return existing === '.jpeg' ? '.jpg' : existing;
+    if (contentType.includes('jpeg')) return '.jpg';
+    if (contentType.includes('webp')) return '.webp';
+    if (contentType.includes('gif')) return '.gif';
+    return '.png';
+}
+
+function mentionLabelFor(mentionText) {
+    if (!mentionText) return null;
+    return trimText(String(mentionText).replace(/\s+/g, ' ').trim(), 34);
 }

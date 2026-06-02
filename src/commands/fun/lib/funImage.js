@@ -128,7 +128,7 @@ function buildDailyCardSvg({ badge, background, displayName, quote, luckyNum, lu
     const luck = clampPercent(luckyNum);
     const label = luckyLabel || labelForLuck(luck);
     const stars = luckyStars || starsForLuck(luck);
-    const quoteLines = wrapText(quote, 22, 3);
+    const quoteLines = wrapText(quote, 29, 3);
     const barWidth = Math.round(405 * (luck / 100));
     const backdrop = bitmapBackdrop(background, `
       <rect width="${WIDTH}" height="${HEIGHT}" fill="url(#dailyBackdrop)"/>
@@ -161,14 +161,14 @@ function buildDailyCardSvg({ badge, background, displayName, quote, luckyNum, lu
         <rect x="124" y="298" width="952" height="156" rx="19" fill="#fff6dc" stroke="#efd68a" stroke-width="2"/>
         <path d="M155 317 H1045" stroke="#e2b84f" stroke-width="2" opacity="0.55"/>
         <text x="154" y="351" class="label" fill="#a46b07">今日御言</text>
-        ${quoteLines.map((line, index) => `<text x="154" y="${404 + index * 43}" class="body" fill="#3f2608">${escapeXml(line)}</text>`).join('')}
+        ${quoteLines.map((line, index) => `<text x="154" y="${401 + index * 39}" class="daily-body" fill="#3f2608">${escapeXml(line)}</text>`).join('')}
       </g>
 
       <g filter="url(#softShadow)">
         <rect x="104" y="502" width="992" height="84" rx="22" fill="#f4d27c" stroke="#9f6810" stroke-width="3"/>
         <rect x="121" y="517" width="958" height="54" rx="16" fill="#fff0b8" opacity="0.52"/>
         <text x="146" y="554" class="label" fill="#7a4b06">今日幸運值</text>
-        <text x="320" y="556" class="metric" fill="#3f2608">${luck} / 100</text>
+        <text x="292" y="556" class="daily-metric" fill="#3f2608">${luck} / 100</text>
         <text x="514" y="554" class="small" fill="#765218">${escapeXml(label)}</text>
         <text x="846" y="523" text-anchor="middle" class="lucky-stars" fill="#8d5b08">${escapeXml(stars)}</text>
         <rect x="644" y="530" width="405" height="28" rx="14" fill="#8a5b10" opacity="0.72"/>
@@ -312,6 +312,8 @@ function baseSvg(theme, content) {
       .fortune-title { font-size: 60px; }
       .label { font-size: 25px; font-weight: 900; letter-spacing: 0; }
       .body { font-size: 34px; font-weight: 760; letter-spacing: 0; }
+      .daily-body { font-size: 30px; font-weight: 760; letter-spacing: 0; }
+      .daily-metric { font-size: 34px; font-weight: 900; letter-spacing: 0; }
       .small { font-size: 23px; font-weight: 700; letter-spacing: 0; }
       .lucky-stars { font-size: 23px; font-weight: 900; letter-spacing: 0; }
       .footer { font-size: 21px; font-weight: 800; letter-spacing: 0; }

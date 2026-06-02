@@ -13,6 +13,12 @@ import {
 import { UI_COLORS } from '../src/utils/style.js';
 import { buildPollPayload } from '../src/commands/fun/poll.js';
 import { buildAnnouncementPayload, openAnnouncementComposer } from '../src/utils/announcementTools.js';
+import { renderAnnouncementScrollImage } from '../src/utils/announcementImage.js';
+
+const tinyPng = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+    'base64'
+);
 
 test('V2 payloads set flags, default to safe mentions, and reject duplicate ids', () => {
     const row = new ActionRowBuilder().addComponents(
@@ -41,27 +47,67 @@ test('V2 text and component guards constrain oversized output', () => {
     assert.throws(() => assertValidV2Components(panels), /40/);
 });
 
-test('new poll and announcement renders are V2-only with controlled mentions', () => {
+test('new poll and announcement renders keep controlled mentions', async () => {
     const poll = buildPollPayload({
         question: '今天吃什麼？',
         options: ['牛排', '雞肉'],
         votes: { 0: ['1'], 1: [] },
         creatorId: '123',
     });
-    const announcement = buildAnnouncementPayload({
+    const announcement = await buildAnnouncementPayload({
         title: '維護通知',
         content: '今晚暫停服務。',
         footer: '請留意',
-        images: ['https://example.test/notice.png'],
+        images: [{ url: 'https://example.test/notice.png', name: 'notice.png', contentType: 'image/png' }],
         mentionText: '<@&456>',
         allowedMentions: { parse: [], roles: ['456'] },
+    }, {
+        fetchImpl: successfulImageFetch,
     });
 
     assert.equal((poll.flags & MessageFlags.IsComponentsV2) !== 0, true);
     assert.match(JSON.stringify(poll.components[0].toJSON()), /建立者：<@123>/);
     assert.equal('embeds' in announcement, false);
+    assert.equal('components' in announcement, false);
+    assert.equal(announcement.content, '<@&456>');
     assert.deepEqual(announcement.allowedMentions, { parse: [], roles: ['456'] });
-    assert.match(JSON.stringify(announcement.components[0].toJSON()), /維護通知/);
+    assert.equal(announcement.files[0].name, 'announcement-scroll.png');
+    assert.equal(announcement.files[1].name, 'notice.png');
+});
+
+test('announcement preview is ephemeral V2 with scroll image and buttons', async () => {
+    const row = buildAnnouncementPreviewButtonsForTest();
+    const preview = await buildAnnouncementPayload({
+        title: '活動公告',
+        content: '本週末舉辦活動，請大家準時集合。',
+        mentionText: '@here',
+        allowedMentions: { parse: ['everyone'] },
+    }, {
+        preview: true,
+        actionRows: [row],
+    });
+
+    assert.equal((preview.flags & MessageFlags.IsComponentsV2) !== 0, true);
+    assert.equal((preview.flags & MessageFlags.Ephemeral) !== 0, true);
+    assert.deepEqual(preview.allowedMentions, { parse: [] });
+    assert.equal(preview.files[0].name, 'announcement-scroll.png');
+    assert.match(JSON.stringify(preview.components[0].toJSON()), /發布公告/);
+});
+
+test('announcement scroll renderer returns a non-empty PNG and tolerates missing background', async () => {
+    const card = await renderAnnouncementScrollImage({
+        title: '超長公告標題測試超長公告標題測試超長公告標題測試',
+        content: '這是一段會被印在直式卷軸上的公告內容。'.repeat(20),
+        footer: '請大家留意後續更新',
+        mentionLabel: '@here',
+        backgroundPath: 'assets/missing-scroll-background.png',
+    });
+
+    assert.equal(card.filename, 'announcement-scroll.png');
+    assert.equal(card.attachment.name, 'announcement-scroll.png');
+    assert.equal(Buffer.isBuffer(card.buffer), true);
+    assert.equal(card.buffer.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
+    assert.equal(card.buffer.length > 1000, true);
 });
 
 test('announcement composer opens a modal with file upload', async () => {
@@ -74,4 +120,25 @@ test('announcement composer opens a modal with file upload', async () => {
     await openAnnouncementComposer(interaction, { channelId: 'channel' });
 
     assert.match(JSON.stringify(modal), /announce_images/);
+    assert.match(JSON.stringify(modal), /480/);
 });
+
+function successfulImageFetch() {
+    return new Response(tinyPng, {
+        status: 200,
+        headers: { 'content-type': 'image/png' },
+    });
+}
+
+function buildAnnouncementPreviewButtonsForTest() {
+    return new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+            .setCustomId('announce_preview:test:publish')
+            .setLabel('發布公告')
+            .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+            .setCustomId('announce_preview:test:cancel')
+            .setLabel('取消')
+            .setStyle(ButtonStyle.Secondary)
+    );
+}
