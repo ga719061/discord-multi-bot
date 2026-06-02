@@ -1,5 +1,10 @@
-import { AttachmentBuilder } from 'discord.js';
-import sharp from 'sharp';
+import {
+  cacheKeyFor,
+  escapeXml,
+  fetchWithTimeout,
+  imageUrlToDataUri,
+  svgToPngAttachment,
+} from '../../../utils/imageRendering.js';
 
 const WIDTH = 1600;
 const HEIGHT = 900;
@@ -12,8 +17,6 @@ const VALORANT_API = 'https://valorant-api.com/v1';
 
 const imageCache = new Map();
 const jsonCache = new Map();
-const fetchIds = new WeakMap();
-let nextFetchId = 1;
 
 const THEMES = {
   valorant: {
@@ -49,12 +52,7 @@ const THEMES = {
 export async function renderStatsImage(result, options = {}) {
   const assets = await resolveStatsAssets(result, options);
   const svg = buildStatsSvg(result, assets);
-  const buffer = await sharp(Buffer.from(svg)).png().toBuffer();
-  return {
-    attachment: new AttachmentBuilder(buffer, { name: CARD_FILENAME }),
-    filename: CARD_FILENAME,
-    buffer,
-  };
+  return svgToPngAttachment(svg, CARD_FILENAME);
 }
 
 export function buildStatsSvg(result, assets = {}) {
@@ -449,7 +447,7 @@ async function jsonFromUrl(url, fetchImpl) {
   if (!url) return null;
   const cacheKey = cacheKeyFor(fetchImpl, url);
   if (!jsonCache.has(cacheKey)) {
-    jsonCache.set(cacheKey, fetchWithTimeout(url, fetchImpl)
+    jsonCache.set(cacheKey, fetchWithTimeout(url, fetchImpl, IMAGE_TIMEOUT_MS)
       .then((response) => response?.ok ? response.json() : null)
       .catch(() => null));
   }
@@ -457,49 +455,11 @@ async function jsonFromUrl(url, fetchImpl) {
 }
 
 async function dataUriFromUrl(url, fetchImpl, imageOptions = {}) {
-  if (!url) return null;
-  if (String(url).startsWith('data:')) return url;
-  const cacheKey = cacheKeyFor(fetchImpl, `${url}|${imageOptions.width || 0}x${imageOptions.height || 0}`);
-  if (!imageCache.has(cacheKey)) {
-    imageCache.set(cacheKey, fetchWithTimeout(url, fetchImpl)
-      .then(async (response) => {
-        if (!response?.ok) return null;
-        const original = Buffer.from(await response.arrayBuffer());
-        const buffer = imageOptions.width || imageOptions.height
-          ? await sharp(original)
-            .resize({
-              width: imageOptions.width,
-              height: imageOptions.height,
-              fit: 'inside',
-              withoutEnlargement: true,
-            })
-            .png({ compressionLevel: 9 })
-            .toBuffer()
-          : original;
-        const contentType = imageOptions.width || imageOptions.height
-          ? 'image/png'
-          : response.headers?.get?.('content-type') || mimeFromUrl(url);
-        return `data:${contentType};base64,${buffer.toString('base64')}`;
-      })
-      .catch(() => null));
-  }
-  return imageCache.get(cacheKey);
-}
-
-async function fetchWithTimeout(url, fetchImpl) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), IMAGE_TIMEOUT_MS);
-  try {
-    return await fetchImpl(url, { signal: controller.signal });
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-function cacheKeyFor(fetchImpl, url) {
-  if (fetchImpl === fetch) return `global:${url}`;
-  if (!fetchIds.has(fetchImpl)) fetchIds.set(fetchImpl, nextFetchId++);
-  return `custom:${fetchIds.get(fetchImpl)}:${url}`;
+  return imageUrlToDataUri(url, fetchImpl, {
+    ...imageOptions,
+    cache: imageCache,
+    timeoutMs: IMAGE_TIMEOUT_MS,
+  });
 }
 
 function icon(name, x, y, size, color) {
@@ -562,14 +522,6 @@ function formatUpdatedAt(content) {
   return trimText(normalized, 19);
 }
 
-function escapeXml(content) {
-  return String(content ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 function trimText(text, maxLength) {
   const content = value(text);
   return content.length <= maxLength ? content : `${content.slice(0, maxLength - 1)}…`;
@@ -627,12 +579,4 @@ function assetKey(item = {}) {
 
 function normalizeKey(content) {
   return String(content || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
-}
-
-function mimeFromUrl(url) {
-  const path = String(url).split('?')[0].toLowerCase();
-  if (path.endsWith('.jpg') || path.endsWith('.jpeg')) return 'image/jpeg';
-  if (path.endsWith('.webp')) return 'image/webp';
-  if (path.endsWith('.svg')) return 'image/svg+xml';
-  return 'image/png';
 }

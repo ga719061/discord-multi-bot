@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
-import { buildDailyCardData, execute as executeDaily, luckyLabelFor } from '../src/commands/fun/daily.js';
+import { buildDailyCardData, execute as executeDaily, luckyLabelFor, luckyStarCountFor, luckyStarsFor, quotesForLuck } from '../src/commands/fun/daily.js';
 import { buildFortuneCardData, execute as executeFortune, fortuneForAura } from '../src/commands/fun/fortune.js';
 import { renderDailyCardImage, renderFortuneCardImage } from '../src/commands/fun/lib/funImage.js';
 import { getTaiwanDateKey } from '../src/utils/deterministicRandom.js';
@@ -14,6 +14,7 @@ test('daily image renderer returns a non-empty PNG attachment', async () => {
         quote: '今天可以偷懶五分鐘，但不准偷懶一整天。汪。',
         luckyNum: 88,
         luckyLabel: '皇家賜福',
+        luckyStars: '★★★★★',
         date: '2026-06-02',
         avatarPath: missingAvatarPath,
     });
@@ -32,6 +33,7 @@ test('fortune image renderer returns a non-empty PNG attachment', async () => {
         fortune: '大吉',
         answer: '可以，但記得先喝水。連敗兩場就休息，本王不准你硬拚。',
         aura: 76,
+        color: fortuneForAura(80).color,
         avatarPath: missingAvatarPath,
     });
 
@@ -50,6 +52,7 @@ test('image renderers tolerate missing avatar and long text', async () => {
             quote: longText,
             luckyNum: 101,
             luckyLabel: longText,
+            luckyStars: longText,
             date: '2026-06-02',
             avatarPath: missingAvatarPath,
         }),
@@ -59,6 +62,7 @@ test('image renderers tolerate missing avatar and long text', async () => {
             fortune: longText,
             answer: longText,
             aura: -8,
+            color: '#e74c3c',
             avatarPath: missingAvatarPath,
         }),
     ]);
@@ -76,6 +80,7 @@ test('daily card data is stable for the same user on the same day', () => {
     assert.equal(first.date, '2026-06-02');
     assert.equal(first.luckyNum >= 1 && first.luckyNum <= 100, true);
     assert.equal(first.luckyLabel, luckyLabelFor(first.luckyNum));
+    assert.equal(first.luckyStars, luckyStarsFor(first.luckyNum));
 });
 
 test('daily card data uses Taiwan date boundaries', () => {
@@ -97,6 +102,33 @@ test('daily lucky labels match their configured ranges', () => {
     assert.equal(luckyLabelFor(100), '皇家賜福');
 });
 
+test('daily lucky stars match their configured ranges', () => {
+    const cases = [
+        [1, 1, '★'],
+        [20, 1, '★'],
+        [21, 2, '★★'],
+        [40, 2, '★★'],
+        [41, 3, '★★★'],
+        [60, 3, '★★★'],
+        [61, 4, '★★★★'],
+        [80, 4, '★★★★'],
+        [81, 5, '★★★★★'],
+        [100, 5, '★★★★★'],
+    ];
+
+    for (const [luck, count, stars] of cases) {
+        assert.equal(luckyStarCountFor(luck), count);
+        assert.equal(luckyStarsFor(luck), stars);
+    }
+});
+
+test('daily quotes match the lucky range tone', () => {
+    assert.match(quotesForLuck(1).join('\n'), /低速|充電|基本盤|平安/);
+    assert.match(quotesForLuck(60).join('\n'), /平穩|計畫|節奏/);
+    assert.match(quotesForLuck(100).join('\n'), /皇家賜福|大事|王冠|好運/);
+    assert.match(quotesForLuck(80).join('\n'), /尾巴|肉乾|汪|本王/);
+});
+
 test('fortune card data with a question uses random rolls', () => {
     const rolls = [0.75, 0.2];
     const data = buildFortuneCardData({
@@ -107,7 +139,7 @@ test('fortune card data with a question uses random rolls', () => {
     assert.equal(data.question, '今天適合打 ranked 嗎？');
     assert.equal(data.fortune, '中吉');
     assert.equal(data.aura, 76);
-    assert.equal(data.answer, '暫緩一下，等心情比較穩再出手。');
+    assert.equal(data.answer, '可以小步開跑，好運正在靠近，尾巴穩住就接得到。');
     assert.equal(data.answerLabel, '本王判決');
 });
 
@@ -125,8 +157,8 @@ test('fortune card data without a question is stable for the same user on the sa
 
 test('fortune aura ranges always match the displayed fortune', () => {
     const cases = [
-        [1, '需要點心'],
-        [7, '需要點心'],
+        [1, '大凶'],
+        [7, '大凶'],
         [8, '小凶'],
         [19, '小凶'],
         [20, '混沌'],
@@ -146,6 +178,39 @@ test('fortune aura ranges always match the displayed fortune', () => {
     for (const [aura, fortune] of cases) {
         assert.equal(fortuneForAura(aura).luck, fortune);
     }
+});
+
+test('fortune tiers use distinct colors and major bad luck wording', () => {
+    const cases = [1, 8, 20, 35, 50, 65, 80, 95].map((aura) => fortuneForAura(aura));
+    const colors = new Set(cases.map((fortune) => fortune.color));
+
+    assert.equal(colors.size, cases.length);
+    assert.equal(cases[0].luck, '大凶');
+    assert.match(cases[0].text, /氣場偏低|避開衝突|重要決定/);
+    assert.match(cases[0].answers.join('\n'), /先不要|大凶|低氣場|城門/);
+    assert.doesNotMatch(cases[0].text, /點心|補充體力/);
+});
+
+test('fortune question answers follow the rolled fortune tone', () => {
+    const bad = buildFortuneCardData({
+        question: '今天適合硬衝嗎？',
+        rng: (() => {
+            const rolls = [0.01, 0];
+            return () => rolls.shift() ?? 0;
+        })(),
+    });
+    const great = buildFortuneCardData({
+        question: '今天適合推進嗎？',
+        rng: (() => {
+            const rolls = [0.99, 0];
+            return () => rolls.shift() ?? 0;
+        })(),
+    });
+
+    assert.equal(bad.fortune, '大凶');
+    assert.match(bad.answer, /先不要|大凶|門口/);
+    assert.equal(great.fortune, '皇家奇蹟');
+    assert.match(great.answer, /奇蹟|大膽|尾巴/);
 });
 
 test('daily and fortune commands reply with image files only and safe mentions', async () => {
