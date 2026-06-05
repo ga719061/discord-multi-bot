@@ -48,6 +48,23 @@ import { ephemeralV2Payload, v2Divider, v2EditPayload, v2Notice, v2Panel, v2Payl
 import { parseScopedCustomId, scopedCustomId } from '../../utils/customIds.js';
 
 const PANEL_TIMEOUT = 10 * 60_000;
+const CUSTOM_EMOJI_PATTERN = /^<a?:([A-Za-z0-9_]+):(\d{17,20})>$/;
+const CUSTOM_EMOJI_IDENTIFIER_PATTERN = /^([A-Za-z0-9_]+):(\d{17,20})$/;
+const DISCORD_ID_PATTERN = /^\d{17,20}$/;
+const COMMON_REACTION_EMOJIS = [
+  { char: '🎮', label: '遊戲' },
+  { char: '🎵', label: '音樂' },
+  { char: '🎨', label: '藝術' },
+  { char: '📢', label: '公告' },
+  { char: '⭐', label: '精選' },
+  { char: '💬', label: '聊天' },
+  { char: '🎬', label: '影音' },
+  { char: '📸', label: '攝影' },
+  { char: '⚽', label: '運動' },
+  { char: '📚', label: '閱讀' },
+  { char: '💻', label: '程式' },
+  { char: '🔔', label: '通知' },
+];
 const LOG_TYPES = [
   { value: 'message', label: '訊息紀錄' },
   { value: 'member', label: '成員變動' },
@@ -61,7 +78,7 @@ const MODULE_STYLE = {
   '等級系統': { section: 'CONFIGURATION / LEVELING', color: UI_COLORS.ROYAL },
   'Steam 推播': { section: 'CONFIGURATION / STEAM', color: UI_COLORS.STEAM },
   '自助身分組': { section: 'CONFIGURATION / SELF ROLES', color: UI_COLORS.ROYAL },
-  '反應身分組': { section: 'CONFIGURATION / REACTION ROLES', color: UI_COLORS.FUN },
+  '按鈕身分組': { section: 'CONFIGURATION / BUTTON ROLES', color: UI_COLORS.FUN },
   'AI 設定': { section: 'CONFIGURATION / AI', color: UI_COLORS.SPECIAL },
   'AI 存取驗證': { section: 'CONFIGURATION / AI ACCESS', color: UI_COLORS.MUTED },
   '伺服器資訊': { section: 'OPERATIONS / SERVER', color: UI_COLORS.INFO },
@@ -75,7 +92,7 @@ const MODULE_TITLES = {
   '等級系統': '🏅 爵位晉升公告 | 等級系統',
   'Steam 推播': '🛒 皇家採購推播 | Steam',
   '自助身分組': '🏷️ 皇家自助身分領取 | 自助身分組',
-  '反應身分組': '🎭 皇家反應身分站 | 反應身分組',
+  '按鈕身分組': '🎭 皇家按鈕身分站 | 按鈕身分組',
   'AI 設定': '🧠 國王智慧核心 | AI 設定',
   'AI 存取驗證': '🔐 御前智慧驗證 | AI 存取驗證',
   '伺服器資訊': '🏰 領地視察 | 伺服器資訊',
@@ -190,7 +207,7 @@ async function routeComponent(component, context) {
     return executeConfirmation(component, context);
   }
   if (action === 'modal') {
-    return openModal(component, context, parts[3]);
+    return openModal(component, context, actionValue(parts));
   }
 
   if (component.isChannelSelectMenu()) {
@@ -206,8 +223,12 @@ async function routeComponent(component, context) {
     return handleUserSelect(component, context, action);
   }
   if (component.isButton()) {
-    return handleButton(component, context, action, parts[3]);
+    return handleButton(component, context, action, actionValue(parts));
   }
+}
+
+function actionValue(parts) {
+  return parts[1];
 }
 
 async function handleChannelSelect(component, context, action) {
@@ -247,6 +268,22 @@ async function handleStringSelect(component, context, action) {
     context.notice = '國王智慧核心模型已更新。';
   }
   if (action === 'reaction_delete_target') context.pending.reactionDeleteMessage = component.values[0];
+  if (action === 'reaction_emoji') {
+    const value = component.values[0];
+    let emojiInput;
+    if (value.startsWith('guild:')) {
+      const emojiId = value.slice(6);
+      const guildEmoji = context.guild.emojis?.cache?.get(emojiId);
+      if (!guildEmoji) return component.reply(v2Notice('🎭 emoji 已失效', '這個 emoji 可能已被移除，請重新選擇。', UI_COLORS.WARNING));
+      emojiInput = guildEmoji.identifier;
+    } else if (value.startsWith('common:')) {
+      emojiInput = value.slice(7);
+    } else {
+      emojiInput = value;
+    }
+    const pairError = tryAddReactionPair(context, emojiInput);
+    if (pairError) return component.reply(v2Notice(pairError.title, pairError.message, UI_COLORS.WARNING));
+  }
   if (action === 'announce_mention') {
     context.pending.announceMention = component.values[0];
     if (context.pending.announceMention !== 'role') context.pending.announceRole = null;
@@ -267,6 +304,11 @@ async function handleRoleSelect(component, context, action) {
     const roles = getSelfRoles(context.guild.id).filter((entry) => entry.id !== role?.id);
     updateGuildSetting(context.guild.id, 'selfrole_roles', JSON.stringify(roles));
     context.notice = '皇家自助身分領取選項已移除。';
+  }
+  if (action === 'reaction_role') {
+    const error = validateAssignableRole(context.guild, role);
+    if (error) return component.reply(v2Notice('🎭 無法加入按鈕身分站', error, UI_COLORS.WARNING));
+    context.pending.reactionRole = role.id;
   }
   if (action === 'announce_role') {
     context.pending.announceRole = role?.id || null;
@@ -346,6 +388,11 @@ async function handleButton(component, context, action, value) {
     updateAiSetting(context.guild.id, 'whitelist', JSON.stringify([...whitelist]));
     context.notice = 'AI 御准白名單已更新。';
   }
+  if (action === 'reaction_clear_pairs') {
+    context.pending.reactionPairs = [];
+    context.pending.reactionRole = null;
+    context.notice = '按鈕身分站暫存配對已清除。';
+  }
   if (action === 'prepare_confirm') {
     context.pending.confirmReturnView = context.view;
     context.pending.confirm = value;
@@ -355,6 +402,7 @@ async function handleButton(component, context, action, value) {
 }
 
 async function openModal(component, context, type) {
+  if (!type) return component.reply(v2Notice('⚠️ 操作目標遺失', '請回到設定面板重新按一次操作按鈕。', UI_COLORS.WARNING));
   if (type.startsWith('ai_') && type !== 'ai_unlock' && !requireAiUnlock(component, context)) return;
   const modal = buildModal(context, type);
   await component.showModal(modal);
@@ -405,12 +453,21 @@ async function openModal(component, context, type) {
   if (type === 'self_description') context.pending.selfDescription = submit.fields.getTextInputValue('value').trim();
   if (type === 'reaction_create') {
     if (!context.pending.reactionChannel) {
-      return submit.reply(v2Notice('🎭 尚未選擇發布頻道', '請先在皇家反應身分站頁面選擇發布頻道。', UI_COLORS.WARNING));
+      return submit.reply(v2Notice('🎭 尚未選擇發布頻道', '請先在皇家按鈕身分站頁面選擇發布頻道。', UI_COLORS.WARNING));
     }
     const result = parseReactionPairs(context.guild, submit.fields.getTextInputValue('pairs'));
-    if (result.error) return submit.reply(v2Notice('🎭 皇家反應站設定無效', result.error, UI_COLORS.WARNING));
+    if (result.error) return submit.reply(v2Notice('🎭 皇家按鈕站設定無效', result.error, UI_COLORS.WARNING));
     context.pending.reactionPairs = result.pairs;
     context.pending.reactionTitle = submit.fields.getTextInputValue('title').trim();
+  }
+  if (type === 'reaction_pair_add') {
+    const emoji = submit.fields.getTextInputValue('emoji').trim();
+    const pairError = tryAddReactionPair(context, emoji);
+    if (pairError) return submit.reply(v2Notice(pairError.title, pairError.message, UI_COLORS.WARNING));
+  }
+  if (type === 'reaction_title') {
+    context.pending.reactionTitle = submit.fields.getTextInputValue('title').trim();
+    context.notice = '皇家按鈕身分站標題已更新。';
   }
   if (type === 'ai_prompt') {
     updateAiSetting(context.guild.id, 'system_prompt', submit.fields.getTextInputValue('value').trim() || DEFAULT_AI_PROMPT);
@@ -447,9 +504,19 @@ function buildModal(context, type) {
     return modal.setTitle('皇家自助身分領取佈告').addComponents(textRow('value', '領取頁介紹', context.pending.selfDescription || '子民請從下方選單選擇想領取或取消的身分組。', TextInputStyle.Paragraph));
   }
   if (type === 'reaction_create') {
-    return modal.setTitle('建立皇家反應身分站').addComponents(
-      textRow('pairs', 'emoji:身分組ID，多組以逗號分隔', '', TextInputStyle.Paragraph),
+    return modal.setTitle('建立皇家按鈕身分站').addComponents(
+      textRow('pairs', '自訂按鈕:身分組（如 🎮遊戲玩家:身分組 或 📣:身分組 或 遊戲玩家），一行一組', '', TextInputStyle.Paragraph),
       textRow('title', '標題（選填）', '', TextInputStyle.Short, false)
+    );
+  }
+  if (type === 'reaction_pair_add') {
+    return modal.setTitle('新增按鈕身分配對').addComponents(
+      textRow('emoji', 'Emoji、文字或兩者（如 🎮遊戲玩家）', '', TextInputStyle.Short)
+    );
+  }
+  if (type === 'reaction_title') {
+    return modal.setTitle('設定皇家按鈕身分站標題').addComponents(
+      textRow('title', '標題（選填）', context.pending.reactionTitle || '', TextInputStyle.Short, false)
     );
   }
   if (type === 'ai_unlock') {
@@ -476,16 +543,22 @@ async function executeConfirmation(component, context) {
     await publishSelfRoleMenu(context.guild, channel, getSelfRoles(context.guild.id), context.pending.selfDescription);
   }
   if (type === 'reaction_create') {
-    if (!context.pending.reactionChannel || !context.pending.reactionPairs) {
-      return component.reply(v2Notice('🎭 皇家站點尚未完成', '請選擇頻道並填寫反應配對。', UI_COLORS.WARNING));
+    if (!context.pending.reactionChannel || !Array.isArray(context.pending.reactionPairs) || context.pending.reactionPairs.length === 0) {
+      return component.reply(v2Notice('🎭 皇家站點尚未完成', '請選擇頻道並新增按鈕配對。', UI_COLORS.WARNING));
     }
     const channel = await context.guild.channels.fetch(context.pending.reactionChannel).catch(() => null);
-    if (!channel?.isTextBased()) return component.reply(v2Notice('🎭 站點頻道無效', '選取的頻道無法發布皇家反應身分站。', UI_COLORS.WARNING));
+    if (!channel?.isTextBased()) return component.reply(v2Notice('🎭 站點頻道無效', '選取的頻道無法發布皇家按鈕身分站。', UI_COLORS.WARNING));
+    const permissionError = validateReactionStationChannel(context.guild, channel);
+    if (permissionError) return component.reply(v2Notice('🎭 無法在此頻道建立按鈕站', permissionError, UI_COLORS.WARNING));
     await component.deferUpdate();
     await createReactionStation(context.guild, channel, context.pending.reactionPairs, context.pending.reactionTitle);
+    context.pending.reactionPairs = [];
+    context.pending.reactionRole = null;
+    context.pending.reactionTitle = null;
+    context.notice = '皇家按鈕身分站已發布。';
   }
   if (type === 'reaction_delete') {
-    if (!context.pending.reactionDeleteMessage) return component.reply(v2Notice('🎭 尚未選擇站點', '請先選取要撤除的皇家反應身分站。', UI_COLORS.WARNING));
+    if (!context.pending.reactionDeleteMessage) return component.reply(v2Notice('🎭 尚未選擇站點', '請先選取要撤除的皇家按鈕身分站。', UI_COLORS.WARNING));
     await component.deferUpdate();
     await deleteReactionStation(context.guild, context.pending.reactionDeleteMessage);
   }
@@ -529,16 +602,32 @@ async function executeConfirmation(component, context) {
   }
   context.pending.confirm = null;
   context.pending.confirmReturnView = null;
-  context.view = type.startsWith('self_') ? 'selfrole' : type.startsWith('reaction_') ? 'reaction' : type.startsWith('ai_') ? 'ai' : 'steam';
-  const page = await renderView(context);
-  context.currentComponents = page.components;
-  if (component.deferred) await context.editResponse(v2EditPayload(ephemeralV2Payload(page.components)));
-  else await component.update({ components: page.components });
+  context.view = confirmationReturnView(type);
+  await updateView(component, context);
+}
+
+function confirmationReturnView(type) {
+  if (typeof type !== 'string') return 'home';
+  if (type.startsWith('self_')) return 'selfrole';
+  if (type.startsWith('reaction_')) return 'reaction';
+  if (type.startsWith('ai_')) return 'ai';
+  return 'steam';
 }
 
 async function updateView(component, context) {
   const view = await renderView(context);
   context.currentComponents = view.components;
+  if (!component.deferred && !component.replied && typeof component.deferUpdate === 'function') {
+    await component.deferUpdate();
+  }
+  if (typeof context.editResponse === 'function') {
+    await context.editResponse(v2EditPayload(ephemeralV2Payload(view.components)));
+    return;
+  }
+  if (component.deferred || component.replied) {
+    await component.editReply(v2EditPayload(ephemeralV2Payload(view.components)));
+    return;
+  }
   await component.update({ components: view.components });
 }
 
@@ -589,7 +678,7 @@ async function renderHome(context) {
     .addTextDisplayComponents(v2Text('## CONFIGURATION | 功能設定\n調整使用者體驗、自動化推播、身分領取與 AI 行為。'))
     .addActionRowComponents(
       buttonRow(context, [['welcome', '歡迎'], ['logging', '紀錄'], ['leveling', '等級'], ['steam', 'Steam']]),
-      buttonRow(context, [['selfrole', '自助身分組'], ['reaction', '反應身分組'], ['ai', aiUnlocked(context) ? 'AI 設定' : 'AI 驗證', aiUnlocked(context) ? ButtonStyle.Secondary : ButtonStyle.Primary]])
+      buttonRow(context, [['selfrole', '自助身分組'], ['reaction', '按鈕身分組'], ['ai', aiUnlocked(context) ? 'AI 設定' : 'AI 驗證', aiUnlocked(context) ? ButtonStyle.Secondary : ButtonStyle.Primary]])
     )
     .addSeparatorComponents(v2Divider())
     .addTextDisplayComponents(v2Text('## OPERATIONS | 管理工具\n查看伺服器與核心狀態，或執行會影響伺服器的公開管理工作。'))
@@ -703,13 +792,41 @@ function renderSelfRole(context) {
 function renderReaction(context) {
   const roles = getReactionRolesByGuild(context.guild.id);
   const stationIds = [...new Set(roles.map((item) => item.message_id))];
-  const summary = stationIds.length ? `王國目前共有 ${stationIds.length} 個站點、${roles.length} 組配對。` : '尚未建立皇家反應身分站。';
-  const panel = modulePanel(context, '反應身分組', `${summary}\n建立站點需先選擇頻道，再填寫 emoji 與身分組配對。`)
+  const summary = stationIds.length ? `王國目前共有 ${stationIds.length} 個按鈕站點、${roles.length} 組配對。` : '尚未建立皇家按鈕身分站。';
+  const selectedRole = context.pending.reactionRole ? context.guild.roles.cache.get(context.pending.reactionRole) : null;
+  const pendingPairs = Array.isArray(context.pending.reactionPairs) ? context.pending.reactionPairs : [];
+  const pendingText = pendingPairs.length
+    ? pendingPairs.map((pair) => {
+        const emojiPart = pair.emoji ? pair.emoji : '';
+        const labelPart = pair.label || pair.role.name;
+        const display = emojiPart && labelPart ? `${emojiPart} ${labelPart}` : (emojiPart || labelPart);
+        return `- [${display}] -> <@&${pair.role.id}>`;
+      }).join('\n')
+    : '尚未新增配對';
+  const setupText = [
+    summary,
+    '建立站點需先選擇頻道，再選身分組並新增按鈕配對（支援 Emoji、文字或兩者）。',
+    `選取身分組：${selectedRole ? `<@&${selectedRole.id}>` : '尚未選擇'}`,
+    `站點標題：${context.pending.reactionTitle || '預設標題'}`,
+    `暫存配對：\n${pendingText}`,
+  ].join('\n');
+  const panel = modulePanel(context, '按鈕身分組', setupText)
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder().setCustomId(id(context, 'reaction_channel')).setPlaceholder('選擇新站點頻道').addChannelTypes(ChannelType.GuildText)
     ))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new RoleSelectMenuBuilder().setCustomId(id(context, 'reaction_role')).setPlaceholder('選擇要給予/移除的身分組')
+    ))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(id(context, 'reaction_emoji'))
+        .setPlaceholder('選擇 emoji（選取後自動新增配對）')
+        .addOptions(buildReactionEmojiOptions(context.guild))
+    ))
     .addActionRowComponents(actionButtons(context, [
-      ['modal:reaction_create', '填寫新站點', ButtonStyle.Primary],
+      ['modal:reaction_pair_add', '手動輸入按鈕內容', ButtonStyle.Secondary],
+      ['modal:reaction_title', '設定標題', ButtonStyle.Secondary],
+      ['reaction_clear_pairs', '清除配對', ButtonStyle.Secondary],
       ['prepare_confirm:reaction_create', '發布新站點', ButtonStyle.Danger],
     ]));
   if (stationIds.length) {
@@ -981,8 +1098,8 @@ async function renderMemberLookup(context) {
 function renderConfirm(context) {
   const labels = {
     self_publish: `將在 ${context.pending.selfPublishChannel ? `<#${context.pending.selfPublishChannel}>` : '選取的頻道'} 張貼新的皇家自助身分領取佈告。`,
-    reaction_create: `將在 ${context.pending.reactionChannel ? `<#${context.pending.reactionChannel}>` : '選取的頻道'} 建立新的皇家反應身分站。`,
-    reaction_delete: `將撤除皇家反應身分站公開訊息 \`${context.pending.reactionDeleteMessage || '尚未選取'}\` 與其設定。`,
+    reaction_create: `將在 ${context.pending.reactionChannel ? `<#${context.pending.reactionChannel}>` : '選取的頻道'} 建立新的皇家按鈕身分站。`,
+    reaction_delete: `將撤除皇家按鈕身分站公開訊息 \`${context.pending.reactionDeleteMessage || '尚未選取'}\` 與其設定。`,
     steam_publish: '將立即在已設定的推播頻道頒布 Steam 皇家特價榜聖旨。',
     steam_free_publish: '將立即在已設定的限時免費頻道頒布 Steam 限時免費御賜聖旨。',
     ai_party: `將在 ${context.pending.aiPartyChannel ? `<#${context.pending.aiPartyChannel}>` : '選取頻道'} 啟動 AI 派對模式並公開發送通知。`,
@@ -1123,21 +1240,211 @@ function getSelfRoles(guildId) {
   return normalizeSelfRoleSettings(getGuildSettings(guildId).selfrole_roles);
 }
 
+function extractEmojiAndLabel(text) {
+  text = String(text ?? '').trim();
+  if (!text) return { emoji: null, label: null };
+
+  // 1. Custom emoji mention: <:royal:123456789012345678> or <a:royal:123456789012345678>
+  const customMentionMatch = text.match(/^(<a?:[A-Za-z0-9_]+:\d{17,20}>)(.*)$/);
+  if (customMentionMatch) {
+    return { emoji: customMentionMatch[1], label: customMentionMatch[2].trim() || null };
+  }
+
+  // 2. Custom emoji identifier: a:royal:123456789012345678 or royal:123456789012345678
+  const customIdentifierMatch = text.match(/^(a?:?[A-Za-z0-9_]+:\d{17,20})(.*)$/);
+  if (customIdentifierMatch) {
+    return { emoji: customIdentifierMatch[1], label: customIdentifierMatch[2].trim() || null };
+  }
+
+  // 3. Custom emoji ID: 123456789012345678
+  const customIdMatch = text.match(/^(\d{17,20})(.*)$/);
+  if (customIdMatch) {
+    return { emoji: customIdMatch[1], label: customIdMatch[2].trim() || null };
+  }
+
+  // 4. Unicode emoji at the start (using \p{Extended_Pictographic} to match only pictographic emojis)
+  const unicodeEmojiMatch = text.match(/^(\p{Extended_Pictographic})(.*)$/u);
+  if (unicodeEmojiMatch) {
+    return { emoji: unicodeEmojiMatch[1], label: unicodeEmojiMatch[2].trim() || null };
+  }
+
+  // 5. No emoji found, the entire text is the label
+  return { emoji: null, label: text };
+}
+
 function parseReactionPairs(guild, source) {
   const pairs = [];
-  for (const entry of String(source).split(',').map((part) => part.trim()).filter(Boolean)) {
-    const separator = entry.lastIndexOf(':');
-    if (separator <= 0) return { error: `格式錯誤：\`${entry}\`，請使用 \`emoji:身分組ID\`。` };
-    const emoji = entry.slice(0, separator).trim();
-    const role = guild.roles.cache.get(entry.slice(separator + 1).trim());
-    if (!role) return { error: `找不到身分組：\`${entry.slice(separator + 1).trim()}\`。` };
+  for (const entry of splitReactionPairEntries(source)) {
+    const parsed = parseReactionPairEntry(entry);
+    if (parsed.error) return parsed;
+    const { buttonSpec, roleRef } = parsed;
+    const { emoji, label } = extractEmojiAndLabel(buttonSpec);
+
+    let normalizedEmoji = null;
+    if (emoji) {
+      const emojiValidation = normalizeReactionEmojiInput(guild, emoji);
+      if (emojiValidation.error) return { error: emojiValidation.error };
+      normalizedEmoji = emojiValidation.emoji;
+    }
+
+    const role = resolveRoleReference(guild, roleRef);
+    if (!role) return { error: `找不到身分組：\`${roleRef}\`。可以貼上 @身分組、身分組名稱或 ID。` };
     const invalid = validateAssignableRole(guild, role);
     if (invalid) return { error: `${role.name}：${invalid}` };
-    pairs.push({ emoji, role });
+
+    const finalLabel = label || null;
+    pairs.push({ emoji: normalizedEmoji, label: finalLabel, role });
   }
-  if (!pairs.length) return { error: '至少需要一組 emoji 與身分組配對。' };
-  if (pairs.length > 20) return { error: '皇家反應身分站最多只能建立 20 組配對。' };
+  if (!pairs.length) return { error: '至少需要一組按鈕設定與身分組配對。' };
+  if (pairs.length > 20) return { error: '皇家按鈕身分站最多只能建立 20 組配對。' };
   return { pairs };
+}
+
+function addPendingReactionPair(currentPairs, pair) {
+  const pairs = Array.isArray(currentPairs) ? currentPairs : [];
+  const nextPairs = pairs.filter((item) => item.role.id !== pair.role.id);
+  if (nextPairs.length >= 20) throw new Error('皇家按鈕身分站最多只能建立 20 組配對。');
+  return [...nextPairs, pair];
+}
+
+function tryAddReactionPair(context, emojiInput) {
+  if (!context.pending.reactionRole) {
+    return { title: '🎭 尚未選擇身分組', message: '請先從按鈕身分組頁面的選單挑選要綁定的身分組。' };
+  }
+  const role = context.guild.roles.cache.get(context.pending.reactionRole);
+  const invalid = validateAssignableRole(context.guild, role);
+  if (invalid) return { title: '🎭 無法加入按鈕配對', message: invalid };
+  if (!emojiInput) return { title: '🎭 尚未填寫內容', message: '請填入按鈕的 emoji 或文字。' };
+
+  const { emoji, label } = extractEmojiAndLabel(emojiInput);
+
+  let normalizedEmoji = null;
+  if (emoji) {
+    const emojiValidation = normalizeReactionEmojiInput(context.guild, emoji);
+    if (emojiValidation.error) return { title: '🎭 emoji 無法使用', message: emojiValidation.error };
+    normalizedEmoji = emojiValidation.emoji;
+  }
+
+  const finalLabel = label || null;
+  const currentPairs = Array.isArray(context.pending.reactionPairs) ? context.pending.reactionPairs : [];
+  const willReplace = currentPairs.some(
+    (item) => item.role.id === role.id || (item.emoji === normalizedEmoji && item.label === finalLabel)
+  );
+  if (!willReplace && currentPairs.length >= 20) {
+    return { title: '🎭 配對數量已滿', message: '皇家按鈕身分站最多只能建立 20 組配對。' };
+  }
+
+  context.pending.reactionPairs = addPendingReactionPair(context.pending.reactionPairs, {
+    emoji: normalizedEmoji,
+    label: finalLabel,
+    role
+  });
+
+  const emojiPart = normalizedEmoji ? normalizedEmoji : '';
+  const labelPart = finalLabel || role.name;
+  const display = emojiPart && labelPart ? `${emojiPart} ${labelPart}` : (emojiPart || labelPart);
+  context.notice = `按鈕配對已新增：[${display}] -> ${role.name}`;
+  return null;
+}
+
+function buildReactionEmojiOptions(guild) {
+  const guildEmojis = [...guild.emojis.cache.values()].slice(0, 20).map((e) => ({
+    label: e.name,
+    value: `guild:${e.id}`,
+    emoji: { id: e.id, name: e.name, animated: e.animated },
+  }));
+  const remaining = 25 - guildEmojis.length;
+  const common = COMMON_REACTION_EMOJIS.slice(0, Math.max(remaining, 2)).map((e) => ({
+    label: e.label,
+    value: `common:${e.char}`,
+    emoji: { name: e.char },
+  }));
+  return [...guildEmojis, ...common].slice(0, 25);
+}
+
+function normalizeReactionEmojiInput(guild, rawEmoji) {
+  const emoji = String(rawEmoji ?? '').trim();
+  const custom = parseCustomEmojiReference(emoji);
+  if (!custom) {
+    // 純文字輸入：嘗試從伺服器自訂 emoji 名稱查找（不區分大小寫）
+    const byName = findInCache(guild.emojis?.cache, (e) => e.name?.toLowerCase() === emoji.toLowerCase());
+    if (byName) {
+      return { emoji: byName.identifier || `${byName.name}:${byName.id}` };
+    }
+    return { emoji };
+  }
+
+  const guildEmoji = guild.emojis?.cache?.get(custom.id);
+  if (!guildEmoji) {
+    return {
+      error: `自訂 emoji \`${emoji}\` 不在這個伺服器，機器人無法把它放到按鈕上。請改用本伺服器的自訂 emoji、一般 Unicode emoji（如 🎮），或直接輸入伺服器 emoji 名稱（如 \`sword\`）。`,
+    };
+  }
+
+  return { emoji: guildEmoji.identifier || `${guildEmoji.name}:${guildEmoji.id}` };
+}
+
+function parseCustomEmojiReference(value) {
+  const text = String(value ?? '').trim();
+  const mention = text.match(CUSTOM_EMOJI_PATTERN);
+  if (mention) return { name: mention[1], id: mention[2] };
+
+  // 動畫 emoji identifier: a:name:id
+  const animated = text.match(/^a:([A-Za-z0-9_]+):(\d{17,20})$/);
+  if (animated) return { name: animated[1], id: animated[2] };
+
+  const identifier = text.match(CUSTOM_EMOJI_IDENTIFIER_PATTERN);
+  if (identifier) return { name: identifier[1], id: identifier[2] };
+
+  if (DISCORD_ID_PATTERN.test(text)) return { id: text };
+  return null;
+}
+
+function splitReactionPairEntries(source) {
+  return String(source)
+    .split(/[,\n]+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+}
+
+function parseReactionPairEntry(entry) {
+  entry = String(entry ?? '').trim();
+  const separator = Math.max(entry.lastIndexOf(':'), entry.lastIndexOf('：'));
+  if (separator > 0) {
+    const buttonSpec = entry.slice(0, separator).trim();
+    const roleRef = entry.slice(separator + 1).trim();
+    if (buttonSpec && roleRef) return { buttonSpec, roleRef };
+  }
+
+  // No colon: try to extract emoji and label/roleRef
+  const { emoji, label } = extractEmojiAndLabel(entry);
+  if (emoji && label) {
+    return { buttonSpec: emoji, roleRef: label };
+  }
+
+  return { buttonSpec: entry, roleRef: entry };
+}
+
+function resolveRoleReference(guild, roleRef) {
+  const reference = String(roleRef ?? '').trim();
+  const id = reference.match(/^<@&(\d{17,20})>$/)?.[1] || (/^\d{17,20}$/.test(reference) ? reference : null);
+  if (id) return guild.roles.cache.get(id);
+
+  const roleName = reference.replace(/^@/, '').trim().toLocaleLowerCase('zh-TW');
+  return [...guild.roles.cache.values()]
+    .find((role) => role.name?.toLocaleLowerCase('zh-TW') === roleName);
+}
+
+function validateReactionStationChannel(guild, channel) {
+  const permissions = channel.permissionsFor?.(guild.members.me);
+  if (!permissions) return '本王無法檢查此頻道權限，請確認機器人看得到該頻道。';
+
+  const missing = [
+    [PermissionFlagsBits.ViewChannel, '查看頻道'],
+    [PermissionFlagsBits.SendMessages, '傳送訊息'],
+  ].filter(([permission]) => !permissions.has(permission)).map(([, label]) => label);
+
+  return missing.length ? `請在該頻道補上機器人權限：${missing.join('、')}。` : null;
 }
 
 function buildSelfRoleMenuPayload(guild, roles, description) {
@@ -1161,23 +1468,81 @@ async function publishSelfRoleMenu(guild, channel, roles, description) {
 }
 
 async function createReactionStation(guild, channel, pairs, title) {
-  const text = pairs.map(({ emoji, role }) => `${emoji} -> <@&${role.id}>`).join('\n');
-  const message = await channel.send(v2Payload([basePanel(title || '皇家反應身分站', `子民點擊反應即可領取或交還身分組。\n\n${text}`)]));
+  const payload = buildButtonRoleStationPayload(guild, pairs, title);
+  const message = await channel.send(payload);
+
   try {
-    for (const { emoji, role } of pairs) {
-      await message.react(emoji);
-      addReactionRole(guild.id, channel.id, message.id, emoji, role.id);
+    for (const { emoji, label, role } of pairs) {
+      addReactionRole(guild.id, channel.id, message.id, emoji || null, label || null, role.id);
     }
   } catch (error) {
     deleteReactionRolesByMessage(message.id);
     await message.delete().catch(() => {});
-    throw new Error('本王無法建立皇家反應站，請確認 emoji 可供機器人使用。', { cause: error });
+    throw error;
   }
+}
+
+function buildButtonRoleStationPayload(guild, pairs, title) {
+  const rows = [];
+  let currentRow = new ActionRowBuilder();
+
+  for (let i = 0; i < pairs.length; i++) {
+    const { emoji, label, role } = pairs[i];
+    const button = new ButtonBuilder()
+      .setCustomId(`buttonrole:${role.id}`)
+      .setStyle(ButtonStyle.Secondary);
+
+    if (label) {
+      button.setLabel(label);
+    } else if (!emoji) {
+      button.setLabel(role.name);
+    }
+
+    if (emoji) {
+      button.setEmoji(resolveReactableEmoji(guild, emoji));
+    }
+
+    currentRow.addComponents(button);
+
+    if ((i + 1) % 5 === 0 || i === pairs.length - 1) {
+      rows.push(currentRow);
+      currentRow = new ActionRowBuilder();
+    }
+  }
+
+  const payload = v2Payload([
+    basePanel(title || '皇家按鈕身分站', '子民點擊下方按鈕即可領取或交還對應的身分組。')
+  ]);
+  payload.components.push(...rows);
+  return payload;
+}
+
+function resolveReactableEmoji(guild, emoji) {
+  const custom = parseCustomEmojiReference(emoji);
+  if (custom) {
+    const cached = guild.emojis?.cache?.get(custom.id);
+    if (cached) return cached;
+  }
+  // Fallback：用 identifier 全文比對搜尋（處理邊緣情況）
+  const byIdentifier = findInCache(guild.emojis?.cache, (e) => e.identifier === emoji);
+  if (byIdentifier) return byIdentifier;
+  return emoji;
+}
+
+function findInCache(cache, predicate) {
+  if (!cache) return null;
+  if (typeof cache.find === 'function') return cache.find(predicate);
+  return [...cache.values()].find(predicate) || null;
+}
+
+function getReactionEmojiFailureMessage(emoji, error) {
+  const reason = error?.rawError?.message || error?.message || 'Discord 拒絕使用此 emoji';
+  return `本王無法把 \`${emoji}\` 放到按鈕上：${reason}。請確認這是本伺服器可用的 emoji。`;
 }
 
 async function deleteReactionStation(guild, messageId) {
   const entry = getReactionRolesByGuild(guild.id).find((item) => item.message_id === messageId);
-  if (!entry) throw new Error('找不到選取的皇家反應身分站。');
+  if (!entry) throw new Error('找不到選取的皇家按鈕身分站。');
   const channel = await guild.channels.fetch(entry.channel_id).catch(() => null);
   if (channel?.isTextBased()) {
     const message = await channel.messages.fetch(messageId).catch(() => null);
@@ -1227,6 +1592,7 @@ export const settingsViewTesting = {
   renderWelcome,
   renderSteam,
   renderSelfRole,
+  renderReaction,
   renderAi,
   renderServerInfo,
   renderBotStatus,
@@ -1235,8 +1601,13 @@ export const settingsViewTesting = {
   renderConfirm,
   id,
   parseSettingsCustomId,
+  actionValue,
+  confirmationReturnView,
   buildModal,
   openModal,
+  parseReactionPairs,
+  buildButtonRoleStationPayload,
   closePanel,
   buildSelfRoleMenuPayload,
+  extractEmojiAndLabel,
 };

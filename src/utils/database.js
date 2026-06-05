@@ -76,6 +76,7 @@ export function initDatabase() {
       channel_id TEXT,
       message_id TEXT,
       emoji TEXT,
+      label TEXT,
       role_id TEXT
     );
 
@@ -104,6 +105,12 @@ export function initDatabase() {
       created_at INTEGER
     );
   `);
+
+  try {
+    db.prepare('ALTER TABLE reaction_roles ADD COLUMN label TEXT').run();
+  } catch (err) {
+    // Ignore error if column already exists
+  }
 
   // === 索引 (加速 leaderboard 等查詢) ===
   db.exec(`
@@ -275,12 +282,12 @@ export function getLeaderboard(guildId, limit = 10) {
   ).all(guildId, limit);
 }
 
-// 反應身份組
-export function addReactionRole(guildId, channelId, messageId, emoji, roleId) {
+// 按鈕身份組
+export function addReactionRole(guildId, channelId, messageId, emoji, label, roleId) {
   const db = getDb();
   db.prepare(
-    'INSERT INTO reaction_roles (guild_id, channel_id, message_id, emoji, role_id) VALUES (?, ?, ?, ?, ?)'
-  ).run(guildId, channelId, messageId, emoji, roleId);
+    'INSERT INTO reaction_roles (guild_id, channel_id, message_id, emoji, label, role_id) VALUES (?, ?, ?, ?, ?, ?)'
+  ).run(guildId, channelId, messageId, emoji, label, roleId);
 }
 
 export function getReactionRoleByMessage(messageId, emoji) {
@@ -295,6 +302,13 @@ export function getReactionRolesByGuild(guildId) {
   return db.prepare(
     'SELECT * FROM reaction_roles WHERE guild_id = ? ORDER BY message_id'
   ).all(guildId);
+}
+
+export function getButtonRoleByMessageAndRole(messageId, roleId) {
+  const db = getDb();
+  return db.prepare(
+    'SELECT * FROM reaction_roles WHERE message_id = ? AND role_id = ?'
+  ).get(messageId, roleId);
 }
 
 export function deleteReactionRolesByMessage(messageId) {

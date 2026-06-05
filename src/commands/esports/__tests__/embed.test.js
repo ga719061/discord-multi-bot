@@ -17,12 +17,21 @@ function serializedCard(payload) {
 async function mockAssetFetch(url) {
   const href = String(url);
   if (href.includes('valorant-api.com/v1/agents')) {
+    if (href.includes('language=zh-TW')) {
+      return jsonResponse({ data: [{ uuid: 'agent-jett', displayName: '婕提' }] });
+    }
     return jsonResponse({ data: [{ uuid: 'agent-jett', displayName: 'Jett', displayIcon: 'https://assets.test/jett.png' }] });
   }
   if (href.includes('valorant-api.com/v1/weapons')) {
+    if (href.includes('language=zh-TW')) {
+      return jsonResponse({ data: [{ uuid: 'weapon-vandal', displayName: '暴徒' }] });
+    }
     return jsonResponse({ data: [{ uuid: 'weapon-vandal', displayName: 'Vandal', displayIcon: 'https://assets.test/vandal.png' }] });
   }
   if (href.includes('valorant-api.com/v1/maps')) {
+    if (href.includes('language=zh-TW')) {
+      return jsonResponse({ data: [{ uuid: 'map-split', displayName: '雙塔迷城' }] });
+    }
     return jsonResponse({ data: [{ uuid: 'map-split', displayName: 'Split', splash: 'https://assets.test/split.png' }] });
   }
   if (href.includes('ddragon.leagueoflegends.com/api/versions.json')) {
@@ -30,6 +39,9 @@ async function mockAssetFetch(url) {
   }
   if (href.includes('ddragon.leagueoflegends.com/cdn/15.1.1/data/en_US/champion.json')) {
     return jsonResponse({ data: { Aurora: { id: 'Aurora', name: 'Aurora', image: { full: 'Aurora.png' } } } });
+  }
+  if (href.includes('ddragon.leagueoflegends.com/cdn/15.1.1/data/zh_TW/champion.json')) {
+    return jsonResponse({ data: { Aurora: { id: 'Aurora', name: '歐羅拉', image: { full: 'Aurora.png' } } } });
   }
   return new Response(tinyPng, { status: 200, headers: { 'content-type': 'image/png' } });
 }
@@ -83,11 +95,24 @@ test('buildStatsReply creates a Valorant image card with attachment and source a
   assert.match(card, /op\.gg\/valorant/);
   assert.equal(payload.files[0].name, 'stats-card.png');
   assert.equal((svg.match(/data-icon=/g) || []).length >= 6, true);
+  assert.match(svg, /data-role="stats-background"/);
+  assert.match(svg, /data-region="card-header"/);
+  assert.match(svg, /data-region="identity-card"/);
+  assert.match(svg, /data-region="metric-dock"/);
+  assert.match(svg, /data-region="detail-sections"/);
+  assert.match(svg, /data-panel="stats-section"/);
   assert.match(svg, /<image href="data:image\/png;base64/);
   assert.match(svg, /data-image-layout="wide"/);
+  assert.match(svg, /clip-path="url\(#identityAvatarClip-valorant\)"/);
+  assert.match(svg, /x="76" y="222" width="132" height="132" preserveAspectRatio="xMidYMid slice"/);
+  assert.match(svg, /x="88" y="519" width="44" height="44" preserveAspectRatio="xMidYMid slice"/);
+  assert.match(svg, /x="538" y="521" width="88" height="40" preserveAspectRatio="xMidYMid meet"/);
   assert.match(svg, /preserveAspectRatio="xMidYMid meet"/);
   assert.match(svg, /皇家戰報/);
   assert.match(svg, /VALORANT/);
+  assert.match(svg, /婕提/);
+  assert.match(svg, /暴徒/);
+  assert.match(svg, /雙塔迷城/);
   assert.match(svg, /常用特務/);
   assert.match(svg, /武器表現/);
   assert.match(svg, /地圖勝率/);
@@ -122,6 +147,32 @@ test('buildStatsReply labels a ValoCheck fallback and links the actual source', 
   assert.match(card, /attachment:\/\/stats-card\.png/);
   assert.match(card, /www\.valocheck\.com/);
   assert.match(svg, /ValoCheck fallback/);
+});
+
+test('stats image keeps English row names when localized metadata is unavailable', async () => {
+  const fetchImpl = async (url) => (
+    String(url).includes('language=zh-TW')
+      ? new Response('', { status: 404 })
+      : mockAssetFetch(url)
+  );
+  const result = {
+    game: 'valorant',
+    status: 'ok',
+    source: 'OP.GG',
+    sourceUrl: 'https://op.gg/valorant/profile/test',
+    stats: {
+      playerId: 'test#TW2',
+      rank: 'Unranked',
+      topAgents: [{ id: 'agent-jett', name: 'Jett', games: '3', winRate: '66.7%' }],
+      weapons: [{ id: 'weapon-vandal', name: 'Vandal', kills: '42', headshot: '25.0%' }],
+      maps: [{ id: 'map-split', name: 'Split', record: '2勝 0和 1敗', winRate: '66.7%' }],
+    },
+  };
+  const svg = buildStatsSvg(result, await resolveStatsAssets(result, { fetchImpl }));
+
+  assert.match(svg, />Jett</);
+  assert.match(svg, />Vandal</);
+  assert.match(svg, />Split</);
 });
 
 test('buildStatsReply creates a fallback card when a source is blocked', async () => {
@@ -225,8 +276,13 @@ test('buildStatsReply includes League image theme and champion sections', async 
   const svg = buildStatsSvg(result, assets);
 
   assert.match(card, /attachment:\/\/stats-card\.png/);
+  assert.match(svg, /data-role="stats-background"/);
+  assert.match(svg, /data-region="identity-card"/);
+  assert.match(svg, /data-region="metric-dock"/);
+  assert.match(svg, /data-panel="stats-section"/);
   assert.match(svg, /<image href="data:image\/png;base64/);
   assert.match(svg, /LEAGUE OF LEGENDS/);
+  assert.match(svg, /歐羅拉/);
   assert.match(svg, /峽谷榮耀/);
   assert.match(svg, /常用英雄/);
   assert.match(svg, /單雙 \/ 彈性牌位/);
@@ -306,7 +362,7 @@ test('renderer fetches only needed Valorant asset indexes and keeps weapon thumb
   assert.equal(calls.some((call) => call.includes('/v1/agents')), false);
   assert.equal(calls.some((call) => call.includes('/v1/maps')), false);
   assert.match(svg, /data-image-layout="wide"/);
-  assert.match(svg, /width="90" height="42" preserveAspectRatio="xMidYMid meet"/);
+  assert.match(svg, /x="538" y="521" width="88" height="40" preserveAspectRatio="xMidYMid meet"/);
 });
 
 test('renderer keeps long League names, ranks and KDA values from colliding', async () => {

@@ -84,21 +84,21 @@ export function buildGuildDiagnostics({
   const missingReactionChannel = reactionChannelIds.some((id) => !availableChannelIds.has(id));
   if (missingReactionChannel) {
     diagnostics.push({
-      label: '反應身分組',
+      label: '按鈕身分組',
       status: '設定異常',
-      detail: '反應身分組使用的頻道已不存在',
-      fix: '在 `/設定` 的「反應身分組」頁檢查並刪除失效設定。',
+      detail: '按鈕身分組使用的頻道已不存在',
+      fix: '在 `/設定` 的「按鈕身分組」頁檢查並刪除失效設定。',
     });
   } else if (reactionRoles.length === 0) {
     diagnostics.push({
-      label: '反應身分組',
+      label: '按鈕身分組',
       status: '未設定',
-      detail: '尚未建立反應站',
-      fix: '在 `/設定` 的「反應身分組」頁建立站點。',
+      detail: '尚未建立按鈕站',
+      fix: '在 `/設定` 的「按鈕身分組」頁建立站點。',
     });
   } else {
     diagnostics.push({
-      label: '反應身分組',
+      label: '按鈕身分組',
       status: '正常',
       detail: `已建立 ${reactionRoles.length} 組配對`,
       fix: null,

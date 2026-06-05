@@ -104,7 +104,7 @@ const CATEGORY_META = {
     roles: {
         label: '身分組',
         emoji: '🏷️',
-        description: '皇家自助身分領取與反應身分站設定。',
+        description: '皇家自助身分領取與按鈕身分站設定。',
         order: 90,
         group: 'admin',
         permission: PermissionFlagsBits.ManageRoles

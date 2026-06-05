@@ -1,9 +1,9 @@
 import 'dotenv/config';
 import dns from 'node:dns';
-import { Client, GatewayIntentBits, Collection, Partials, Events, EmbedBuilder, MessageFlags } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, Partials, Events, EmbedBuilder, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { loadCommands } from './handlers/commandHandler.js';
 import { loadEvents } from './handlers/eventHandler.js';
-import { initDatabase, getDb, updateGuildSetting, getGuildSettings } from './utils/database.js';
+import { initDatabase, getDb, updateGuildSetting, getGuildSettings, getButtonRoleByMessageAndRole } from './utils/database.js';
 import { logger } from './utils/logger.js';
 import { startHealthServer } from './utils/healthServer.js';
 import { startScheduledJobs } from './utils/scheduledJobs.js';
@@ -233,6 +233,72 @@ client.on(Events.InteractionCreate, async (interaction) => {
           pendingAnnouncements.delete(uuid);
           const completed = v2Notice('📜 公告已發布', `聖旨已正式張貼至 <#${draft.channelId}>。`, UI_COLORS.SUCCESS);
           return interaction.editReply(v2EditPayload(completed));
+        }
+      }
+
+      if (interaction.customId.startsWith('buttonrole:')) {
+        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+        const roleId = interaction.customId.split(':')[1];
+        const member = interaction.member;
+        const guild = interaction.guild;
+        if (!guild || !member) return;
+        const configured = getButtonRoleByMessageAndRole(interaction.message.id, roleId);
+        if (!configured) {
+          return interaction.editReply(v2EditPayload(v2Notice(
+            '🎭 按鈕身分組已失效',
+            '這顆按鈕已不在目前的按鈕身分站設定中，請聯絡管理員重新發布。',
+            UI_COLORS.WARNING
+          )));
+        }
+
+        const role = guild.roles.cache.get(roleId);
+        if (!role) {
+          return interaction.editReply(v2EditPayload(v2Notice(
+            '🎭 按鈕身分組失敗',
+            '此身分組可能已被伺服器刪除，請聯絡管理員重新發布按鈕身分站。',
+            UI_COLORS.WARNING
+          )));
+        }
+
+        const botMember = guild.members.me;
+        if (!botMember?.permissions.has(PermissionFlagsBits.ManageRoles)) {
+          return interaction.editReply(v2EditPayload(v2Notice(
+            '🎭 權限不足',
+            '本王缺少「管理身分組」權限，無法為你更新按鈕身分組。',
+            UI_COLORS.DANGER
+          )));
+        }
+        if (botMember.roles.highest.position <= role.position) {
+          return interaction.editReply(v2EditPayload(v2Notice(
+            '🎭 階級不足',
+            `本王的階級低於目標身分組 <@&${role.id}>，無法為你更新。`,
+            UI_COLORS.DANGER
+          )));
+        }
+
+        try {
+          if (member.roles.cache.has(roleId)) {
+            await member.roles.remove(roleId);
+            return interaction.editReply(v2EditPayload(v2Notice(
+              '🎭 按鈕身分組已變更',
+              `已成功為你收回身分組 <@&${role.id}>。`,
+              UI_COLORS.SUCCESS
+            )));
+          } else {
+            await member.roles.add(roleId);
+            return interaction.editReply(v2EditPayload(v2Notice(
+              '🎭 按鈕身分組已變更',
+              `已成功為你授予身分組 <@&${role.id}>。`,
+              UI_COLORS.SUCCESS
+            )));
+          }
+        } catch (err) {
+          logger.error('[ButtonRoles] Failed to toggle role:', err);
+          return interaction.editReply(v2EditPayload(v2Notice(
+            '🎭 登記失敗',
+            '本王無法更新你的按鈕身分組，請確認機器人擁有管理權限。',
+            UI_COLORS.DANGER
+          )));
         }
       }
     } catch (error) {

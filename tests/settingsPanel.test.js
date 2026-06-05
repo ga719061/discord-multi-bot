@@ -38,6 +38,142 @@ test('settings custom ids preserve the existing wire format and owner checks', (
   assert.equal(settingsViewTesting.parseSettingsCustomId(viewId, { userId: 'other' }), null);
 });
 
+test('settings action ids expose their target value for modals and confirmations', () => {
+  const context = { userId: 'admin' };
+  const modalParts = settingsViewTesting.parseSettingsCustomId(settingsViewTesting.id(context, 'modal:reaction_create'), context);
+  const confirmParts = settingsViewTesting.parseSettingsCustomId(settingsViewTesting.id(context, 'prepare_confirm:reaction_create'), context);
+
+  assert.equal(settingsViewTesting.actionValue(modalParts), 'reaction_create');
+  assert.equal(settingsViewTesting.actionValue(confirmParts), 'reaction_create');
+  assert.equal(settingsViewTesting.confirmationReturnView(settingsViewTesting.actionValue(confirmParts)), 'reaction');
+});
+
+test('reaction role pairs accept role mentions, names, ids, commas, and new lines', () => {
+  const roles = [
+    { id: '111111111111111111', name: '遊戲玩家', managed: false, position: 1, permissions: { has: () => false } },
+    { id: '222222222222222222', name: 'Movie Night', managed: false, position: 1, permissions: { has: () => false } },
+    { id: '333333333333333333', name: '公告通知', managed: false, position: 1, permissions: { has: () => false } },
+  ];
+  const guild = {
+    id: 'guild',
+    roles: { cache: new Map(roles.map((role) => [role.id, role])) },
+    members: {
+      me: {
+        permissions: { has: () => true },
+        roles: { highest: { position: 10 } },
+      },
+    },
+  };
+
+  const result = settingsViewTesting.parseReactionPairs(
+    guild,
+    '🎮:@遊戲玩家\n🍿:Movie Night,📣:<@&333333333333333333>'
+  );
+
+  assert.equal(result.error, undefined);
+  assert.deepEqual(result.pairs.map((pair) => [pair.emoji, pair.role.id]), [
+    ['🎮', '111111111111111111'],
+    ['🍿', '222222222222222222'],
+    ['📣', '333333333333333333'],
+  ]);
+});
+
+test('reaction role pairs reject external custom emoji and normalize guild emoji', () => {
+  const role = { id: '111111111111111111', name: '遊戲玩家', managed: false, position: 1, permissions: { has: () => false } };
+  const guildEmoji = { id: '444444444444444444', name: 'royal', identifier: 'royal:444444444444444444' };
+  const emojisCache1 = new Map([[guildEmoji.id, guildEmoji]]);
+  emojisCache1.find = (fn) => [...emojisCache1.values()].find(fn);
+  const guild = {
+    id: 'guild',
+    roles: { cache: new Map([[role.id, role]]) },
+    emojis: { cache: emojisCache1 },
+    members: {
+      me: {
+        permissions: { has: () => true },
+        roles: { highest: { position: 10 } },
+      },
+    },
+  };
+
+  const accepted = settingsViewTesting.parseReactionPairs(guild, '<:royal:444444444444444444>:@遊戲玩家');
+  const rejected = settingsViewTesting.parseReactionPairs(guild, '<:other:555555555555555555>:@遊戲玩家');
+
+  assert.equal(accepted.error, undefined);
+  assert.equal(accepted.pairs[0].emoji, guildEmoji.identifier);
+  assert.match(rejected.error, /不在這個伺服器/);
+});
+
+test('reaction-role panel supports selected role plus emoji pair building', async () => {
+  initDatabase();
+  const role = { id: '111111111111111111', name: '遊戲玩家', managed: false, position: 1, permissions: { has: () => false } };
+  const emojisCache2 = new Map();
+  emojisCache2.find = (fn) => [...emojisCache2.values()].find(fn);
+  const guild = {
+    id: `settings-reaction-builder-${process.pid}`,
+    roles: { cache: new Map([[role.id, role]]) },
+    emojis: { cache: emojisCache2 },
+    members: {
+      me: {
+        permissions: { has: () => true },
+        roles: { highest: { position: 10 } },
+      },
+    },
+  };
+  const context = {
+    userId: 'admin',
+    guild,
+    view: 'reaction',
+    pending: { reactionRole: role.id },
+    notice: null,
+  };
+  const panelText = JSON.stringify(settingsViewTesting.renderReaction(context).components[0].toJSON());
+
+  assert.match(panelText, /reaction_role/);
+  assert.match(panelText, /reaction_pair_add/);
+
+  await settingsViewTesting.openModal({
+    showModal: async () => {},
+    awaitModalSubmit: async () => ({
+      user: { id: 'admin' },
+      memberPermissions: { has: () => true },
+      fields: { getTextInputValue: () => '🎮' },
+      update: async () => {},
+    }),
+  }, context, 'reaction_pair_add');
+
+  assert.deepEqual(context.pending.reactionPairs.map((pair) => [pair.emoji, pair.role.id]), [
+    ['🎮', role.id],
+  ]);
+});
+
+test('button-role station renders emoji-only, text-only, and emoji-with-text buttons', () => {
+  const roles = [
+    { id: '111111111111111111', name: '遊戲玩家' },
+    { id: '222222222222222222', name: '公告通知' },
+    { id: '333333333333333333', name: '活動通知' },
+  ];
+  const guild = {
+    emojis: { cache: new Map() },
+  };
+
+  const payload = settingsViewTesting.buildButtonRoleStationPayload(guild, [
+    { emoji: '🎮', label: null, role: roles[0] },
+    { emoji: null, label: '公告通知', role: roles[1] },
+    { emoji: '📣', label: '活動通知', role: roles[2] },
+  ], '測試站');
+  const buttons = payload.components
+    .map((component) => component.toJSON?.() || component)
+    .filter((component) => component.type === 1)
+    .flatMap((row) => row.components);
+
+  assert.equal(buttons[0].emoji.name, '🎮');
+  assert.equal(buttons[0].label, undefined);
+  assert.equal(buttons[1].label, '公告通知');
+  assert.equal(buttons[1].emoji, undefined);
+  assert.equal(buttons[2].emoji.name, '📣');
+  assert.equal(buttons[2].label, '活動通知');
+});
+
 test('self-role settings normalize legacy string entries and preserve requirements', () => {
   assert.deepEqual(normalizeSelfRoleSettings('["role-a"]'), [{ id: 'role-a', requirement: null }]);
   assert.deepEqual(

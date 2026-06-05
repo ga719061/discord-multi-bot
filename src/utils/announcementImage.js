@@ -10,6 +10,7 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BACKGROUND_PATH = path.join(__dirname, '..', '..', 'assets', 'announcement', 'scroll-background.png');
+const SEAL_PATH = path.join(__dirname, '..', '..', 'assets', 'announcement', 'king-seal.png');
 const WIDTH = 1080;
 const HEIGHT = 1600;
 const FILENAME = 'announcement-scroll.png';
@@ -28,12 +29,20 @@ export async function renderAnnouncementScrollImage({
   date = new Date(),
   backgroundPath = BACKGROUND_PATH,
 } = {}) {
-  const background = await imageFileToDataUri(backgroundPath, {
-    width: WIDTH,
-    height: HEIGHT,
-    fit: 'cover',
-    withoutEnlargement: false,
-  });
+  const [background, sealImage] = await Promise.all([
+    imageFileToDataUri(backgroundPath, {
+      width: WIDTH,
+      height: HEIGHT,
+      fit: 'cover',
+      withoutEnlargement: false,
+    }),
+    imageFileToDataUri(SEAL_PATH, {
+      width: 220,
+      height: 220,
+      fit: 'contain',
+      withoutEnlargement: false,
+    }),
+  ]);
   const svg = buildAnnouncementScrollSvg({
     title,
     content,
@@ -41,12 +50,13 @@ export async function renderAnnouncementScrollImage({
     mentionLabel,
     dateLabel: formatTaiwanDate(date),
     background,
+    sealImage,
   });
 
   return svgToPngAttachment(svg, FILENAME);
 }
 
-function buildAnnouncementScrollSvg({ title, content, footer, mentionLabel, dateLabel, background }) {
+function buildAnnouncementScrollSvg({ title, content, footer, mentionLabel, dateLabel, background, sealImage }) {
   const titleLines = wrapText(title || '王國公告', 13, 2);
   const normalizedContent = normalizeAnnouncementText(content || '公告內容');
   const longContent = [...normalizedContent].length > 360;
@@ -134,7 +144,7 @@ function buildAnnouncementScrollSvg({ title, content, footer, mentionLabel, date
     <g>
       <text x="292" y="1288" class="footer" fill="#5a2b0d">${escapeXml(footerText)}</text>
       <text x="292" y="1332" class="date" fill="#8b561f">${escapeXml(dateLabel)}</text>
-      ${seal()}
+      ${seal(sealImage)}
     </g>
   </g>
 </svg>`;
@@ -221,7 +231,14 @@ function faintCrests() {
     </g>`;
 }
 
-function seal() {
+function seal(sealImage) {
+  if (sealImage) {
+    return `
+    <g filter="url(#softShadow)">
+      <image href="${sealImage}" x="736" y="1194" width="192" height="192" preserveAspectRatio="xMidYMid meet"/>
+    </g>`;
+  }
+
   return `
     <g transform="translate(744 1202)" filter="url(#softShadow)">
       <circle cx="88" cy="88" r="78" fill="url(#sealInk)" opacity="0.94"/>

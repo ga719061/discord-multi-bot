@@ -13,7 +13,7 @@ test('daily image renderer returns a non-empty PNG attachment', async () => {
         displayName: '測試旅人',
         quote: '今天可以偷懶五分鐘，但不准偷懶一整天。汪。',
         luckyNum: 88,
-        luckyLabel: '✨ 皇家聖光',
+        luckyLabel: '皇家聖光',
         luckyStars: '★★★★★',
         date: '2026-06-02',
         avatarPath: missingAvatarPath,
@@ -30,7 +30,7 @@ test('fortune image renderer returns a non-empty PNG attachment', async () => {
     const card = await renderFortuneCardImage({
         displayName: '測試旅人',
         question: '今天適合打 ranked 嗎？',
-        fortune: '🐾 傲嬌大吉',
+        fortune: '傲嬌大吉',
         answer: '可以，但記得先喝水。連敗兩場就休息，本王不准你硬拚。',
         aura: 76,
         color: fortuneForAura(80).color,
@@ -90,16 +90,16 @@ test('daily card data uses Taiwan date boundaries', () => {
 });
 
 test('daily lucky labels match their configured ranges', () => {
-    assert.equal(luckyLabelFor(1), '🔋 電量警告');
-    assert.equal(luckyLabelFor(20), '🔋 電量警告');
-    assert.equal(luckyLabelFor(21), '🐢 慢速小步');
-    assert.equal(luckyLabelFor(40), '🐢 慢速小步');
-    assert.equal(luckyLabelFor(41), '🐾 尾巴平穩');
-    assert.equal(luckyLabelFor(60), '🐾 尾巴平穩');
-    assert.equal(luckyLabelFor(61), '↗️ 好運爆發');
-    assert.equal(luckyLabelFor(80), '↗️ 好運爆發');
-    assert.equal(luckyLabelFor(81), '✨ 皇家聖光');
-    assert.equal(luckyLabelFor(100), '✨ 皇家聖光');
+    assert.equal(luckyLabelFor(1), '電量警告');
+    assert.equal(luckyLabelFor(20), '電量警告');
+    assert.equal(luckyLabelFor(21), '慢速小步');
+    assert.equal(luckyLabelFor(40), '慢速小步');
+    assert.equal(luckyLabelFor(41), '尾巴平穩');
+    assert.equal(luckyLabelFor(60), '尾巴平穩');
+    assert.equal(luckyLabelFor(61), '好運爆發');
+    assert.equal(luckyLabelFor(80), '好運爆發');
+    assert.equal(luckyLabelFor(81), '皇家聖光');
+    assert.equal(luckyLabelFor(100), '皇家聖光');
 });
 
 test('daily lucky stars match their configured ranges', () => {
@@ -137,9 +137,9 @@ test('fortune card data with a question uses random rolls', () => {
     });
 
     assert.equal(data.question, '今天適合打 ranked 嗎？');
-    assert.equal(data.fortune, '🍖 順風中吉');
+    assert.equal(data.fortune, '順風中吉');
     assert.equal(data.aura, 76);
-    assert.equal(data.answer, '勇敢上吧！跨出那隻小爪子，就算只有前進一公分，也比坐在原地發呆有魔法！✨');
+    assert.equal(data.answer, '勇敢上吧！跨出那隻小爪子，就算只有前進一公分，也比坐在原地發呆有魔法！');
     assert.equal(data.answerLabel, '本王判決');
 });
 
@@ -157,24 +157,24 @@ test('fortune card data without a question is stable for the same user on the sa
 
 test('fortune aura ranges always match the displayed fortune', () => {
     const cases = [
-        [1, '💀 皇家大凶'],
-        [3, '💀 皇家大凶'],
-        [4, '🥩 急需牛排'],
-        [7, '🥩 急需牛排'],
-        [8, '💥 國王警告'],
-        [19, '💥 國王警告'],
-        [20, '🌀 爪子打結'],
-        [34, '🌀 爪子打結'],
-        [35, '☁️ 尾巴平穩'],
-        [49, '☁️ 尾巴平穩'],
-        [50, '☀️ 晴空小吉'],
-        [64, '☀️ 晴空小吉'],
-        [65, '🍖 順風中吉'],
-        [79, '🍖 順風中吉'],
-        [80, '🐾 傲嬌大吉'],
-        [94, '🐾 傲嬌大吉'],
-        [95, '✨ 皇家神蹟'],
-        [100, '✨ 皇家神蹟'],
+        [1, '皇家大凶'],
+        [3, '皇家大凶'],
+        [4, '急需牛排'],
+        [7, '急需牛排'],
+        [8, '國王警告'],
+        [19, '國王警告'],
+        [20, '爪子打結'],
+        [34, '爪子打結'],
+        [35, '尾巴平穩'],
+        [49, '尾巴平穩'],
+        [50, '晴空小吉'],
+        [64, '晴空小吉'],
+        [65, '順風中吉'],
+        [79, '順風中吉'],
+        [80, '傲嬌大吉'],
+        [94, '傲嬌大吉'],
+        [95, '皇家神蹟'],
+        [100, '皇家神蹟'],
     ];
 
     for (const [aura, fortune] of cases) {
@@ -187,10 +187,10 @@ test('fortune tiers use distinct colors and major bad luck wording', () => {
     const colors = new Set(cases.map((fortune) => fortune.color));
 
     assert.equal(colors.size, cases.length);
-    assert.equal(cases[0].luck, '💀 皇家大凶');
+    assert.equal(cases[0].luck, '皇家大凶');
     assert.match(cases[0].text, /史上最黑暗|浴缸|被窩/);
     assert.match(cases[0].answers.join('\n'), /先不要|No|乖乖躺下/);
-    assert.equal(cases[1].luck, '🥩 急需牛排');
+    assert.equal(cases[1].luck, '急需牛排');
     assert.doesNotMatch(cases[0].text, /需要點心|補充體力/);
 });
 
@@ -210,9 +210,9 @@ test('fortune question answers follow the rolled fortune tone', () => {
         })(),
     });
 
-    assert.equal(bad.fortune, '💀 皇家大凶');
+    assert.equal(bad.fortune, '皇家大凶');
     assert.match(bad.answer, /先不要|迷霧|按兵不動/);
-    assert.equal(great.fortune, '✨ 皇家神蹟');
+    assert.equal(great.fortune, '皇家神蹟');
     assert.match(great.answer, /本王覺得行|躺平|不准硬撐/);
 });
 

@@ -53,7 +53,7 @@ test('buildGuildDiagnostics identifies missing channels and AI environment setti
   assert.equal(byLabel(diagnostics, 'AI 設定').status, '設定異常');
   assert.equal(byLabel(diagnostics, '日誌記錄').status, '設定異常');
   assert.equal(byLabel(diagnostics, '環境變數').status, '設定異常');
-  assert.equal(byLabel(diagnostics, '反應身分組').status, '設定異常');
+  assert.equal(byLabel(diagnostics, '按鈕身分組').status, '設定異常');
   assert.equal(byLabel(diagnostics, 'Steam 特價推播').status, '設定異常');
   assert.equal(byLabel(diagnostics, 'Steam 限時免費推播').status, '設定異常');
 });
@@ -78,7 +78,7 @@ test('buildGuildDiagnostics distinguishes optional features that are not configu
   assert.equal(byLabel(diagnostics, '日誌記錄').status, '未設定');
   assert.equal(byLabel(diagnostics, '歡迎訊息').status, '未設定');
   assert.equal(byLabel(diagnostics, '自助身分組').status, '未設定');
-  assert.equal(byLabel(diagnostics, '反應身分組').status, '未設定');
+  assert.equal(byLabel(diagnostics, '按鈕身分組').status, '未設定');
   assert.equal(byLabel(diagnostics, 'Steam 特價推播').status, '未設定');
   assert.equal(byLabel(diagnostics, 'Steam 限時免費推播').status, '未設定');
 });
