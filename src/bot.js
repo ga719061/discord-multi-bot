@@ -3,19 +3,48 @@ import dns from 'node:dns';
 import { Client, GatewayIntentBits, Collection, Partials, Events, EmbedBuilder, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { loadCommands } from './handlers/commandHandler.js';
 import { loadEvents } from './handlers/eventHandler.js';
-import { initDatabase, getDb, updateGuildSetting, getGuildSettings, getButtonRoleByMessageAndRole } from './utils/database.js';
+import { initDatabase, getDb, updateGuildSetting, getGuildSettings, getButtonRoleByMessageAndRole, closeDatabaseForTests } from './utils/database.js';
 import { logger } from './utils/logger.js';
-import { startHealthServer } from './utils/healthServer.js';
-import { startScheduledJobs } from './utils/scheduledJobs.js';
+import { startHealthServer, stopHealthServer } from './utils/healthServer.js';
+import { startScheduledJobs, stopScheduledJobs } from './utils/scheduledJobs.js';
 import { normalizePollVotes, parseJsonArray } from './utils/jsonUtils.js';
 import { isV2Message, v2EditPayload, v2Notice } from './utils/componentsV2.js';
 import { UI_COLORS } from './utils/style.js';
 import { normalizeSelfRoleSettings } from './utils/roleSettings.js';
 import { buildPollPayload } from './commands/fun/poll.js';
-import { buildAnnouncementPayload, buildAnnouncementPreviewButtons, pendingAnnouncements } from './utils/announcementTools.js';
+import {
+  buildAnnouncementPayload,
+  buildAnnouncementPreviewButtons,
+  claimPendingAnnouncement,
+  pendingAnnouncements,
+  restorePendingAnnouncement,
+} from './utils/announcementTools.js';
 import { buildSteamDealDetailPayload, fetchSteamAppDetails, getSteamFailureMessage } from './utils/steamDeals.js';
+import { inviteCache } from './utils/inviteCache.js';
+import { AI_QA_SCOPE, handleAiQaAction, parseAiQaAction } from './utils/aiQaActions.js';
 
 dns.setDefaultResultOrder('ipv4first');
+
+async function handleInteractionError(interaction, error, contextMessage) {
+  logger.error(`${contextMessage}失敗:`, error);
+  const replyContent = v2Notice(
+    '🐕💥 皇家互動發生故障',
+    '本王執行這項互動時遇到問題，請稍後再試，汪！',
+    UI_COLORS.DANGER,
+    { ephemeral: true }
+  );
+  try {
+    if (interaction.replied) {
+      await interaction.followUp(replyContent);
+    } else if (interaction.deferred) {
+      await interaction.editReply(v2EditPayload(replyContent));
+    } else {
+      await interaction.reply(replyContent);
+    }
+  } catch (err) {
+    logger.error('發送皇家互動錯誤回覆失敗:', err);
+  }
+}
 
 const client = new Client({
   intents: [
@@ -32,8 +61,6 @@ const client = new Client({
 
 client.commands = new Collection();
 client.cooldowns = new Collection();
-// 暫存領地的邀請連結，用於追蹤是誰邀請的
-export const inviteCache = new Collection();
 
 client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.isChatInputCommand()) {
@@ -94,7 +121,11 @@ client.on(Events.InteractionCreate, async (interaction) => {
         const allowedRoles = normalizeSelfRoleSettings(settings.selfrole_roles);
         const allowedRoleIds = allowedRoles.map((entry) => entry.id);
         const selectedEntries = allowedRoles.filter((entry) => roleIds.includes(entry.id));
-        const blocked = selectedEntries.find((entry) => entry.requirement && !member.roles.cache.has(entry.requirement));
+
+        const currentRoleIds = [...member.roles.cache.keys()];
+        const expectedRoleIds = currentRoleIds.filter(id => !allowedRoleIds.includes(id)).concat(roleIds);
+
+        const blocked = selectedEntries.find((entry) => entry.requirement && !expectedRoleIds.includes(entry.requirement));
         if (blocked) {
           return interaction.editReply(v2EditPayload(v2Notice(
             '🏷️ 尚未符合皇家領取資格',
@@ -147,12 +178,20 @@ client.on(Events.InteractionCreate, async (interaction) => {
         ));
       }
     } catch (error) {
-      logger.error('選擇選單交互失敗:', error);
+      await handleInteractionError(interaction, error, '選擇選單交互');
     }
   }
 
   if (interaction.isButton()) {
     try {
+      if (interaction.customId.startsWith(`${AI_QA_SCOPE}:`)) {
+        const action = parseAiQaAction(interaction.customId, interaction.user.id);
+        if (!action) {
+          return interaction.reply(v2Notice('🐕🛡️ 這顆入口不屬於你', '請重新向本王提問，或使用 `/幫助` 開啟自己的功能入口。', UI_COLORS.WARNING));
+        }
+        return handleAiQaAction(interaction, action);
+      }
+
       if (interaction.customId.startsWith('poll_')) {
         const optionIndex = parseInt(interaction.customId.split('_')[1], 10);
         const messageId = interaction.message.id;
@@ -219,19 +258,22 @@ client.on(Events.InteractionCreate, async (interaction) => {
           return interaction.update({ components: cancelled.components });
         }
         if (action === 'publish') {
-          await interaction.deferUpdate();
-          const targetChannel = await client.channels.fetch(draft.channelId);
-          let payload;
+          const claimedDraft = claimPendingAnnouncement(uuid);
+          if (!claimedDraft) {
+            return interaction.reply(v2Notice('📜 公告正在發布', '這份公告已由另一個發布請求取得，請稍候確認結果。', UI_COLORS.WARNING));
+          }
           try {
-            payload = await buildAnnouncementPayload(draft);
+            await interaction.deferUpdate();
+            const targetChannel = await client.channels.fetch(claimedDraft.channelId);
+            const payload = await buildAnnouncementPayload(claimedDraft);
+            await targetChannel.send(payload);
           } catch (error) {
-            logger.error('公告卷軸產生失敗:', error);
-            const failed = v2Notice('📜 公告產生失敗', '無法讀取公告附圖或產生卷軸，請重新建立公告草稿。', UI_COLORS.WARNING);
+            restorePendingAnnouncement(uuid, claimedDraft);
+            logger.error('公告發布失敗:', error);
+            const failed = v2Notice('📜 公告發布失敗', '公告草稿已保留，請稍後重新嘗試發布。', UI_COLORS.WARNING);
             return interaction.editReply(v2EditPayload(failed));
           }
-          await targetChannel.send(payload);
-          pendingAnnouncements.delete(uuid);
-          const completed = v2Notice('📜 公告已發布', `聖旨已正式張貼至 <#${draft.channelId}>。`, UI_COLORS.SUCCESS);
+          const completed = v2Notice('📜 公告已發布', `聖旨已正式張貼至 <#${claimedDraft.channelId}>。`, UI_COLORS.SUCCESS);
           return interaction.editReply(v2EditPayload(completed));
         }
       }
@@ -302,7 +344,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         }
       }
     } catch (error) {
-      logger.error('按鈕交互失敗:', error);
+      await handleInteractionError(interaction, error, '按鈕交互');
     }
   }
 
@@ -346,7 +388,7 @@ client.on(Events.InteractionCreate, async (interaction) => {
         await interaction.editReply(v2EditPayload(preview));
       }
     } catch (error) {
-      logger.error('彈窗提交失敗:', error);
+      await handleInteractionError(interaction, error, '彈窗提交');
     }
   }
 });
@@ -359,10 +401,10 @@ async function start() {
     await loadCommands(client);
     logger.info(`已載入 ${client.commands.size} 個指令。`);
 
-    await client.login(process.env.DISCORD_TOKEN);
-
     await loadEvents(client);
     logger.info('事件註冊完成。');
+
+    await client.login(process.env.DISCORD_TOKEN);
 
     startScheduledJobs(client);
 
@@ -399,3 +441,28 @@ async function start() {
 }
 
 start();
+
+const cleanups = [
+  stopScheduledJobs,
+  stopHealthServer,
+  closeDatabaseForTests,
+];
+
+async function gracefulShutdown(signal) {
+  logger.info(`[Bot] 收到 ${signal} 信號，啟動優雅退出程序...`);
+  for (const cleanup of cleanups) {
+    try {
+      await cleanup();
+    } catch (err) {
+      logger.error(`[Bot] 清理出錯:`, err);
+    }
+  }
+  try {
+    client.destroy();
+  } catch {}
+  logger.info('[Bot] 優雅退出完成。');
+  process.exit(0);
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

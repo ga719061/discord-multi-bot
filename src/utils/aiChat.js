@@ -2,10 +2,13 @@ import { GoogleGenAI } from '@google/genai';
 import { DEFAULT_AI_MODEL } from './aiConfig.js';
 import { logger } from './logger.js';
 import { AI_PERSONA_PROMPT } from '../knowledge/persona.js';
+import { fetchWithLimit } from './imageRendering.js';
 
 let genAI = null;
 
 export const DEFAULT_AI_PROMPT = AI_PERSONA_PROMPT;
+const IMAGE_FETCH_TIMEOUT_MS = 3500;
+const MAX_AI_IMAGE_BYTES = 5 * 1024 * 1024;
 
 function getGeminiClient() {
     if (!genAI) {
@@ -22,6 +25,42 @@ function summarizeAiError(err) {
         .replace(/\s+/g, ' ')
         .slice(0, 500);
     return { status, message };
+}
+
+function normalizeImageMime(contentType) {
+    const mimeType = String(contentType || '').split(';')[0].trim().toLowerCase();
+    return mimeType.startsWith('image/') ? mimeType : null;
+}
+
+async function fetchImageAttachment(img) {
+    const declaredMimeType = normalizeImageMime(img.contentType);
+    if (!declaredMimeType) return null;
+
+    try {
+        const response = await fetchWithLimit(img.url, fetch, {
+            maxBytes: MAX_AI_IMAGE_BYTES,
+            timeoutMs: IMAGE_FETCH_TIMEOUT_MS,
+        });
+        if (!response.ok) return null;
+
+        const responseContentType = response.headers?.get?.('content-type');
+        const responseMimeType = responseContentType ? normalizeImageMime(responseContentType) : declaredMimeType;
+        if (!responseMimeType) return null;
+
+        const buffer = Buffer.from(await response.arrayBuffer());
+        if (buffer.length > MAX_AI_IMAGE_BYTES) {
+            logger.warn(`[AI] 圖片超過大小限制，已略過: ${buffer.length} bytes`);
+            return null;
+        }
+
+        return {
+            mimeType: responseMimeType,
+            data: buffer.toString('base64'),
+        };
+    } catch (err) {
+        logger.warn(`[AI] 圖片下載失敗: ${err.message}`);
+        return null;
+    }
 }
 
 /**
@@ -50,14 +89,10 @@ export async function getAiResponse(userMessage, systemPrompt, modelName = DEFAU
     // 將圖片轉為 base64 inlineData
     for (const img of imageAttachments) {
         try {
-            const response = await fetch(img.url);
-            if (!response.ok) continue;
-            const buffer = await response.arrayBuffer();
+            const inlineData = await fetchImageAttachment(img);
+            if (!inlineData) continue;
             parts.push({
-                inlineData: {
-                    mimeType: img.contentType,
-                    data: Buffer.from(buffer).toString('base64'),
-                }
+                inlineData,
             });
         } catch (err) {
             logger.warn(`[AI] 圖片下載失敗: ${err.message}`);

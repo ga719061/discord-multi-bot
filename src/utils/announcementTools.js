@@ -12,10 +12,23 @@ import {
 } from 'discord.js';
 import { UI_COLORS } from './style.js';
 import { ephemeralV2Payload, v2Card } from './componentsV2.js';
-import { fetchWithTimeout, trimText } from './imageRendering.js';
+import { fetchWithTimeout, fetchWithLimit, trimText } from './imageRendering.js';
 import { renderAnnouncementScrollImage } from './announcementImage.js';
 
 export const pendingAnnouncements = new Map();
+
+export function claimPendingAnnouncement(uuid) {
+    const draft = pendingAnnouncements.get(uuid);
+    if (!draft) return null;
+    pendingAnnouncements.delete(uuid);
+    return draft;
+}
+
+export function restorePendingAnnouncement(uuid, draft) {
+    if (!draft || pendingAnnouncements.has(uuid)) return false;
+    pendingAnnouncements.set(uuid, draft);
+    return true;
+}
 
 export async function buildAnnouncementPayload(draft, { preview = false, actionRows = [], fetchImpl = fetch } = {}) {
     const scroll = await renderAnnouncementScrollImage({
@@ -61,6 +74,36 @@ export function buildAnnouncementPreviewButtons(uuid) {
             .setLabel('取消')
             .setStyle(ButtonStyle.Secondary)
     );
+}
+
+export async function buildPrefilledAnnouncementPreview({
+    channelId,
+    userId,
+    title,
+    content,
+    footer = '',
+    mentionText = null,
+    allowedMentions = { parse: [] },
+    images = [],
+}) {
+    const uuid = crypto.randomUUID();
+    const draft = {
+        channelId,
+        userId,
+        title,
+        content,
+        footer,
+        images,
+        mentionText,
+        allowedMentions,
+        timestamp: Date.now(),
+    };
+    pendingAnnouncements.set(uuid, draft);
+    const cleanupTimer = setTimeout(() => pendingAnnouncements.delete(uuid), 5 * 60 * 1000);
+    cleanupTimer.unref?.();
+
+    const previewButtons = buildAnnouncementPreviewButtons(uuid);
+    return buildAnnouncementPayload(draft, { preview: true, actionRows: [previewButtons] });
 }
 
 export async function openAnnouncementComposer(interaction, {
@@ -122,14 +165,26 @@ export async function openAnnouncementComposer(interaction, {
 async function buildUploadedImageAttachments(images = [], fetchImpl = fetch) {
     const records = images.map(normalizeUploadedImage).filter((image) => image.url);
     const attachments = [];
+    const MAX_SINGLE_BYTES = 8 * 1024 * 1024;
+    const MAX_TOTAL_BYTES = 15 * 1024 * 1024;
+    let downloadedBytes = 0;
 
     for (const [index, image] of records.entries()) {
-        const response = await fetchWithTimeout(image.url, fetchImpl, 5000);
+        const remainingBytes = MAX_TOTAL_BYTES - downloadedBytes;
+        const maxBytes = Math.min(MAX_SINGLE_BYTES, remainingBytes);
+
+        if (maxBytes <= 0) {
+            throw new Error(`Total download size limit exceeded (max: ${MAX_TOTAL_BYTES} bytes)`);
+        }
+
+        const response = await fetchWithLimit(image.url, fetchImpl, { maxBytes, timeoutMs: 5000 });
         const contentType = response?.headers?.get?.('content-type') || image.contentType || '';
         if (!response?.ok || !contentType.startsWith('image/')) {
             throw new Error(`Unable to fetch announcement image ${index + 1}`);
         }
         const buffer = Buffer.from(await response.arrayBuffer());
+        downloadedBytes += buffer.length;
+
         attachments.push(new AttachmentBuilder(buffer, {
             name: safeImageName(image.name, index, contentType),
         }));

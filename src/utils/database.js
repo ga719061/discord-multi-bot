@@ -10,10 +10,14 @@ const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 
 let db;
 
-export function initDatabase() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+export function initDatabase(options = {}) {
+  const dbPath = options.dbPath || path.join(DATA_DIR, 'bot.db');
+  const dbDir = path.dirname(dbPath);
+  if (!fs.existsSync(dbDir)) fs.mkdirSync(dbDir, { recursive: true });
 
-  db = new Database(path.join(DATA_DIR, 'bot.db'));
+  if (db) db.close();
+
+  db = new Database(dbPath);
   db.pragma('journal_mode = WAL');
 
   db.exec(`
@@ -55,7 +59,11 @@ export function initDatabase() {
       winners INTEGER DEFAULT 1,
       end_time INTEGER,
       ended INTEGER DEFAULT 0,
-      participants TEXT DEFAULT '[]'
+      participants TEXT DEFAULT '[]',
+      status TEXT DEFAULT 'pending',
+      attempts INTEGER DEFAULT 0,
+      last_error TEXT DEFAULT NULL,
+      winner_ids TEXT DEFAULT NULL
     );
 
     CREATE TABLE IF NOT EXISTS polls (
@@ -90,6 +98,7 @@ export function initDatabase() {
       admin_ids TEXT DEFAULT '[]',
       search_enabled INTEGER DEFAULT 0,
       context_enabled INTEGER DEFAULT 1,
+      action_buttons_enabled INTEGER DEFAULT 1,
       party_channel_id TEXT DEFAULT NULL,
       party_expires_at INTEGER DEFAULT NULL
     );
@@ -102,7 +111,10 @@ export function initDatabase() {
       content TEXT,
       target_time INTEGER,
       status TEXT DEFAULT 'pending',
-      created_at INTEGER
+      created_at INTEGER,
+      attempts INTEGER DEFAULT 0,
+      next_retry_at INTEGER DEFAULT NULL,
+      last_error TEXT DEFAULT NULL
     );
   `);
 
@@ -111,12 +123,6 @@ export function initDatabase() {
   } catch (err) {
     // Ignore error if column already exists
   }
-
-  // === 索引 (加速 leaderboard 等查詢) ===
-  db.exec(`
-    CREATE INDEX IF NOT EXISTS idx_user_levels_guild_rank
-    ON user_levels(guild_id, level DESC, xp DESC);
-  `);
 
   const guildSettingsInfo = db.pragma('table_info(guild_settings)');
   const guildColumns = guildSettingsInfo.map(c => c.name);
@@ -165,6 +171,9 @@ export function initDatabase() {
   if (!aiColumns.includes('context_enabled')) {
     db.prepare("ALTER TABLE ai_settings ADD COLUMN context_enabled INTEGER DEFAULT 1").run();
   }
+  if (!aiColumns.includes('action_buttons_enabled')) {
+    db.prepare("ALTER TABLE ai_settings ADD COLUMN action_buttons_enabled INTEGER DEFAULT 1").run();
+  }
   if (!aiColumns.includes('party_channel_id')) {
     db.prepare("ALTER TABLE ai_settings ADD COLUMN party_channel_id TEXT DEFAULT NULL").run();
   }
@@ -181,7 +190,49 @@ export function initDatabase() {
     db.prepare('ALTER TABLE polls ADD COLUMN creator_id TEXT DEFAULT NULL').run();
   }
 
+  const giveawayInfo = db.pragma('table_info(giveaways)');
+  const giveawayColumns = giveawayInfo.map(c => c.name);
+  if (!giveawayColumns.includes('status')) {
+    db.prepare("ALTER TABLE giveaways ADD COLUMN status TEXT DEFAULT 'pending'").run();
+    db.prepare("UPDATE giveaways SET status = 'completed' WHERE ended = 1").run();
+  }
+  if (!giveawayColumns.includes('attempts')) {
+    db.prepare("ALTER TABLE giveaways ADD COLUMN attempts INTEGER DEFAULT 0").run();
+  }
+  if (!giveawayColumns.includes('last_error')) {
+    db.prepare("ALTER TABLE giveaways ADD COLUMN last_error TEXT DEFAULT NULL").run();
+  }
+  if (!giveawayColumns.includes('winner_ids')) {
+    db.prepare("ALTER TABLE giveaways ADD COLUMN winner_ids TEXT DEFAULT NULL").run();
+  }
+
+  const reminderInfo = db.pragma('table_info(reminders)');
+  const reminderColumns = reminderInfo.map(c => c.name);
+  if (!reminderColumns.includes('attempts')) {
+    db.prepare("ALTER TABLE reminders ADD COLUMN attempts INTEGER DEFAULT 0").run();
+  }
+  if (!reminderColumns.includes('next_retry_at')) {
+    db.prepare("ALTER TABLE reminders ADD COLUMN next_retry_at INTEGER DEFAULT NULL").run();
+  }
+  if (!reminderColumns.includes('last_error')) {
+    db.prepare("ALTER TABLE reminders ADD COLUMN last_error TEXT DEFAULT NULL").run();
+  }
+
+  // 索引必須在既有資料庫完成欄位遷移後建立。
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_user_levels_guild_rank ON user_levels(guild_id, level DESC, xp DESC);
+    CREATE INDEX IF NOT EXISTS idx_reminders_status_time ON reminders (status, target_time);
+    CREATE INDEX IF NOT EXISTS idx_giveaways_ended_status_time ON giveaways (ended, status, end_time);
+    CREATE INDEX IF NOT EXISTS idx_polls_message_id ON polls (message_id);
+    CREATE INDEX IF NOT EXISTS idx_reaction_roles_message_role ON reaction_roles (message_id, role_id);
+  `);
+
   return db;
+}
+
+export function closeDatabaseForTests() {
+  if (db) db.close();
+  db = null;
 }
 
 export function getDb() {
@@ -218,7 +269,7 @@ const ALLOWED_GUILD_KEYS = [
 ];
 
 export function updateGuildSetting(guildId, key, value) {
-  if (!ALLOWED_GUILD_KEYS.includes(key)) throw new Error(`不可許的欄位名稱: ${key}`);
+  if (!ALLOWED_GUILD_KEYS.includes(key)) throw new Error(`不允許的欄位名稱: ${key}`);
   const db = getDb();
   getGuildSettings(guildId);
   db.prepare(`UPDATE guild_settings SET ${key} = ? WHERE guild_id = ?`).run(value, guildId);
@@ -243,8 +294,7 @@ export function addXp(guildId, userId, amount, options = { source: 'message' }) 
   let leveledUp = false;
 
   const countColumn = options.source === 'voice' ? 'total_voice_mins' : 'total_messages';
-  const increment = options.source === 'voice' ? 10 : 1; // 假設語音為每 10 分鐘檢查一次
-
+  const increment = options.source === 'voice' ? 10 : 1; // 語音經驗值每 10 分鐘檢查一次
   if (newXp >= xpNeeded) {
     db.prepare(`
       UPDATE user_levels SET xp = ?, level = level + 1, ${countColumn} = ${countColumn} + ?, last_xp_time = ?
@@ -345,10 +395,10 @@ export function getAiSettings(guildId) {
   };
 }
 
-const ALLOWED_AI_KEYS = ['enabled', 'expires_at', 'system_prompt', 'whitelist', 'model', 'admin_ids', 'search_enabled', 'context_enabled', 'party_channel_id', 'party_expires_at'];
+const ALLOWED_AI_KEYS = ['enabled', 'expires_at', 'system_prompt', 'whitelist', 'model', 'admin_ids', 'search_enabled', 'context_enabled', 'action_buttons_enabled', 'party_channel_id', 'party_expires_at'];
 
 export function updateAiSetting(guildId, key, value) {
-  if (!ALLOWED_AI_KEYS.includes(key)) throw new Error(`不可許的欄位名稱: ${key}`);
+  if (!ALLOWED_AI_KEYS.includes(key)) throw new Error(`不允許的欄位名稱: ${key}`);
   const db = getDb();
   getAiSettings(guildId);
   const normalizedValue = key === 'model' ? normalizeAiModel(value) : value;
@@ -376,39 +426,63 @@ export function addReminder(guildId, channelId, userId, content, targetTime) {
   `).run(guildId, channelId, userId, content, targetTime, Date.now());
 }
 
-export function getUserReminders(userId, limit = 10) {
-  const db = getDb();
-  return db.prepare(`
-    SELECT * FROM reminders 
-    WHERE user_id = ? AND status = 'pending' 
-    ORDER BY target_time ASC 
-    LIMIT ?
-  `).all(userId, limit);
-}
-
-export function deleteReminder(reminderId, userId) {
-  const db = getDb();
-  const result = db.prepare('DELETE FROM reminders WHERE id = ? AND user_id = ?').run(reminderId, userId);
-  if (result.changes > 0) {
-    maybeResetReminderSequence();
+export function getUserReminders(userId, guildId = null, limit = 10) {
+  let actualGuildId = guildId;
+  let actualLimit = limit;
+  if (typeof guildId === 'number') {
+    actualLimit = guildId;
+    actualGuildId = null;
   }
-  return result;
+
+  const db = getDb();
+  if (actualGuildId) {
+    return db.prepare(`
+      SELECT * FROM reminders
+      WHERE user_id = ? AND guild_id = ? AND status = 'pending'
+      ORDER BY target_time ASC
+      LIMIT ?
+    `).all(userId, actualGuildId, actualLimit);
+  } else {
+    return db.prepare(`
+      SELECT * FROM reminders
+      WHERE user_id = ? AND status = 'pending'
+      ORDER BY target_time ASC
+      LIMIT ?
+    `).all(userId, actualLimit);
+  }
 }
 
-export function getDueReminders() {
+export function deleteReminder(reminderId, userId, guildId = null) {
+  const db = getDb();
+  if (guildId) {
+    return db.prepare('DELETE FROM reminders WHERE id = ? AND user_id = ? AND guild_id = ?').run(reminderId, userId, guildId);
+  } else {
+    return db.prepare('DELETE FROM reminders WHERE id = ? AND user_id = ?').run(reminderId, userId);
+  }
+}
+
+export function getDueReminders(nowTime = Date.now()) {
   const db = getDb();
   return db.prepare(`
-    SELECT * FROM reminders 
-    WHERE status = 'pending' AND target_time <= ?
-  `).all(Date.now());
+    SELECT * FROM reminders
+    WHERE status = 'pending'
+      AND target_time <= ?
+      AND (next_retry_at IS NULL OR next_retry_at <= ?)
+  `).all(nowTime, nowTime);
 }
 
 export function updateReminderStatus(reminderId, status) {
   const db = getDb();
   db.prepare('UPDATE reminders SET status = ? WHERE id = ?').run(status, reminderId);
-  if (status === 'completed') {
-    maybeResetReminderSequence();
-  }
+}
+
+export function updateReminderError(id, errorMsg, nextRetryAt) {
+  const db = getDb();
+  return db.prepare(`
+    UPDATE reminders
+    SET status = 'pending', attempts = attempts + 1, last_error = ?, next_retry_at = ?
+    WHERE id = ?
+  `).run(errorMsg, nextRetryAt, id);
 }
 
 // ===== 抽獎系統 =====
@@ -421,22 +495,36 @@ export function addGiveaway(guildId, channelId, messageId, prize, winners, endTi
   `).run(guildId, channelId, messageId, prize, winners, endTime);
 }
 
-export function markGiveawayEnded(id) {
+export function updateGiveawayState(id, { ended = 0, status, winnerIds } = {}) {
   const db = getDb();
-  db.prepare('UPDATE giveaways SET ended = 1 WHERE id = ?').run(id);
+  const fields = ['ended = ?'];
+  const values = [ended];
+  if (status !== undefined) {
+    fields.push('status = ?');
+    values.push(status);
+  }
+  if (winnerIds !== undefined) {
+    fields.push('winner_ids = ?');
+    values.push(winnerIds);
+  }
+  values.push(id);
+  return db.prepare(`UPDATE giveaways SET ${fields.join(', ')} WHERE id = ?`).run(...values);
+}
+
+export function markGiveawayEnded(id, status = 'completed') {
+  return updateGiveawayState(id, { ended: 1, status });
+}
+
+export function updateGiveawayError(id, errorMsg) {
+  const db = getDb();
+  db.prepare(`
+    UPDATE giveaways
+    SET attempts = attempts + 1, last_error = ?
+    WHERE id = ?
+  `).run(errorMsg, id);
 }
 
 export function getActiveGiveaways() {
   const db = getDb();
   return db.prepare('SELECT * FROM giveaways WHERE ended = 0').all();
-}
-
-function maybeResetReminderSequence() {
-  const db = getDb();
-  const count = db.prepare('SELECT COUNT(*) as count FROM reminders').get().count;
-  if (count === 0) {
-    try {
-      db.prepare("DELETE FROM sqlite_sequence WHERE name = 'reminders'").run();
-    } catch (e) {}
-  }
 }

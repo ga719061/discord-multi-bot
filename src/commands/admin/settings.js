@@ -4,6 +4,7 @@ import {
   ButtonStyle,
   ChannelSelectMenuBuilder,
   ChannelType,
+  MessageFlags,
   ModalBuilder,
   PermissionFlagsBits,
   RoleSelectMenuBuilder,
@@ -29,9 +30,10 @@ import {
   updateAiSetting,
   updateGuildSetting,
 } from '../../utils/database.js';
-import { openAnnouncementComposer } from '../../utils/announcementTools.js';
+import { buildPrefilledAnnouncementPreview, openAnnouncementComposer } from '../../utils/announcementTools.js';
 import { DEFAULT_AI_PROMPT } from '../../utils/aiChat.js';
 import { AI_MODELS, DEFAULT_AI_MODEL } from '../../utils/aiConfig.js';
+import { AI_DRAFT_TONES, AI_DRAFT_TYPES, generateAiDraft } from '../../utils/aiDrafts.js';
 import { buildGuildDiagnostics } from '../../utils/guildDiagnostics.js';
 import { parseJsonObject } from '../../utils/jsonUtils.js';
 import { normalizeSelfRoleSettings, validateAssignableRole } from '../../utils/roleSettings.js';
@@ -106,11 +108,11 @@ export const data = new SlashCommandBuilder()
   .setDescription('集中管理伺服器中的吉吉國王功能設定')
   .setDefaultMemberPermissions(PermissionFlagsBits.Administrator);
 
-export async function execute(interaction) {
+export async function execute(interaction, { initialView = 'home' } = {}) {
   if (!isAdministrator(interaction)) {
     return interaction.reply(v2Notice('🛡️ 御前通行證不足', '只有具有 Administrator 權限的管理員可以進入皇家管理控制台。', UI_COLORS.DANGER));
   }
-  const context = createPanelContext(interaction);
+  const context = createPanelContext(interaction, { initialView });
   const home = await renderView(context);
   context.currentComponents = home.components;
   await interaction.reply(ephemeralV2Payload(home.components));
@@ -133,12 +135,12 @@ export async function openSettingsPanelFromHelp(interaction, onReturnToHelp) {
   attachPanelCollector(interaction.message, context);
 }
 
-function createPanelContext(interaction, { onReturnToHelp = null } = {}) {
+function createPanelContext(interaction, { onReturnToHelp = null, initialView = 'home' } = {}) {
   return {
     guild: interaction.guild,
     client: interaction.client,
     userId: interaction.user.id,
-    view: 'home',
+    view: initialView,
     pending: {},
     currentComponents: [],
     message: null,
@@ -232,6 +234,7 @@ function actionValue(parts) {
 }
 
 async function handleChannelSelect(component, context, action) {
+  if (action.startsWith('ai_') && !requireAiUnlock(component, context)) return;
   const channelId = component.values[0];
   if (action === 'welcome_channel') {
     updateGuildSetting(context.guild.id, 'welcome_channel', channelId);
@@ -253,10 +256,12 @@ async function handleChannelSelect(component, context, action) {
   if (action === 'reaction_channel') context.pending.reactionChannel = channelId;
   if (action === 'ai_party_channel') context.pending.aiPartyChannel = channelId;
   if (action === 'announce_channel') context.pending.announceChannel = channelId;
+  if (action === 'ai_draft_channel') context.pending.aiDraftChannel = channelId;
   await updateView(component, context);
 }
 
 async function handleStringSelect(component, context, action) {
+  if (action.startsWith('ai_') && !requireAiUnlock(component, context)) return;
   if (action === 'log_types') {
     const toggles = Object.fromEntries(LOG_TYPES.map((type) => [type.value, component.values.includes(type.value) ? 1 : 0]));
     updateGuildSetting(context.guild.id, 'log_toggles', JSON.stringify(toggles));
@@ -288,6 +293,12 @@ async function handleStringSelect(component, context, action) {
     context.pending.announceMention = component.values[0];
     if (context.pending.announceMention !== 'role') context.pending.announceRole = null;
   }
+  if (action === 'ai_draft_type') {
+    context.pending.aiDraftType = component.values[0];
+    context.pending.aiDraft = null;
+  }
+  if (action === 'ai_draft_tone') context.pending.aiDraftTone = component.values[0];
+  if (action === 'ai_draft_mention') context.pending.aiDraftMention = component.values[0];
   await updateView(component, context);
 }
 
@@ -388,6 +399,68 @@ async function handleButton(component, context, action, value) {
     updateAiSetting(context.guild.id, 'whitelist', JSON.stringify([...whitelist]));
     context.notice = 'AI 御准白名單已更新。';
   }
+  if (action === 'ai_draft_regenerate' || action === 'ai_draft_short' || action === 'ai_draft_formal' || action === 'ai_draft_cute') {
+    if (!requireAiUnlock(component, context)) return;
+    const brief = context.pending.aiDraft?.sourceBrief;
+    if (!brief) return component.reply(v2Notice('🧠 尚未有草稿重點', '請先按「產生 AI 草稿」輸入主題與重點。', UI_COLORS.WARNING));
+    const toneByAction = {
+      ai_draft_regenerate: context.pending.aiDraft?.tone || context.pending.aiDraftTone || 'clear',
+      ai_draft_short: 'short',
+      ai_draft_formal: 'formal',
+      ai_draft_cute: 'cute',
+    };
+    await component.deferUpdate();
+    await generateAiDraftForContext(context, {
+      type: context.pending.aiDraft?.type || context.pending.aiDraftType || 'announcement',
+      brief,
+      tone: toneByAction[action],
+    });
+    const view = await renderView(context);
+    context.currentComponents = view.components;
+    return context.editResponse(v2EditPayload(ephemeralV2Payload(view.components)));
+  }
+  if (action === 'ai_draft_preview') {
+    if (!requireAiUnlock(component, context)) return;
+    const draft = context.pending.aiDraft;
+    if (!draft || draft.type !== 'announcement') {
+      return component.reply(v2Notice('📜 尚未有公告草稿', '請先產生「公告」類型的 AI 草稿。', UI_COLORS.WARNING));
+    }
+    if (!context.pending.aiDraftChannel) {
+      return component.reply(v2Notice('📜 尚未選擇發布頻道', '請先在 AI 草稿中心選擇公告預覽要使用的目標頻道。', UI_COLORS.WARNING));
+    }
+    await component.deferReply({ flags: MessageFlags.Ephemeral });
+    const { mentionText, allowedMentions } = aiDraftMentionPayload(context.pending.aiDraftMention || 'none');
+    const preview = await buildPrefilledAnnouncementPreview({
+      channelId: context.pending.aiDraftChannel,
+      userId: context.userId,
+      title: draft.title,
+      content: draft.content,
+      footer: draft.footer,
+      mentionText,
+      allowedMentions,
+    });
+    return component.editReply(v2EditPayload(preview));
+  }
+  if (action === 'ai_draft_apply') {
+    if (!requireAiUnlock(component, context)) return;
+    const draft = context.pending.aiDraft;
+    if (!draft || draft.type === 'announcement') {
+      return component.reply(v2Notice('🧠 尚未有可套用草稿', '歡迎訊息與自助身分組說明草稿才會套用到設定草稿。', UI_COLORS.WARNING));
+    }
+    if (draft.type === 'welcome') {
+      context.pending.welcomeMessageDraft = draft.text;
+      context.view = 'welcome';
+      context.notice = 'AI 歡迎訊息草稿已帶入，請按「編輯歡迎訊息」確認後儲存。';
+    } else if (draft.type === 'selfrole') {
+      context.pending.selfDescription = draft.text;
+      context.view = 'selfrole';
+      context.notice = 'AI 自助身分組說明已帶入設定草稿，發布前仍可再編輯。';
+    }
+  }
+  if (action === 'ai_draft_clear') {
+    context.pending.aiDraft = null;
+    context.notice = 'AI 草稿已清除。';
+  }
   if (action === 'reaction_clear_pairs') {
     context.pending.reactionPairs = [];
     context.pending.reactionRole = null;
@@ -415,6 +488,23 @@ async function openModal(component, context, type) {
     return submit.reply(v2Notice('🛡️ 御前權限已失效', '你目前沒有 Administrator 權限。', UI_COLORS.DANGER));
   }
 
+  if (type === 'ai_draft') {
+    await submit.deferUpdate();
+    await generateAiDraftForContext(context, {
+      type: context.pending.aiDraftType || 'announcement',
+      brief: submit.fields.getTextInputValue('brief'),
+      tone: submit.fields.getTextInputValue('tone').trim() || context.pending.aiDraftTone || 'clear',
+    });
+    const view = await renderView(context);
+    context.currentComponents = view.components;
+    if (typeof context.editResponse === 'function') {
+      await context.editResponse(v2EditPayload(ephemeralV2Payload(view.components)));
+    } else {
+      await submit.editReply(v2EditPayload(ephemeralV2Payload(view.components)));
+    }
+    return;
+  }
+
   if (type === 'ai_unlock') {
     const configuredPassword = process.env.AI_ADMIN_PASSWORD;
     const suppliedPassword = submit.fields.getTextInputValue('password');
@@ -432,6 +522,7 @@ async function openModal(component, context, type) {
   }
   if (type === 'welcome_message') {
     updateGuildSetting(context.guild.id, 'welcome_message', submit.fields.getTextInputValue('value').trim() || null);
+    context.pending.welcomeMessageDraft = null;
     context.notice = '皇家迎賓訊息已更新。';
   }
   if (type === 'steam_time') {
@@ -489,7 +580,7 @@ async function openModal(component, context, type) {
 function buildModal(context, type) {
   const modal = new ModalBuilder().setCustomId(id(context, `modal_submit_${type}`));
   if (type === 'welcome_message') {
-    const current = getGuildSettings(context.guild.id).welcome_message || '';
+    const current = context.pending.welcomeMessageDraft || getGuildSettings(context.guild.id).welcome_message || '';
     return modal.setTitle('編輯皇家迎賓佈告').addComponents(textRow('value', '迎賓內容（可留空恢復預設）', current, TextInputStyle.Paragraph, false));
   }
   if (type === 'steam_time') {
@@ -525,7 +616,46 @@ function buildModal(context, type) {
   if (type === 'ai_prompt') {
     return modal.setTitle('編輯國王智慧人格').addComponents(textRow('value', '提示詞（留空恢復預設）', '', TextInputStyle.Paragraph, false));
   }
+  if (type === 'ai_draft') {
+    const draftType = context.pending.aiDraftType || 'announcement';
+    const typeLabel = AI_DRAFT_TYPES.find((entry) => entry.value === draftType)?.label || '公告';
+    const tone = context.pending.aiDraftTone || 'clear';
+    return modal.setTitle(`AI 草稿中心 | ${typeLabel}`).addComponents(
+      textRow('brief', '主題與重點', context.pending.aiDraft?.sourceBrief || '', TextInputStyle.Paragraph),
+      textRow('tone', '語氣', tone, TextInputStyle.Short, false)
+    );
+  }
   return modal.setTitle('啟動皇家 AI 宴會').addComponents(textRow('minutes', '持續分鐘', '30', TextInputStyle.Short));
+}
+
+async function generateAiDraftForContext(context, { type, brief, tone }) {
+  try {
+    const settings = getAiSettings(context.guild.id);
+    context.pending.aiDraft = await generateAiDraft({
+      guildId: context.guild.id,
+      userId: context.userId,
+      type,
+      brief,
+      tone,
+      settings,
+    });
+    context.pending.aiDraftType = context.pending.aiDraft.type;
+    context.pending.aiDraftTone = context.pending.aiDraft.tone;
+    context.notice = 'AI 私人草稿已生成，尚未發布或寫入設定。';
+  } catch (error) {
+    context.pending.aiDraft = null;
+    context.notice = {
+      label: 'AI DRAFT',
+      color: COLORS.RED,
+      text: `草稿產生失敗：${error.message || 'AI 回傳格式無法解析'}。請調整重點後重試。`,
+    };
+  }
+}
+
+function aiDraftMentionPayload(mention) {
+  if (mention === 'here') return { mentionText: '@here', allowedMentions: { parse: ['everyone'] } };
+  if (mention === 'everyone') return { mentionText: '@everyone', allowedMentions: { parse: ['everyone'] } };
+  return { mentionText: null, allowedMentions: { parse: [] } };
 }
 
 async function executeConfirmation(component, context) {
@@ -858,7 +988,8 @@ function renderAi(context) {
   }
   const settings = getAiSettings(context.guild.id);
   const whitelistCount = new Set(settings.whitelist.filter(Boolean).map(String)).size;
-  const panel = modulePanel(context, 'AI 設定', `國王大腦：\`${settings.model || DEFAULT_AI_MODEL}\`\n天文地理聯網：**${settings.search_enabled ? '開啟' : '關閉'}** | 御前對話記憶：**${settings.context_enabled ? '開啟' : '關閉'}**\n御准白名單：${whitelistCount} 人`)
+  const actionButtonsEnabled = settings.action_buttons_enabled !== 0;
+  const panel = modulePanel(context, 'AI 設定', `國王大腦：\`${settings.model || DEFAULT_AI_MODEL}\`\n天文地理聯網：**${settings.search_enabled ? '開啟' : '關閉'}** | 御前對話記憶：**${settings.context_enabled ? '開啟' : '關閉'}** | 回答操作按鈕：**${actionButtonsEnabled ? '開啟' : '關閉'}**\n御准白名單：${whitelistCount} 人`)
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder().setCustomId(id(context, 'ai_model')).setPlaceholder('選擇 AI 模型')
         .addOptions(AI_MODELS.map((model) => ({ label: model, value: model, default: model === settings.model })))
@@ -866,8 +997,11 @@ function renderAi(context) {
     .addActionRowComponents(actionButtons(context, [
       ['ai_toggle:search_enabled', settings.search_enabled ? '關閉聯網' : '開啟聯網', settings.search_enabled ? ButtonStyle.Secondary : ButtonStyle.Success],
       ['ai_toggle:context_enabled', settings.context_enabled ? '關閉記憶' : '開啟記憶', settings.context_enabled ? ButtonStyle.Secondary : ButtonStyle.Success],
+      ['ai_toggle:action_buttons_enabled', actionButtonsEnabled ? '關閉回答按鈕' : '開啟回答按鈕', actionButtonsEnabled ? ButtonStyle.Secondary : ButtonStyle.Success],
       ['modal:ai_prompt', '編輯提示詞', ButtonStyle.Secondary],
-    ]))
+    ]));
+  addAiDraftCenter(panel, context);
+  panel
     .addTextDisplayComponents(v2Text(renderAiWhitelist(settings.whitelist, context.pending.aiUser)))
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new UserSelectMenuBuilder().setCustomId(id(context, 'ai_user')).setPlaceholder('選擇白名單使用者')
@@ -884,6 +1018,107 @@ function renderAi(context) {
       ['prepare_confirm:ai_party', '啟動派對', ButtonStyle.Danger],
     ]));
   return { components: [finishPanel(panel, context)] };
+}
+
+function addAiDraftCenter(panel, context) {
+  const draftType = context.pending.aiDraftType || context.pending.aiDraft?.type || 'announcement';
+  const tone = context.pending.aiDraftTone || context.pending.aiDraft?.tone || 'clear';
+  const draft = context.pending.aiDraft;
+  const summary = draft
+    ? renderAiDraftSummary(draft)
+    : '尚未產生草稿。草稿只存在這個私人設定面板，逾時後會消失。';
+
+  panel
+    .addSeparatorComponents(v2Divider())
+    .addTextDisplayComponents(v2Text([
+      '## AI DRAFT CENTER | AI 草稿中心',
+      summary,
+    ].join('\n')));
+
+  if (!draft) {
+    panel.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(id(context, 'ai_draft_type'))
+        .setPlaceholder('選擇草稿類型')
+        .addOptions(AI_DRAFT_TYPES.map((entry) => ({
+          label: entry.label,
+          value: entry.value,
+          default: entry.value === draftType,
+        })))
+    ));
+    panel.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(id(context, 'ai_draft_tone'))
+        .setPlaceholder('選擇語氣')
+        .addOptions(AI_DRAFT_TONES.map((entry) => ({
+          label: entry.label,
+          value: entry.value,
+          default: entry.value === tone,
+        })))
+    ));
+  }
+
+  panel.addActionRowComponents(actionButtons(context, [
+      ['modal:ai_draft', '產生 AI 草稿', ButtonStyle.Primary],
+      ['ai_draft_clear', '清除草稿', ButtonStyle.Secondary],
+  ]));
+
+  if (!draft) return;
+
+  if (draft.type === 'announcement') {
+    const mention = context.pending.aiDraftMention || 'none';
+    panel
+      .addActionRowComponents(new ActionRowBuilder().addComponents(
+        new ChannelSelectMenuBuilder()
+          .setCustomId(id(context, 'ai_draft_channel'))
+          .setPlaceholder('選擇公告預覽發布頻道')
+          .addChannelTypes(ChannelType.GuildText)
+      ))
+      .addActionRowComponents(new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(id(context, 'ai_draft_mention'))
+          .setPlaceholder('選擇提及模式')
+          .addOptions(
+            { label: '不提及任何人', value: 'none', default: mention === 'none' },
+            { label: '提及 @here', value: 'here', default: mention === 'here' },
+            { label: '提及 @everyone', value: 'everyone', default: mention === 'everyone' }
+          )
+      ))
+      .addActionRowComponents(actionButtons(context, [
+        ['ai_draft_preview', '建立公告預覽', ButtonStyle.Success],
+        ['ai_draft_regenerate', '重新生成', ButtonStyle.Secondary],
+        ['ai_draft_short', '改短', ButtonStyle.Secondary],
+        ['ai_draft_formal', '正式一點', ButtonStyle.Secondary],
+        ['ai_draft_cute', '可愛一點', ButtonStyle.Secondary],
+      ]));
+    return;
+  }
+
+  panel.addActionRowComponents(actionButtons(context, [
+    ['ai_draft_apply', '套用到設定草稿', ButtonStyle.Success],
+    ['ai_draft_regenerate', '重新生成', ButtonStyle.Secondary],
+    ['ai_draft_short', '改短', ButtonStyle.Secondary],
+    ['ai_draft_formal', '正式一點', ButtonStyle.Secondary],
+    ['ai_draft_cute', '可愛一點', ButtonStyle.Secondary],
+  ]));
+}
+
+function renderAiDraftSummary(draft) {
+  if (draft.type === 'announcement') {
+    return [
+      `**公告標題：** ${draft.title}`,
+      `**公告內容：** ${draft.content}`,
+      draft.footer ? `**頁尾：** ${draft.footer}` : '**頁尾：** 無',
+      '-# 這只是私人草稿；建立預覽後仍需按「發布公告」才會公開。',
+    ].join('\n');
+  }
+
+  const label = draft.type === 'welcome' ? '歡迎訊息' : '自助身分組說明';
+  return [
+    `**${label}：**`,
+    draft.text,
+    '-# 這只是設定草稿；仍需進入對應設定頁確認後才會生效。',
+  ].join('\n');
 }
 
 function renderAiWhitelist(whitelist, selectedUserId = null) {

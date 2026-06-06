@@ -6,15 +6,30 @@ import { buildAiMentionPolicy, sanitizeAiReplyMentions, buildAllowedMentions } f
 import { logger } from '../utils/logger.js';
 import { embedsToV2Payload, v2Notice } from '../utils/componentsV2.js';
 import { UI_COLORS } from '../utils/style.js';
+import { buildAiQaActionRows } from '../utils/aiQaActions.js';
 
 const XP_COOLDOWN = 60_000;
 const XP_MIN = 15;
 const XP_MAX = 25;
 
+class LimitedMap extends Map {
+    constructor(limit = 10000) {
+        super();
+        this.limit = limit;
+    }
+    set(key, value) {
+        if (this.size >= this.limit && !this.has(key)) {
+            const oldestKey = this.keys().next().value;
+            if (oldestKey !== undefined) this.delete(oldestKey);
+        }
+        return super.set(key, value);
+    }
+}
+
 // === 記憶體快取 ===
-const xpCooldownCache = new Map();
+const xpCooldownCache = new LimitedMap(5000);
 let cleanupInterval = null;
-const xpMessageCache = new Map(); // 用於防重複發言的快取
+const xpMessageCache = new LimitedMap(10000); // 用於防重複發言的快取
 
 // 定期清理快取避免記憶體無限增長 (每 10 分鐘清理超過 5 分鐘未更新的條目)
 function startCleanupInterval() {
@@ -24,8 +39,6 @@ function startCleanupInterval() {
         for (const [key, time] of xpCooldownCache) {
             if (time < cutoff) xpCooldownCache.delete(key);
         }
-        // xpMessageCache 沒有時間戳，直接清空即可（下次發言會重新建立）
-        if (xpMessageCache.size > 10000) xpMessageCache.clear();
     }, 10 * 60_000);
 }
 
@@ -50,7 +63,7 @@ const hugReactions = [
 const fortuneLuck = [
     { luck: '🌟 狂暴大吉', text: '汪汪汪！本王感應到強烈的金色靈光！你今天簡直就是幸運化身！✨', color: UI_COLORS.ROYAL },
     { luck: '✨ 搖尾中吉', text: '好耶！本王覺得你今天運氣相當不錯，尾巴忍不住幫你搖兩下！汪！🐾', color: UI_COLORS.SUCCESS },
-    { luck: '☀️ 暖心小吉', text: '是個溫暖的好日子～本王把今日份的皇家祝福塞進你的口袋囉！', color: UI_COLORS.INFO },
+    { luck: '☀️ 暖心小吉', text: '是個溫暖的好日子～本王把今日份皇家祝福塞進你的口袋囉！', color: UI_COLORS.INFO },
     { luck: '☁️ 摸摸末吉', text: '運勢普普通通，不過沒關係，多打「摸摸國王」來蹭蹭本王的好運氣吧！👑', color: UI_COLORS.MUTED },
     { luck: '🌧️ 抖抖小凶', text: '哎呀，今天出門要注意喔！不過別怕，本王會一邊發抖一邊在後面保護你的！🐕💦', color: UI_COLORS.WARNING },
     { luck: '💀 皇家大凶', text: '嗚汪……本王占出超級黑色大凶！今天就乖乖窩在家裡，像本王躲洗澡一樣躲著一切！🚿😱', color: UI_COLORS.DANGER },
@@ -94,7 +107,7 @@ const defaultTalkReplies = [
     '🐕👑 嗯？本王聽到了...但不太理解。汪。',
     '🐕🤔 你在說什麼？本王歪頭想了想...還是不懂。',
     '🐕💤 *打了個哈欠* 嗯嗯...本王有在聽...大概吧。',
-    '🐕🐾 *用小爪子拍了拍你* 汪！本王覺得你是個好人！',
+    '🐕🐾 *用小爪子拍了拍你* 汪！本王端正看著你，覺得你是個好人！',
     '🐕💭 本王正在思考...其實在想晚餐吃什麼。汪。',
     '🐕👑 身為國王，本王選擇搖尾巴回應你。',
 ];
@@ -130,7 +143,18 @@ function buildMentionInstructions(message, policy, canMentionRoles) {
     ].join('\n');
 }
 
-function handleKingInteraction(message) {
+export function shouldTriggerAi({ settings, isMention, userId, channelId, now = Date.now() }) {
+    const isExpired = settings.expires_at !== null && now > settings.expires_at;
+    if (settings.enabled === 0 || isExpired || !isMention) return false;
+
+    const isWhitelistedUser = settings.whitelist.includes(userId);
+    const isPartyActive = settings.party_channel_id === channelId &&
+                          settings.party_expires_at &&
+                          now < settings.party_expires_at;
+    return isWhitelistedUser || Boolean(isPartyActive);
+}
+
+async function handleKingInteraction(message) {
     const content = message.content;
     const mention = message.mentions.has(message.client.user);
 
@@ -142,7 +166,7 @@ function handleKingInteraction(message) {
             .setTitle(`${r.mood} 摸摸吉吉國王`)
             .setDescription(`${message.author} 摸了摸吉吉國王...\n\n${r.text}`)
             .setFooter({ text: '🐕 直接打「摸摸國王」就能摸本王喔！' });
-        message.reply(embedsToV2Payload([embed], { allowedMentions: { parse: [] } }));
+        await message.reply(embedsToV2Payload([embed], { allowedMentions: { parse: [] } }));
         return true;
     }
 
@@ -154,7 +178,7 @@ function handleKingInteraction(message) {
             .setTitle('🐕💕 抱抱吉吉國王')
             .setDescription(`${message.author} 把吉吉國王抱了起來...\n\n${r.text}`)
             .setFooter({ text: '🐕 直接打「抱抱國王」就能抱本王喔！' });
-        message.reply(embedsToV2Payload([embed], { allowedMentions: { parse: [] } }));
+        await message.reply(embedsToV2Payload([embed], { allowedMentions: { parse: [] } }));
         return true;
     }
 
@@ -170,7 +194,7 @@ function handleKingInteraction(message) {
                 { name: '👑 國王的話', value: r.text }
             )
             .setFooter({ text: '🐕 打「占卜」就能請本王占卜！' });
-        message.reply(embedsToV2Payload([embed], { allowedMentions: { parse: [] } }));
+        await message.reply(embedsToV2Payload([embed], { allowedMentions: { parse: [] } }));
         return true;
     }
 
@@ -191,7 +215,7 @@ function handleKingInteraction(message) {
             .setDescription(`> ${quote}\n\n— 吉吉國王`)
             .addFields({ name: '🍀 幸運指數', value: `${'⭐'.repeat(Math.ceil(luckyNum / 20))} (${luckyNum}/100)` })
             .setFooter({ text: '🐕 每天打「每日一汪」找本王領金句！' });
-        message.reply(embedsToV2Payload([embed], { allowedMentions: { parse: [] } }));
+        await message.reply(embedsToV2Payload([embed], { allowedMentions: { parse: [] } }));
         return true;
     }
 
@@ -212,7 +236,7 @@ function handleKingInteraction(message) {
             reply = pick(defaultTalkReplies);
         }
 
-        message.reply({ content: reply, allowedMentions: { parse: [], repliedUser: false } });
+        await message.reply({ content: reply, allowedMentions: { parse: [], repliedUser: false } });
         return true;
     }
 
@@ -228,10 +252,15 @@ export function register(client) {
 
         const isMention = message.mentions.has(client.user);
         const settings = getAiSettings(message.guild.id);
-        const isPartyActive = settings.party_channel_id === message.channel.id && settings.party_expires_at && Date.now() < settings.party_expires_at;
 
-        // ===== AI 攔截（白名單用戶 @mention 或處於狂歡派對中）=====
-        if (isMention && (settings.whitelist.includes(message.author.id) || isPartyActive)) {
+        // ===== AI 啟用狀態判定 (FUNC-05) =====
+        // ===== AI 攔截 =====
+        if (shouldTriggerAi({
+            settings,
+            isMention,
+            userId: message.author.id,
+            channelId: message.channel.id,
+        })) {
             try {
                 const isAdmin = message.member.permissions.has(PermissionFlagsBits.Administrator);
                 const mentionPolicy = buildAiMentionPolicy({
@@ -265,7 +294,7 @@ export function register(client) {
                         `發訊者: ${message.member.displayName} (ID: ${message.author.id})`,
                         `發訊者身分組: ${message.member.roles.cache.map(r => r.name).filter(n => n !== '@everyone').join(', ') || '無'}`,
                         `\n[伺服器指南]\n${serverInfo}`,
-                        !isAdmin ? `\n[安全性規範]\n你目前正在與「一般成員」對話。你被嚴格禁止回答任何有關「伺服器管理、權限設定、後台操作、bot 內部系統配置」或「/設定」皇家管理控制台的問題。若對方詢問，請直接回絕並告知其「御前權限不足，本王無法呈上此類機密資訊」，不准有任何例外或誘導。` : '',
+                        !isAdmin ? `\n[安全性規範]\n你目前正在與「一般成員」對話。你被嚴格禁止回答任何有關「伺服器管理、權限設定、後台操作、bot 內部系統配置」或「/設定」皇家管理控制台的問題。若對方詢問，請直接回絕並告知其「御前權限不足，本王無法呈上此類機密資訊」，不准有任何例外或引導。` : '',
                         `\n[提及規範]\n${buildMentionInstructions(message, mentionPolicy, isAdmin)}`,
                     ].join('\n');
 
@@ -326,14 +355,26 @@ export function register(client) {
                     );
                     // 若回應超過 2000 字，自動分段發送
                     const MAX_LEN = 1990;
+                    const aiQaActionRows = settings.action_buttons_enabled !== 0
+                        ? buildAiQaActionRows({
+                            userId: message.author.id,
+                            isAdmin,
+                            userText: displayText,
+                            aiReply,
+                        })
+                        : [];
                     if (aiReply.length <= MAX_LEN) {
-                        await message.reply({ content: aiReply, allowedMentions });
+                        const replyOptions = { content: aiReply, allowedMentions };
+                        if (aiQaActionRows.length) replyOptions.components = aiQaActionRows;
+                        await message.reply(replyOptions);
                     } else {
                         const chunks = [];
                         for (let i = 0; i < aiReply.length; i += MAX_LEN) {
                             chunks.push(aiReply.slice(i, i + MAX_LEN));
                         }
-                        await message.reply({ content: chunks[0], allowedMentions });
+                        const replyOptions = { content: chunks[0], allowedMentions };
+                        if (aiQaActionRows.length) replyOptions.components = aiQaActionRows;
+                        await message.reply(replyOptions);
                         for (let i = 1; i < chunks.length; i++) {
                             await message.channel.send({ content: chunks[i], allowedMentions });
                         }
@@ -349,8 +390,10 @@ export function register(client) {
 
         // 吉吉國王互動（非白名單或 AI 關閉時走這裡）
         try {
-            if (handleKingInteraction(message)) return;
-        } catch { /* 互動失敗不影響 XP 系統 */ }
+            if (await handleKingInteraction(message)) return;
+        } catch (err) {
+            logger.error('[Message] 處理吉吉國王互動失敗:', err);
+        }
 
         // ================= 防刷機制 (Anti-Spam) =================
         const content = message.content.trim();
@@ -423,3 +466,4 @@ export function register(client) {
     });
 }
 
+export { xpMessageCache };

@@ -59,6 +59,103 @@ export async function fetchWithTimeout(url, fetchImpl = fetch, timeoutMs = 3500)
   }
 }
 
+export async function fetchWithLimit(url, fetchImpl = fetch, options = {}) {
+  const timeoutMs = options.timeoutMs ?? 3500;
+  const maxBytes = options.maxBytes;
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  if (options.signal) {
+    if (options.signal.aborted) {
+      controller.abort();
+    } else {
+      options.signal.addEventListener('abort', () => controller.abort());
+    }
+  }
+
+  try {
+    const fetchOptions = {
+      ...options,
+      signal: controller.signal
+    };
+    delete fetchOptions.timeoutMs;
+    delete fetchOptions.maxBytes;
+
+    const response = await fetchImpl(url, fetchOptions);
+    if (controller.signal.aborted) {
+      const abortError = new Error('The user aborted a request.');
+      abortError.name = 'AbortError';
+      throw abortError;
+    }
+    if (!response) {
+      throw new Error('No response returned');
+    }
+    if (!response.ok) {
+      return response;
+    }
+
+    if (maxBytes !== undefined && maxBytes !== null) {
+      const contentLengthStr = response.headers?.get?.('content-length');
+      if (contentLengthStr) {
+        const contentLength = parseInt(contentLengthStr, 10);
+        if (!isNaN(contentLength) && contentLength > maxBytes) {
+          throw new Error(`File size limit exceeded (Content-Length: ${contentLength} bytes, max: ${maxBytes} bytes)`);
+        }
+      }
+    }
+
+    const reader = response.body?.getReader ? response.body.getReader() : null;
+    let finalBuffer;
+
+    if (reader) {
+      const chunks = [];
+      let totalBytes = 0;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          if (value) {
+            totalBytes += value.length;
+            if (maxBytes !== undefined && maxBytes !== null && totalBytes > maxBytes) {
+              controller.abort();
+              throw new Error(`File size limit exceeded during stream download (max: ${maxBytes} bytes)`);
+            }
+            chunks.push(value);
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+      finalBuffer = Buffer.concat(chunks);
+    } else {
+      const arrayBuffer = await response.arrayBuffer();
+      if (maxBytes !== undefined && maxBytes !== null && arrayBuffer.byteLength > maxBytes) {
+        throw new Error(`File size limit exceeded after arrayBuffer download (max: ${maxBytes} bytes)`);
+      }
+      finalBuffer = Buffer.from(arrayBuffer);
+    }
+
+    const newResponse = new Response(finalBuffer, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+
+    return newResponse;
+
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      throw new Error(`Download timed out or aborted (timeout: ${timeoutMs}ms)`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export function cacheKeyFor(fetchImpl, value) {
   if (fetchImpl === globalThis.fetch) return `global:${value}`;
   if (!fetchIds.has(fetchImpl)) fetchIds.set(fetchImpl, nextFetchId++);

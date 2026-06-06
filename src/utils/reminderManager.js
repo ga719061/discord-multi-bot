@@ -1,10 +1,12 @@
-import { getDueReminders, updateReminderStatus } from './database.js';
+import { getDueReminders, updateReminderStatus, updateReminderError } from './database.js';
 import { EmbedBuilder } from 'discord.js';
 import { logger } from './logger.js';
 import { fmt, COLORS, UI_COLORS } from './style.js';
 import { embedsToV2Payload } from './componentsV2.js';
+import { createJobOverlapGuard } from './jobGuards.js';
 
 let checkInterval = null;
+const runCheckReminders = createJobOverlapGuard('ReminderManager', checkReminders, logger);
 
 /**
  * 初始化提醒管理器
@@ -15,12 +17,23 @@ export function initReminderManager(client) {
 
     logger.info('⏰ 提醒管理器已啟動');
 
-    checkReminders(client);
+    runCheckReminders(client);
 
     // 每 30 秒檢查一次
     checkInterval = setInterval(() => {
-        checkReminders(client);
+        runCheckReminders(client);
     }, 30_000);
+}
+
+/**
+ * 停止提醒管理器
+ */
+export function stopReminderManager() {
+    if (checkInterval) {
+        clearInterval(checkInterval);
+        checkInterval = null;
+        logger.info('⏰ 提醒管理器已停止');
+    }
 }
 
 /**
@@ -71,7 +84,14 @@ async function checkReminders(client) {
 
             } catch (err) {
                 logger.error(`[Reminder] 處理提醒 ID ${reminder.id} 失敗:`, err);
-                updateReminderStatus(reminder.id, 'error');
+                const currentAttempts = (reminder.attempts || 0) + 1;
+                if (currentAttempts >= 5) {
+                    updateReminderStatus(reminder.id, 'failed');
+                    logger.warn(`[Reminder] 提醒 ID ${reminder.id} 已達最大重試次數 (5)，標記為失敗`);
+                } else {
+                    const nextRetryAt = Date.now() + currentAttempts * 60 * 1000;
+                    updateReminderError(reminder.id, err.message || String(err), nextRetryAt);
+                }
             }
         }
     } catch (err) {

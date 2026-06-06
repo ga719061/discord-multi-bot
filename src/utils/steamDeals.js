@@ -233,6 +233,14 @@ export function buildSteamFreeGamesPayload(games, options = {}) {
 export async function fetchSteamAppDetails(appId, fetchImpl = fetch, options = {}) {
   const cacheKey = String(appId);
   const now = options.now || Date.now();
+
+  // Prune expired entries
+  for (const [k, item] of steamAppDetailsCache.entries()) {
+    if (item.expiresAt <= now) {
+      steamAppDetailsCache.delete(k);
+    }
+  }
+
   const cached = steamAppDetailsCache.get(cacheKey);
   if (cached && cached.expiresAt > now) return cached.details;
   if (cached) steamAppDetailsCache.delete(cacheKey);
@@ -243,6 +251,10 @@ export async function fetchSteamAppDetails(appId, fetchImpl = fetch, options = {
   );
   const details = data?.[appId]?.success ? data[appId].data : null;
   if (details) {
+    if (steamAppDetailsCache.size >= 100 && !steamAppDetailsCache.has(cacheKey)) {
+      const oldestKey = steamAppDetailsCache.keys().next().value;
+      if (oldestKey !== undefined) steamAppDetailsCache.delete(oldestKey);
+    }
     steamAppDetailsCache.set(cacheKey, {
       details,
       expiresAt: now + STEAM_APP_DETAILS_CACHE_TTL_MS,

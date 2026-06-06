@@ -2,25 +2,38 @@ import { logger } from './logger.js';
 import { addXp, getGuildSettings } from './database.js';
 import { v2Notice } from './componentsV2.js';
 import { UI_COLORS } from './style.js';
+import { createJobOverlapGuard } from './jobGuards.js';
 
 const SCAN_INTERVAL = 10 * 60 * 1000; // 10 分鐘
 const BASE_XP = 10;
 const BOOST_MULTIPLIER = 1.5;
+const runScanVoiceChannels = createJobOverlapGuard('VoiceXP', scanVoiceChannels, logger);
+
+let scanInterval = null;
 
 /**
  * 初始化語音經驗值管理員
  * @param {import('discord.js').Client} client 
  */
 export function initVoiceXpManager(client) {
+    if (scanInterval) return;
     logger.info('[VoiceXP] 語音經驗值系統已啟動，掃描間隔：10 分鐘。');
 
-    setInterval(async () => {
+    scanInterval = setInterval(async () => {
         try {
-            await scanVoiceChannels(client);
+            await runScanVoiceChannels(client);
         } catch (error) {
             logger.error('[VoiceXP] 掃描語音頻道時發生錯誤:', error);
         }
     }, SCAN_INTERVAL);
+}
+
+export function stopVoiceXpManager() {
+    if (scanInterval) {
+        clearInterval(scanInterval);
+        scanInterval = null;
+        logger.info('[VoiceXP] 語音經驗值系統已停止');
+    }
 }
 
 /**

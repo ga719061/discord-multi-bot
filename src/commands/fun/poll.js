@@ -82,8 +82,10 @@ export async function openPollComposer(interaction) {
 
         publicationState = 'publishing';
         await optionsSubmit.deferReply({ flags: MessageFlags.Ephemeral });
+        let message;
+        let dbInserted = false;
         try {
-            const message = await optionsSubmit.channel.send(buildPollPayload({
+            message = await optionsSubmit.channel.send(buildPollPayload({
                 question,
                 options,
                 votes,
@@ -102,21 +104,31 @@ export async function openPollComposer(interaction) {
                 Date.now()
             );
 
+            dbInserted = true;
             publicationState = 'published';
             collector.stop('published');
+        } catch (error) {
+            publicationState = 'draft';
+            logger.warn(`[Poll] 發布失敗 guild=${optionsSubmit.guildId}: ${error.message}`);
+            if (message && !dbInserted) {
+                await message.delete().catch(() => {});
+            }
+            await optionsSubmit.editReply(v2EditPayload(v2Notice(
+                '📊 國是會議頒布失敗',
+                '本王暫時無法將投票張貼到目前頻道，請稍後重新嘗試。',
+                UI_COLORS.DANGER
+            ))).catch(() => {});
+            return;
+        }
+
+        try {
             await optionsSubmit.editReply(v2EditPayload(v2Notice(
                 '📊 國是會議已頒布',
                 '本王已將投票公布於目前頻道，子民們可以開始排隊表決了，汪！',
                 UI_COLORS.SUCCESS
             )));
         } catch (error) {
-            publicationState = 'draft';
-            logger.warn(`[Poll] 發布失敗 guild=${optionsSubmit.guildId}: ${error.message}`);
-            await optionsSubmit.editReply(v2EditPayload(v2Notice(
-                '📊 國是會議頒布失敗',
-                '本王暫時無法將投票張貼到目前頻道，請稍後重新嘗試。',
-                UI_COLORS.DANGER
-            )));
+            logger.warn(`[Poll] 發送投票成功通知失敗 guild=${optionsSubmit.guildId}: ${error.message}`);
         }
     });
 

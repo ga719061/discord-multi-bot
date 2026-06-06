@@ -6,6 +6,7 @@ import {
   imageFileToDataUri,
   imageUrlToDataUri,
   svgToPngAttachment,
+  fetchWithLimit,
 } from '../src/utils/imageRendering.js';
 
 const tinyPng = Buffer.from(
@@ -57,4 +58,54 @@ test('imageUrlToDataUri returns null for failed remote assets and caches success
   assert.match(first, /^data:image\/png;base64,/);
   assert.equal(second, first);
   assert.equal(calls, 2);
+});
+
+test('fetchWithLimit downloads within size limits', async () => {
+  const fetchImpl = async () => new Response('hello world');
+  const response = await fetchWithLimit('http://test', fetchImpl, { maxBytes: 20 });
+  const text = new TextDecoder().decode(await response.arrayBuffer());
+  assert.equal(text, 'hello world');
+});
+
+test('fetchWithLimit throws error if content-length exceeds maxBytes', async () => {
+  const fetchImpl = async () => new Response('large file', {
+    headers: { 'content-length': '100' }
+  });
+  await assert.rejects(
+    fetchWithLimit('http://test', fetchImpl, { maxBytes: 20 }),
+    /File size limit exceeded/
+  );
+});
+
+test('fetchWithLimit throws error if stream chunks exceed maxBytes', async () => {
+  const stream = new ReadableStream({
+    start(controller) {
+      controller.enqueue(new Uint8Array([1, 2, 3]));
+      controller.enqueue(new Uint8Array([4, 5, 6]));
+      controller.close();
+    }
+  });
+  const fetchImpl = async () => new Response(stream);
+  await assert.rejects(
+    fetchWithLimit('http://test', fetchImpl, { maxBytes: 4 }),
+    /File size limit exceeded during stream download/
+  );
+});
+
+test('fetchWithLimit fallback to arrayBuffer throws if size exceeds maxBytes', async () => {
+  const response = new Response('large fallback');
+  Object.defineProperty(response, 'body', { value: null });
+  const fetchImpl = async () => response;
+  await assert.rejects(
+    fetchWithLimit('http://test', fetchImpl, { maxBytes: 5 }),
+    /File size limit exceeded after arrayBuffer download/
+  );
+});
+
+test('fetchWithLimit handles timeout abort', async () => {
+  const fetchImpl = () => new Promise((resolve) => setTimeout(resolve, 100));
+  await assert.rejects(
+    fetchWithLimit('http://test', fetchImpl, { timeoutMs: 10 }),
+    /Download timed out or aborted/
+  );
 });

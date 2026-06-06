@@ -5,7 +5,6 @@ import {
   imageFileToDataUri,
   svgToPngAttachment,
   trimText,
-  wrapText,
 } from './imageRendering.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -14,12 +13,11 @@ const SEAL_PATH = path.join(__dirname, '..', '..', 'assets', 'announcement', 'ki
 const WIDTH = 1080;
 const HEIGHT = 1600;
 const FILENAME = 'announcement-scroll.png';
-const FONT = '"Noto Sans CJK TC", "Microsoft JhengHei", "Segoe UI", Arial, sans-serif';
-const BODY_X = 292;
-const BODY_MAX_CHARS = 14;
-const BODY_LONG_MAX_CHARS = 16;
+const FONT = '"Noto Sans CJK TC", "Microsoft JhengHei", "Segoe UI Emoji", "Segoe UI", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Symbol", Arial, sans-serif';
+const BODY_X = 220;
+const BODY_MAX_CHARS = 18;
+const BODY_LONG_MAX_CHARS = 21;
 const MENTION_X = 540;
-const MENTION_Y = 470;
 
 export async function renderAnnouncementScrollImage({
   title,
@@ -55,18 +53,42 @@ export async function renderAnnouncementScrollImage({
 
   return svgToPngAttachment(svg, FILENAME);
 }
-
 function buildAnnouncementScrollSvg({ title, content, footer, mentionLabel, dateLabel, background, sealImage }) {
-  const titleLines = wrapText(title || '王國公告', 13, 2);
+  const titleLines = smartWrap(title || '王國公告', 38, 1);
   const normalizedContent = normalizeAnnouncementText(content || '公告內容');
   const longContent = [...normalizedContent].length > 360;
-  const bodyLines = wrapText(normalizedContent, longContent ? BODY_LONG_MAX_CHARS : BODY_MAX_CHARS, longContent ? 24 : 20);
+  const maxW = longContent ? BODY_LONG_MAX_CHARS * 2 : BODY_MAX_CHARS * 2;
+  const maxLines = longContent ? 24 : 20;
+  const bodyLines = smartWrap(normalizedContent, maxW, maxLines);
   const bodySize = longContent ? 30 : 36;
   const lineHeight = longContent ? 42 : 50;
-  const titleBaseY = 432;
+
   const footerText = trimText(footer || '吉吉國王 頒布', 42);
   const mentionText = mentionLabel ? trimText(mentionLabel, 34) : null;
-  const bodyStart = longContent ? 540 : 566;
+
+  // 依提及與標題行數採垂直流式排版。
+  const titleFontSize = 48;
+  const titleLineHeight = 60;
+
+  let currentY = 370;
+  let mentionY = null;
+  if (mentionText) {
+    mentionY = currentY + 20;
+    currentY += 45;
+  }
+
+  const titleYLines = [];
+  if (!mentionText && titleLines.length === 1) {
+    currentY += 20;
+  }
+
+  for (let i = 0; i < titleLines.length; i++) {
+    titleYLines.push(currentY + titleFontSize);
+    currentY += titleLineHeight;
+  }
+
+  const bodyStart = currentY + 75;
+
   const backdrop = background
     ? `<image href="${background}" x="0" y="0" width="${WIDTH}" height="${HEIGHT}" preserveAspectRatio="xMidYMid slice"/>`
     : fallbackScrollBackdrop();
@@ -115,8 +137,9 @@ function buildAnnouncementScrollSvg({ title, content, footer, mentionLabel, date
     </filter>
     <style>
       .font { font-family: ${FONT}; letter-spacing: 0; }
+      .emoji { font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", "Segoe UI Symbol", sans-serif; font-size: 1.3em; font-weight: normal; }
       .eyebrow { font-size: 31px; font-weight: 900; }
-      .title { font-size: 64px; font-weight: 900; }
+      .title { font-size: 48px; font-weight: 900; }
       .body { font-size: ${bodySize}px; font-weight: 760; }
       .small { font-size: 27px; font-weight: 800; }
       .mention { font-size: 25px; font-weight: 900; }
@@ -134,16 +157,16 @@ function buildAnnouncementScrollSvg({ title, content, footer, mentionLabel, date
       <text x="540" y="275" text-anchor="middle" class="eyebrow" fill="#ffe8a8">GIGI KINGDOM</text>
       <text x="540" y="322" text-anchor="middle" class="eyebrow" fill="#fff6d6">皇家公告</text>
     </g>
-    ${mentionText ? `<text x="${MENTION_X}" y="${MENTION_Y}" text-anchor="middle" class="mention" fill="#87311d">召見：${escapeXml(mentionText)}</text>` : ''}
+    ${mentionText && mentionY ? `<text x="${MENTION_X}" y="${mentionY}" text-anchor="middle" class="mention" fill="#87311d">召見：${highlightEmojis(escapeXml(mentionText))}</text>` : ''}
 
     <g>
-      ${titleLines.map((line, index) => `<text x="540" y="${titleBaseY + index * 76}" text-anchor="middle" class="title" fill="#40200a">${escapeXml(line)}</text>`).join('')}
-      ${bodyLines.map((line, index) => `<text x="${BODY_X}" y="${bodyStart + index * lineHeight}" class="body" fill="#3c210d">${escapeXml(line)}</text>`).join('')}
+      ${titleLines.map((line, index) => `<text x="540" y="${titleYLines[index]}" text-anchor="middle" class="title" fill="#40200a">${highlightEmojis(escapeXml(line))}</text>`).join('')}
+      ${bodyLines.map((line, index) => `<text x="${BODY_X}" y="${bodyStart + index * lineHeight}" class="body" fill="#3c210d">${highlightEmojis(escapeXml(line))}</text>`).join('')}
     </g>
 
     <g>
-      <text x="292" y="1288" class="footer" fill="#5a2b0d">${escapeXml(footerText)}</text>
-      <text x="292" y="1332" class="date" fill="#8b561f">${escapeXml(dateLabel)}</text>
+      <text x="${BODY_X}" y="1288" class="footer" fill="#5a2b0d">${highlightEmojis(escapeXml(footerText))}</text>
+      <text x="${BODY_X}" y="1332" class="date" fill="#8b561f">${highlightEmojis(escapeXml(dateLabel))}</text>
       ${seal(sealImage)}
     </g>
   </g>
@@ -255,4 +278,102 @@ function formatTaiwanDate(date) {
     month: '2-digit',
     day: '2-digit',
   }).format(date);
+}
+
+// === 中英文混合智慧折行與避頭尾標點 ===
+const CANNOT_START = new Set([
+  ',', '.', '!', '?', ';', ':', '，', '。', '！', '？', '；', '：', '、', '）', '】', '》', '」', '』', '”', '’', '〉',
+]);
+const CANNOT_END = new Set([
+  '（', '【', '《', '「', '『', '“', '‘', '〈', '(', '[', '<'
+]);
+
+function tokenize(text) {
+  const tokens = [];
+  let i = 0;
+  while (i < text.length) {
+    const char = text[i];
+    const match = text.slice(i).match(/^[a-zA-Z0-9'_?-]+/);
+    if (match) {
+      tokens.push({ text: match[0], isWord: true });
+      i += match[0].length;
+    } else {
+      tokens.push({ text: char, isWord: false });
+      i++;
+    }
+  }
+  return tokens;
+}
+
+function getTokenWeight(token) {
+  let weight = 0;
+  for (const char of token.text) {
+    weight += char.charCodeAt(0) > 255 ? 2 : 1;
+  }
+  return weight;
+}
+
+function smartWrap(text, maxW, maxLines) {
+  const tokens = tokenize(text);
+  const lines = [];
+  let currentLineTokens = [];
+  let currentWeight = 0;
+
+  const commitLine = () => {
+    if (currentLineTokens.length === 0) return;
+
+    if (tokens.length > 0) {
+      const lastToken = currentLineTokens[currentLineTokens.length - 1];
+      if (lastToken && CANNOT_END.has(lastToken.text)) {
+        currentLineTokens.pop();
+        tokens.unshift(lastToken);
+      }
+    }
+
+    lines.push(currentLineTokens.map(t => t.text).join(''));
+    currentLineTokens = [];
+    currentWeight = 0;
+  };
+
+  while (tokens.length > 0) {
+    const token = tokens.shift();
+    if (token.text === '\n') {
+      commitLine();
+      continue;
+    }
+
+    const w = getTokenWeight(token);
+
+    if (currentWeight + w > maxW) {
+      if (currentLineTokens.length > 0 && CANNOT_START.has(token.text)) {
+        currentLineTokens.push(token);
+        commitLine();
+      } else {
+        tokens.unshift(token);
+        commitLine();
+      }
+    } else {
+      currentLineTokens.push(token);
+      currentWeight += w;
+    }
+  }
+
+  commitLine();
+
+  if (lines.length > maxLines) {
+    const finalLines = lines.slice(0, maxLines);
+    const lastLine = finalLines[maxLines - 1];
+    finalLines[maxLines - 1] = lastLine.slice(0, Math.max(0, lastLine.length - 2)) + '...';
+    return finalLines;
+  }
+
+  return lines;
+}
+
+function highlightEmojis(text) {
+  // 常見 Emoji 使用獨立字型與一般字重，避免輪廓被粗體填滿。
+  const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{1F600}-\u{1F64F}\u{1F680}-\u{1F6FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F1E6}-\u{1F1FF}\u{1F900}-\u{1F9FF}\u{1F300}-\u{1F5FF}\u{1F004}\u{1F0CF}\u{1F170}-\u{1F251}]/gu;
+  return String(text).replace(emojiRegex, (emoji) => {
+    return `<tspan class="emoji">${emoji}</tspan>`;
+  });
 }

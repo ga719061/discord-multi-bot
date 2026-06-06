@@ -1,11 +1,16 @@
-import test from 'node:test';
+import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { ButtonStyle, ComponentType, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { data, settingsViewTesting } from '../src/commands/admin/settings.js';
-import { ephemeralV2Payload } from '../src/utils/componentsV2.js';
-import { getAiSettings, getDb, initDatabase, updateAiSetting } from '../src/utils/database.js';
+import { countV2Components, ephemeralV2Payload } from '../src/utils/componentsV2.js';
+import { getAiSettings, getDb, updateAiSetting } from '../src/utils/database.js';
 import { AI_MODELS, DEFAULT_AI_MODEL } from '../src/utils/aiConfig.js';
 import { normalizeSelfRoleSettings } from '../src/utils/roleSettings.js';
+import { cleanupTestDatabase, initTestDatabase } from './helpers/database.js';
+
+afterEach(() => {
+  cleanupTestDatabase();
+});
 
 test('/設定 is restricted to Administrator by command metadata', () => {
   const command = data.toJSON();
@@ -104,7 +109,7 @@ test('reaction role pairs reject external custom emoji and normalize guild emoji
 });
 
 test('reaction-role panel supports selected role plus emoji pair building', async () => {
-  initDatabase();
+  initTestDatabase();
   const role = { id: '111111111111111111', name: '遊戲玩家', managed: false, position: 1, permissions: { has: () => false } };
   const emojisCache2 = new Map();
   emojisCache2.find = (fn) => [...emojisCache2.values()].find(fn);
@@ -197,8 +202,108 @@ test('announcement page includes publishing target and mutually exclusive mentio
   assert.match(text, /返回總覽/);
 });
 
+test('AI settings page exposes unlocked private draft center', () => {
+  initTestDatabase();
+  const guildId = `settings-ai-draft-${process.pid}`;
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
+  const context = {
+    userId: 'admin',
+    guild: { id: guildId },
+    view: 'ai',
+    pending: {},
+    notice: null,
+  };
+
+  const panel = settingsViewTesting.renderAi(context).components[0].toJSON();
+  const text = JSON.stringify(panel);
+  const ids = panel.components
+    .filter((component) => component.type === ComponentType.ActionRow)
+    .flatMap((row) => row.components)
+    .map((component) => component.custom_id);
+
+  assert.match(text, /AI 草稿中心/);
+  assert.equal(ids.includes('settings:admin:ai_draft_type'), true);
+  assert.equal(ids.includes('settings:admin:ai_draft_tone'), true);
+  assert.equal(ids.includes('settings:admin:modal:ai_draft'), true);
+});
+
+test('AI settings page exposes action-button toggle and defaults it on', () => {
+  initTestDatabase();
+  const guildId = `settings-ai-action-buttons-${process.pid}`;
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
+  const context = {
+    userId: 'admin',
+    guild: { id: guildId },
+    view: 'ai',
+    pending: {},
+    notice: null,
+  };
+
+  assert.equal(getAiSettings(guildId).action_buttons_enabled, 1);
+  const panel = settingsViewTesting.renderAi(context).components[0].toJSON();
+  const text = JSON.stringify(panel);
+  const buttons = panel.components
+    .filter((component) => component.type === ComponentType.ActionRow)
+    .flatMap((row) => row.components);
+
+  assert.match(text, /回答操作按鈕/);
+  assert.equal(buttons.some((button) => button.custom_id === 'settings:admin:ai_toggle:action_buttons_enabled'), true);
+
+  updateAiSetting(guildId, 'action_buttons_enabled', 0);
+  assert.equal(getAiSettings(guildId).action_buttons_enabled, 0);
+  const disabledText = JSON.stringify(settingsViewTesting.renderAi(context).components[0].toJSON());
+  assert.match(disabledText, /回答操作按鈕.+關閉/);
+});
+
+test('AI announcement draft panel offers preview controls only after a draft exists', () => {
+  initTestDatabase();
+  const guildId = `settings-ai-announcement-draft-${process.pid}`;
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
+  const context = {
+    userId: 'admin',
+    guild: { id: guildId },
+    view: 'ai',
+    pending: {
+      aiDraft: {
+        type: 'announcement',
+        title: '維護通知',
+        content: '今晚維護，請大家提前下線。',
+        footer: '感謝配合',
+        tone: 'formal',
+        sourceBrief: '今晚維護',
+        generatedAt: Date.now(),
+      },
+    },
+    notice: null,
+  };
+
+  const panel = settingsViewTesting.renderAi(context).components[0].toJSON();
+  const text = JSON.stringify(panel);
+  const view = settingsViewTesting.renderAi(context);
+
+  assert.match(text, /建立公告預覽/);
+  assert.match(text, /ai_draft_channel/);
+  assert.match(text, /ai_draft_mention/);
+  assert.match(text, /尚未發布或寫入設定|建立預覽後仍需按/);
+  assert.equal(countV2Components(view.components) <= 40, true);
+});
+
+test('welcome modal uses AI private draft as a prefilled setting draft', () => {
+  initTestDatabase();
+  const guildId = `settings-ai-welcome-draft-${process.pid}`;
+  const context = {
+    userId: 'admin',
+    guild: { id: guildId },
+    pending: { welcomeMessageDraft: '歡迎 {user} 來到伺服器！' },
+  };
+
+  const modal = settingsViewTesting.buildModal(context, 'welcome_message').toJSON();
+
+  assert.match(JSON.stringify(modal), /歡迎 \{user\} 來到伺服器/);
+});
+
 test('settings home health overview uses neutral admin wording', async () => {
-  initDatabase();
+  initTestDatabase();
   const guildId = `settings-home-neutral-${process.pid}`;
   const context = {
     userId: 'admin',
@@ -225,7 +330,7 @@ test('settings home health overview uses neutral admin wording', async () => {
 });
 
 test('Steam panel exposes independent limited-free push controls', () => {
-  initDatabase();
+  initTestDatabase();
   const guildId = `settings-steam-free-${process.pid}`;
   const context = { userId: 'admin', guild: { id: guildId }, view: 'steam', pending: {}, notice: null };
   const panel = settingsViewTesting.renderSteam(context).components[0].toJSON();
@@ -254,7 +359,7 @@ test('confirmation page describes limited-free Steam publish action', () => {
 });
 
 test('locked AI page provides control-center verification with a primary login action', () => {
-  initDatabase();
+  initTestDatabase();
   const guildId = `settings-ai-locked-${process.pid}`;
   updateAiSetting(guildId, 'admin_ids', '[]');
   const previousPassword = process.env.AI_ADMIN_PASSWORD;
@@ -280,7 +385,7 @@ test('locked AI page provides control-center verification with a primary login a
 });
 
 test('AI unlock modal grants persistent access and renders state-aware button colors', async () => {
-  initDatabase();
+  initTestDatabase();
   const guildId = `settings-ai-success-${process.pid}`;
   updateAiSetting(guildId, 'admin_ids', '[]');
   const previousPassword = process.env.AI_ADMIN_PASSWORD;
@@ -319,7 +424,7 @@ test('AI unlock modal grants persistent access and renders state-aware button co
 });
 
 test('AI model selector uses approved models and migrates previous preview choices', () => {
-  initDatabase();
+  initTestDatabase();
   const guildId = `settings-ai-models-${process.pid}`;
   updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
 
@@ -340,7 +445,7 @@ test('AI model selector uses approved models and migrates previous preview choic
 });
 
 test('AI panel displays whitelist members beside its whitelist controls', () => {
-  initDatabase();
+  initTestDatabase();
   const guildId = `settings-ai-whitelist-${process.pid}`;
   const whitelist = [...Array.from({ length: 21 }, (_, index) => String(1000 + index)), '1000'];
   updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
@@ -365,7 +470,7 @@ test('AI panel displays whitelist members beside its whitelist controls', () => 
 });
 
 test('self-role panel presents a royal publishing flow for member-facing role selection', () => {
-  initDatabase();
+  initTestDatabase();
   const guildId = `settings-self-role-${process.pid}`;
   const guild = {
     id: guildId,
@@ -406,7 +511,7 @@ test('published self-role menu speaks to members as the royal receiving office',
 });
 
 test('AI unlock modal keeps invalid credentials locked and presents a denied status', async () => {
-  initDatabase();
+  initTestDatabase();
   const guildId = `settings-ai-denied-${process.pid}`;
   updateAiSetting(guildId, 'admin_ids', '[]');
   const previousPassword = process.env.AI_ADMIN_PASSWORD;
@@ -435,4 +540,38 @@ test('AI unlock modal keeps invalid credentials locked and presents a denied sta
     if (previousPassword === undefined) delete process.env.AI_ADMIN_PASSWORD;
     else process.env.AI_ADMIN_PASSWORD = previousPassword;
   }
+});
+
+test('selfrole_select expectedRoleIds calculation and prerequisite check', () => {
+  const allowedRoles = [
+    { id: 'dependent-role', requirement: 'prereq-role' },
+    { id: 'prereq-role', requirement: null }
+  ];
+  const allowedRoleIds = allowedRoles.map(entry => entry.id);
+
+  // 當前成員擁有的角色，包含 prereq 和 dependent
+  const currentRoleIds = ['prereq-role', 'dependent-role', 'some-other-role'];
+
+  // 情況 1：使用者「同時取消勾選 prereq 但保留勾選依賴角色」
+  // 也就是 values (roleIds) 只包含了 'dependent-role'
+  const roleIds = ['dependent-role'];
+  const expectedRoleIds = currentRoleIds.filter(id => !allowedRoleIds.includes(id)).concat(roleIds);
+
+  assert.deepEqual(expectedRoleIds.sort(), ['dependent-role', 'some-other-role'].sort());
+
+  // 驗證是否會被擋下來 (因為 expectedRoleIds 裡沒有 prereq-role)
+  const selectedEntries = allowedRoles.filter(entry => roleIds.includes(entry.id));
+  const blocked = selectedEntries.find(entry => entry.requirement && !expectedRoleIds.includes(entry.requirement));
+
+  assert.equal(blocked.id, 'dependent-role');
+  assert.equal(blocked.requirement, 'prereq-role');
+
+  // 情況 2：使用者同時保留勾選 prereq 和依賴角色
+  const roleIds2 = ['dependent-role', 'prereq-role'];
+  const expectedRoleIds2 = currentRoleIds.filter(id => !allowedRoleIds.includes(id)).concat(roleIds2);
+
+  const selectedEntries2 = allowedRoles.filter(entry => roleIds2.includes(entry.id));
+  const blocked2 = selectedEntries2.find(entry => entry.requirement && !expectedRoleIds2.includes(entry.requirement));
+
+  assert.equal(blocked2, undefined);
 });

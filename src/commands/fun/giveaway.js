@@ -14,6 +14,7 @@ import { randomUUID } from 'node:crypto';
 import { addGiveaway } from '../../utils/database.js';
 import { COLORS, ansiBlock, UI_COLORS } from '../../utils/style.js';
 import { embedsToV2Payload, ephemeralV2Payload, v2EditPayload, v2Panel, v2Text } from '../../utils/componentsV2.js';
+import { logger } from '../../utils/logger.js';
 
 const COMPOSER_TIMEOUT = 5 * 60_000;
 
@@ -59,19 +60,40 @@ export async function openGiveawayComposer(interaction) {
 
     const endTime = Date.now() + duration * 60 * 1000;
     await submit.deferReply({ flags: MessageFlags.Ephemeral });
-    const message = await submit.channel.send(buildGiveawayPayload(prize, duration, winnersCount, endTime, {
-        creatorId: interaction.user.id,
-        creatorName: getInteractionDisplayName(interaction),
-    }));
-    await message.react('🎉');
-    addGiveaway(submit.guildId, submit.channelId, message.id, prize, winnersCount, endTime);
-    await submit.editReply(v2EditPayload(ephemeralV2Payload([
-        v2Panel(UI_COLORS.SUCCESS).addTextDisplayComponents(v2Text([
-            '# 🎉 皇家抽獎已頒布',
-            '汪汪！本王已把賞賜張貼到目前頻道，子民們可以用 🎉 反應排隊領好運了。',
-            '-# 開獎時間到時，本王會自動公布幸運得主。',
-        ].join('\n'))),
-    ])));
+    let message;
+    let dbInserted = false;
+    try {
+        message = await submit.channel.send(buildGiveawayPayload(prize, duration, winnersCount, endTime, {
+            creatorId: interaction.user.id,
+            creatorName: getInteractionDisplayName(interaction),
+        }));
+        await message.react('🎉');
+        addGiveaway(submit.guildId, submit.channelId, message.id, prize, winnersCount, endTime);
+        dbInserted = true;
+    } catch (error) {
+        logger.error(`[Giveaway] 建立抽獎失敗 guild=${submit.guildId}: ${error.message}`);
+        if (message && !dbInserted) {
+            await message.delete().catch(() => {});
+        }
+        await submit.editReply(v2EditPayload(ephemeralV2Payload([
+            v2Panel(UI_COLORS.DANGER).addTextDisplayComponents(v2Text(
+                '# 🎁 皇家抽獎建立失敗\n本王暫時無法完成抽獎發布，請稍後重新嘗試，汪！'
+            )),
+        ]))).catch(() => {});
+        return;
+    }
+
+    try {
+        await submit.editReply(v2EditPayload(ephemeralV2Payload([
+            v2Panel(UI_COLORS.SUCCESS).addTextDisplayComponents(v2Text([
+                '# 🎉 皇家抽獎已頒布',
+                '汪汪！本王已把賞賜張貼到目前頻道，子民們可以用 🎉 反應排隊領好運了。',
+                '-# 開獎時間到時，本王會自動公布幸運得主。',
+            ].join('\n'))),
+        ])));
+    } catch (error) {
+        logger.error(`[Giveaway] 建立抽獎發送成功通知失敗 guild=${submit.guildId}: ${error.message}`);
+    }
 }
 
 export function buildGiveawayModal(sessionId) {

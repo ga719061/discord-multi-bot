@@ -53,9 +53,10 @@ export async function openReminderComposer(interaction) {
 
 export async function openReminderManager(interaction) {
     const sessionId = randomUUID();
-    await interaction.reply(buildReminderManagerPayload(sessionId, getUserReminders(interaction.user.id)));
+    const guildId = interaction.guildId;
+    await interaction.reply(buildReminderManagerPayload(sessionId, getUserReminders(interaction.user.id, guildId)));
     await attachReminderControls(interaction, interaction.user.id, sessionId, (disabled = false) =>
-        buildReminderManagerPayload(sessionId, getUserReminders(interaction.user.id), disabled));
+        buildReminderManagerPayload(sessionId, getUserReminders(interaction.user.id, guildId), disabled));
 }
 
 export function buildReminderModal(sessionId) {
@@ -147,6 +148,7 @@ async function attachReminderControls(rootInteraction, userId, sessionId, render
     const collector = response.createMessageComponentCollector({ time: PANEL_TIMEOUT });
     let currentRenderer = renderCurrent;
     let canDelete = options.allowDelete !== false;
+    const guildId = rootInteraction.guildId;
     collector.on('collect', async (component) => {
         if (component.user.id !== userId) {
             return component.reply(ephemeralV2Payload([
@@ -159,16 +161,16 @@ async function attachReminderControls(rootInteraction, userId, sessionId, render
             return openReminderComposer(component);
         }
         if (component.customId === reminderId(sessionId, 'manage')) {
-            currentRenderer = (disabled = false) => buildReminderManagerPayload(sessionId, getUserReminders(userId), disabled);
+            currentRenderer = (disabled = false) => buildReminderManagerPayload(sessionId, getUserReminders(userId, guildId), disabled);
             canDelete = true;
             return component.update({
-                components: buildReminderManagerPayload(sessionId, getUserReminders(userId)).components,
+                components: buildReminderManagerPayload(sessionId, getUserReminders(userId, guildId)).components,
             });
         }
         if (canDelete && component.customId === reminderId(sessionId, 'delete')) {
-            deleteReminder(Number(component.values[0]), userId);
+            deleteReminder(Number(component.values[0]), userId, guildId);
             return component.update({
-                components: buildReminderManagerPayload(sessionId, getUserReminders(userId)).components,
+                components: buildReminderManagerPayload(sessionId, getUserReminders(userId, guildId)).components,
             });
         }
     });

@@ -23,8 +23,22 @@ const BACKGROUND_PATHS = {
   lol: new URL('../../../../assets/esports/stats-card-lol-background.png', import.meta.url),
 };
 
-const imageCache = new Map();
-const jsonCache = new Map();
+class LimitedMap extends Map {
+  constructor(limit = 100) {
+    super();
+    this.limit = limit;
+  }
+  set(key, value) {
+    if (this.size >= this.limit && !this.has(key)) {
+      const oldestKey = this.keys().next().value;
+      if (oldestKey !== undefined) this.delete(oldestKey);
+    }
+    return super.set(key, value);
+  }
+}
+
+const imageCache = new LimitedMap(100);
+const jsonCache = new LimitedMap(100);
 
 const THEMES = {
   valorant: {
@@ -830,3 +844,5 @@ function itemKeys(item = {}) {
 function normalizeKey(content) {
   return String(content || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
+
+export { LimitedMap, imageCache, jsonCache };

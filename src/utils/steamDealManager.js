@@ -8,17 +8,19 @@ import {
   getTaipeiDateTime,
   isValidSteamDealTime,
 } from './steamDeals.js';
+import { createJobOverlapGuard } from './jobGuards.js';
 
 let checkInterval = null;
+const runCheckSteamDeals = createJobOverlapGuard('SteamDealManager', checkSteamDeals, logger);
 
 export function initSteamDealManager(client) {
   if (checkInterval) return;
 
   checkInterval = setInterval(() => {
-    checkSteamDeals(client);
+    runCheckSteamDeals(client);
   }, 60_000);
 
-  checkSteamDeals(client);
+  runCheckSteamDeals(client);
   logger.info('[SteamDealManager] Steam 每日特價推播已啟動');
 }
 
@@ -121,5 +123,13 @@ async function postSteamFreeGamesForGuild(client, row, today, db) {
     db.prepare('UPDATE guild_settings SET steam_free_last_post_date = ? WHERE guild_id = ?').run(today, row.guild_id);
   } catch (err) {
     logger.error(`[SteamDealManager] Steam limited free push failed guild=${row.guild_id} code=${err.code || 'unavailable'}:`, err);
+  }
+}
+
+export function stopSteamDealManager() {
+  if (checkInterval) {
+    clearInterval(checkInterval);
+    checkInterval = null;
+    logger.info('[SteamDealManager] Steam 每日特價推播已停止');
   }
 }

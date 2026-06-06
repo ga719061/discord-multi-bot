@@ -12,7 +12,14 @@ import {
 } from '../src/utils/componentsV2.js';
 import { UI_COLORS } from '../src/utils/style.js';
 import { buildPollPayload } from '../src/commands/fun/poll.js';
-import { buildAnnouncementPayload, openAnnouncementComposer } from '../src/utils/announcementTools.js';
+import {
+    buildAnnouncementPayload,
+    buildPrefilledAnnouncementPreview,
+    claimPendingAnnouncement,
+    openAnnouncementComposer,
+    pendingAnnouncements,
+    restorePendingAnnouncement,
+} from '../src/utils/announcementTools.js';
 import { renderAnnouncementScrollImage } from '../src/utils/announcementImage.js';
 
 const tinyPng = Buffer.from(
@@ -121,6 +128,42 @@ test('announcement composer opens a modal with file upload', async () => {
 
     assert.match(JSON.stringify(modal), /announce_images/);
     assert.match(JSON.stringify(modal), /480/);
+});
+
+test('prefilled announcement preview stores a private pending draft with safe mentions', async () => {
+    const before = pendingAnnouncements.size;
+    const preview = await buildPrefilledAnnouncementPreview({
+        channelId: 'channel',
+        userId: 'admin',
+        title: '維護通知',
+        content: '今晚維護，請大家留意。',
+        footer: '謝謝配合',
+        mentionText: '@here',
+        allowedMentions: { parse: ['everyone'] },
+    });
+
+    assert.equal((preview.flags & MessageFlags.IsComponentsV2) !== 0, true);
+    assert.equal((preview.flags & MessageFlags.Ephemeral) !== 0, true);
+    assert.deepEqual(preview.allowedMentions, { parse: [] });
+    assert.equal(pendingAnnouncements.size, before + 1);
+    const draft = [...pendingAnnouncements.values()].find((entry) => entry.title === '維護通知');
+    assert.deepEqual(draft.allowedMentions, { parse: ['everyone'] });
+    assert.match(JSON.stringify(preview.components[0].toJSON()), /發布公告/);
+});
+
+test('announcement draft claim is atomic and can be restored after publish failure', () => {
+    const uuid = 'claim-test';
+    const draft = { channelId: 'channel', userId: 'admin', timestamp: Date.now() };
+    pendingAnnouncements.set(uuid, draft);
+
+    assert.equal(claimPendingAnnouncement(uuid), draft);
+    assert.equal(claimPendingAnnouncement(uuid), null);
+    assert.equal(pendingAnnouncements.has(uuid), false);
+
+    assert.equal(restorePendingAnnouncement(uuid, draft), true);
+    assert.equal(restorePendingAnnouncement(uuid, draft), false);
+    assert.equal(pendingAnnouncements.get(uuid), draft);
+    pendingAnnouncements.delete(uuid);
 });
 
 function successfulImageFetch() {

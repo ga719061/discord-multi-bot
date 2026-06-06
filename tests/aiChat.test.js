@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getAiResponse } from '../src/utils/aiChat.js';
+import { buildAiQaActionRows } from '../src/utils/aiQaActions.js';
+import { generateAiDraft } from '../src/utils/aiDrafts.js';
+import { shouldTriggerAi } from '../src/events/messageCreate.js';
 
 test('Gemini requests preserve search, chat history, and image attachments', async () => {
     const originalKey = process.env.GOOGLE_AI_KEY;
@@ -64,4 +67,168 @@ test('Gemini requests preserve search, chat history, and image attachments', asy
             process.env.GOOGLE_AI_KEY = originalKey;
         }
     }
+});
+
+test('Gemini image attachments skip unsafe MIME types and oversized downloads', async () => {
+    const originalKey = process.env.GOOGLE_AI_KEY;
+    const originalFetch = globalThis.fetch;
+    const fetchedUrls = [];
+    let geminiRequest;
+
+    process.env.GOOGLE_AI_KEY = 'test-key';
+    globalThis.fetch = async (url, options = {}) => {
+        const value = String(url);
+        fetchedUrls.push(value);
+
+        if (value === 'https://assets.example/not-image-response.png') {
+            return new Response(new Uint8Array([1, 2, 3]), {
+                status: 200,
+                headers: { 'content-type': 'text/html' },
+            });
+        }
+        if (value === 'https://assets.example/too-large.png') {
+            return new Response(new Uint8Array([1, 2, 3]), {
+                status: 200,
+                headers: {
+                    'content-type': 'image/png',
+                    'content-length': String(6 * 1024 * 1024),
+                },
+            });
+        }
+
+        geminiRequest = JSON.parse(options.body);
+        return new Response(JSON.stringify({
+            candidates: [{ content: { role: 'model', parts: [{ text: 'ok' }] } }],
+        }), {
+            status: 200,
+            headers: { 'content-type': 'application/json' },
+        });
+    };
+
+    try {
+        const reply = await getAiResponse(
+            '看圖',
+            'system',
+            'gemini-3.5-flash',
+            false,
+            null,
+            [
+                { url: 'https://assets.example/plain.txt', contentType: 'text/plain' },
+                { url: 'https://assets.example/not-image-response.png', contentType: 'image/png' },
+                { url: 'https://assets.example/too-large.png', contentType: 'image/png' },
+            ],
+            0
+        );
+
+        assert.equal(reply, 'ok');
+        assert.equal(fetchedUrls.includes('https://assets.example/plain.txt'), false);
+        assert.equal(geminiRequest.contents[0].parts.length, 1);
+        assert.deepEqual(geminiRequest.contents[0].parts[0], { text: '看圖' });
+    } finally {
+        globalThis.fetch = originalFetch;
+        if (originalKey === undefined) {
+            delete process.env.GOOGLE_AI_KEY;
+        } else {
+            process.env.GOOGLE_AI_KEY = originalKey;
+        }
+    }
+});
+
+test('AI QA action rows expose public actions without admin-only buttons', () => {
+    const rows = buildAiQaActionRows({
+        userId: 'user-a',
+        isAdmin: false,
+        userText: '我要設定公告，也想查 Steam 特價和戰績',
+        aiReply: '可以使用 /幫助、/特價查詢、/戰績。',
+    });
+    const buttons = rows.flatMap((row) => row.toJSON().components);
+
+    assert.deepEqual(buttons.map((button) => button.label), ['開啟幫助', 'Steam 查詢', '戰績查詢']);
+    assert.equal(buttons.some((button) => button.label === '管理設定'), false);
+    assert.equal(buttons.some((button) => button.label === '公告草稿'), false);
+    assert.equal(buttons.every((button) => button.custom_id.startsWith('aiqa:user-a:')), true);
+});
+
+test('AI QA action rows include admin draft actions for announcement questions', () => {
+    const rows = buildAiQaActionRows({
+        userId: 'admin-a',
+        isAdmin: true,
+        userText: '幫我弄公告草稿和設定',
+        aiReply: '可以前往管理設定。',
+    });
+    const labels = rows.flatMap((row) => row.toJSON().components).map((button) => button.label);
+
+    assert.equal(labels.includes('管理設定'), true);
+    assert.equal(labels.includes('公告草稿'), true);
+});
+
+test('AI draft generator accepts valid JSON and rejects invalid JSON without partial drafts', async () => {
+    const draft = await generateAiDraft({
+        guildId: 'guild',
+        userId: 'admin',
+        type: 'announcement',
+        brief: '週末維護，提醒大家備份資料',
+        tone: 'formal',
+        settings: { model: 'gemini-test' },
+        aiResponder: async () => JSON.stringify({
+            title: '週末維護通知',
+            content: '本週末將進行系統維護，請大家提前備份重要資料。',
+            footer: '感謝配合',
+        }),
+    });
+
+    assert.equal(draft.type, 'announcement');
+    assert.equal(draft.title, '週末維護通知');
+    assert.equal(draft.content.includes('系統維護'), true);
+    assert.equal(draft.footer, '感謝配合');
+    assert.equal(draft.sourceBrief, '週末維護，提醒大家備份資料');
+
+    await assert.rejects(
+        generateAiDraft({
+            guildId: 'guild',
+            userId: 'admin',
+            type: 'welcome',
+            brief: '歡迎新成員',
+            aiResponder: async () => '不是 JSON',
+        }),
+        /合法 JSON/
+    );
+});
+
+test('AI trigger always respects global enabled and expiry state', () => {
+    const base = {
+        whitelist: ['user'],
+        party_channel_id: 'party',
+        party_expires_at: 2000,
+        expires_at: null,
+    };
+
+    assert.equal(shouldTriggerAi({
+        settings: { ...base, enabled: 0 },
+        isMention: true,
+        userId: 'user',
+        channelId: 'other',
+        now: 1000,
+    }), false);
+    assert.equal(shouldTriggerAi({
+        settings: { ...base, enabled: 1, expires_at: 999 },
+        isMention: true,
+        userId: 'user',
+        channelId: 'other',
+        now: 1000,
+    }), false);
+    assert.equal(shouldTriggerAi({
+        settings: { ...base, enabled: 1 },
+        isMention: true,
+        userId: 'user',
+        channelId: 'other',
+        now: 1000,
+    }), true);
+    assert.equal(shouldTriggerAi({
+        settings: { ...base, enabled: 1, whitelist: [] },
+        isMention: true,
+        userId: 'user',
+        channelId: 'party',
+        now: 1000,
+    }), true);
 });

@@ -2,9 +2,11 @@ import { getDb } from './database.js';
 import { logger } from './logger.js';
 import { v2Notice } from './componentsV2.js';
 import { UI_COLORS } from './style.js';
+import { createJobOverlapGuard } from './jobGuards.js';
 
 let client;
 let checkInterval;
+const runCheckExpiredParties = createJobOverlapGuard('PartyManager', checkExpiredParties, logger);
 
 /**
  * 初始化派對管理器 — 輪詢 DB 中已過期的派對並清理
@@ -13,9 +15,9 @@ let checkInterval;
 export function initPartyManager(discordClient) {
     client = discordClient;
     // 每 30 秒巡邏一次
-    checkInterval = setInterval(() => checkExpiredParties(), 30_000);
+    checkInterval = setInterval(() => runCheckExpiredParties(), 30_000);
     // 啟動時立刻檢查一次（處理重啟期間過期的派對）
-    checkExpiredParties();
+    runCheckExpiredParties();
     logger.info('[PartyManager] 派對到期巡邏已啟動！汪！');
 }
 
@@ -66,5 +68,13 @@ async function endParty(row) {
         logger.info(`[PartyManager] 領地 ${guild.name} 的派對已結束。`);
     } catch (err) {
         logger.error(`[PartyManager] 結束派對失敗 (guild: ${row.guild_id}):`, err);
+    }
+}
+
+export function stopPartyManager() {
+    if (checkInterval) {
+        clearInterval(checkInterval);
+        checkInterval = null;
+        logger.info('[PartyManager] 派對管理器已停止');
     }
 }

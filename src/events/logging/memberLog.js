@@ -1,7 +1,7 @@
 import { EmbedBuilder, AuditLogEvent } from 'discord.js';
 import { sendLog, getAuditLogExecutor } from '../../utils/logUtils.js';
 import { fmt, COLORS, UI_COLORS } from '../../utils/style.js';
-import { inviteCache } from '../../bot.js';
+import { inviteCache } from '../../utils/inviteCache.js';
 import { logger } from '../../utils/logger.js';
 
 export function register(client) {

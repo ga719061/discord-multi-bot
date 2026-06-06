@@ -7,6 +7,29 @@ const LOG_DIR = path.join(__dirname, '..', '..', 'logs');
 
 if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR, { recursive: true });
 
+function cleanOldLogs(retentionDays = 30) {
+    try {
+        if (!fs.existsSync(LOG_DIR)) return;
+        const files = fs.readdirSync(LOG_DIR);
+        const now = Date.now();
+        const maxAge = retentionDays * 24 * 60 * 60 * 1000;
+
+        for (const file of files) {
+            if (!file.endsWith('.log')) continue;
+            const filePath = path.join(LOG_DIR, file);
+            const stats = fs.statSync(filePath);
+            if (now - stats.mtimeMs > maxAge) {
+                fs.unlinkSync(filePath);
+                console.log(`[Logger] 已刪除過期日誌: ${file}`);
+            }
+        }
+    } catch (err) {
+        console.error('[Logger] 清理舊日誌時出錯:', err);
+    }
+}
+
+cleanOldLogs(30);
+
 const COLORS = {
     reset: '\x1b[0m',
     red: '\x1b[31m',

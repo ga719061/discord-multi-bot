@@ -1,13 +1,20 @@
-import test from 'node:test';
+import fs from 'node:fs';
+import path from 'node:path';
+import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { buildCommandManifest, validateCommandManifest } from '../scripts/command-manifest.js';
 import { COMMAND_KNOWLEDGE } from '../src/knowledge/commands.js';
 import { DEFAULT_AI_PROMPT } from '../src/utils/aiChat.js';
 import { getServerKnowledge } from '../src/utils/serverKnowledge.js';
-import { initDatabase, updateGuildSetting } from '../src/utils/database.js';
+import { getGuildSettings, updateGuildSetting } from '../src/utils/database.js';
+import { cleanupTestDatabase, initTestDatabase } from './helpers/database.js';
+
+afterEach(() => {
+  cleanupTestDatabase();
+});
 
 test('public server knowledge excludes admin-only control-center details', () => {
-  initDatabase();
+  initTestDatabase('knowledge-public');
   const knowledge = getServerKnowledge(`knowledge-public-${process.pid}`, false);
 
   assert.match(knowledge, /公開功能/);
@@ -19,7 +26,7 @@ test('public server knowledge excludes admin-only control-center details', () =>
 });
 
 test('admin server knowledge includes admin notes and guild setting status', () => {
-  initDatabase();
+  initTestDatabase('knowledge-admin');
   const guildId = `knowledge-admin-${process.pid}`;
   updateGuildSetting(guildId, 'welcome_channel', 'welcome-channel');
   updateGuildSetting(guildId, 'log_channel', 'log-channel');
@@ -31,6 +38,18 @@ test('admin server knowledge includes admin notes and guild setting status', () 
   assert.match(knowledge, /管理員附註/);
   assert.match(knowledge, /歡迎系統狀態: 已啟用/);
   assert.match(knowledge, /日誌頻道: 已就緒/);
+});
+
+test('test database helper uses a temp db without touching the real bot database', () => {
+  const realDbPath = path.join(process.cwd(), 'data', 'bot.db');
+  const before = fs.existsSync(realDbPath) ? fs.statSync(realDbPath).mtimeMs : null;
+  const tempDb = initTestDatabase('knowledge-temp-path');
+
+  getGuildSettings(`knowledge-temp-${process.pid}`);
+
+  assert.equal(fs.existsSync(tempDb.dbPath), true);
+  const after = fs.existsSync(realDbPath) ? fs.statSync(realDbPath).mtimeMs : null;
+  assert.equal(after, before);
 });
 
 test('knowledge command names match the deployed slash command manifest', async () => {

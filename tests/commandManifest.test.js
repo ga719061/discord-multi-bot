@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildCommandManifest, validateCommandManifest } from '../scripts/command-manifest.js';
@@ -41,4 +42,11 @@ test('command manifest rejects duplicate and unsupported English command names',
         () => validateCommandManifest([{ name: 'help' }, { name: 'play' }]),
         /英文指令入口僅允許/
     );
+});
+
+test('logging member event does not import the bot entrypoint', () => {
+    const source = fs.readFileSync('src/events/logging/memberLog.js', 'utf8');
+
+    assert.equal(source.includes('../../bot.js'), false);
+    assert.match(source, /utils\/inviteCache\.js/);
 });
