@@ -10,18 +10,11 @@
 
 ---
 
-## 🧠 AI 知識庫架構
+## 🧠 AI 行為
 
-AI 知識已拆成模組化來源，避免功能更新後 prompt 與文件不同步：
-
-- `src/knowledge/persona.js`：吉吉國王 persona、回答風格與安全邊界。
-- `src/knowledge/features.js`：公開功能、管理員功能與 Gemini 模型備註。
-- `src/knowledge/commands.js`：目前部署的 slash command 清單。
-- `src/knowledge/permissions.js`：一般成員、Administrator 與 AI 標記限制。
-- `src/knowledge/lore.js`：牛排、小狗禁忌、本王口吻等角色設定。
-- `src/utils/serverKnowledge.js`：依使用者權限組裝 AI 可讀的伺服器知識。
-
-`DEFAULT_AI_PROMPT` 只保留穩定 persona；功能事實由知識庫模組注入。這讓吉吉國王保留個性，但回答功能問題時會優先準確、清楚。
+- `src/knowledge/persona.js` 僅保留吉吉國王 persona 與回答風格。
+- AI 不會注入或回答本 Discord 伺服器的功能、指令、設定、權限與管理資訊。
+- Discord mention 安全規則仍會在每次回答時強制套用。
 
 ---
 

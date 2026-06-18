@@ -30,6 +30,18 @@ test('Reminder ID Optimization', async (t) => {
   });
 });
 
+test('test database helper uses a temp db without touching the real bot database', () => {
+  const realDbPath = path.join(process.cwd(), 'data', 'bot.db');
+  const before = fs.existsSync(realDbPath) ? fs.statSync(realDbPath).mtimeMs : null;
+  const tempDb = initTestDatabase('temp-path');
+
+  assert.equal(fs.existsSync(tempDb.dbPath), true);
+  const after = fs.existsSync(realDbPath) ? fs.statSync(realDbPath).mtimeMs : null;
+  assert.equal(after, before);
+
+  cleanupTestDatabase();
+});
+
 test('legacy giveaway and reminder schemas migrate before indexes are created', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dc-legacy-db-'));
   const dbPath = path.join(dir, 'legacy.db');

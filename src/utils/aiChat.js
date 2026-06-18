@@ -7,8 +7,17 @@ import { fetchWithLimit } from './imageRendering.js';
 let genAI = null;
 
 export const DEFAULT_AI_PROMPT = AI_PERSONA_PROMPT;
+export const SERVER_INFO_RESTRICTION = '你沒有本 Discord 伺服器的功能、指令、設定、權限或管理資訊。遇到相關問題時，請簡短說明無法提供，不要猜測、整理或引用伺服器內容。';
 const IMAGE_FETCH_TIMEOUT_MS = 3500;
 const MAX_AI_IMAGE_BYTES = 5 * 1024 * 1024;
+
+export function buildAiSystemPrompt(basePrompt, context = '') {
+    return [
+        basePrompt || DEFAULT_AI_PROMPT,
+        `[伺服器資訊限制]\n${SERVER_INFO_RESTRICTION}`,
+        context,
+    ].filter(Boolean).join('\n\n');
+}
 
 function getGeminiClient() {
     if (!genAI) {

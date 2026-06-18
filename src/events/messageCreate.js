@@ -1,6 +1,6 @@
 import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { getUserLevel, addXp, getAiSettings, getRankTitle, getGuildSettings } from '../utils/database.js';
-import { getAiResponse, DEFAULT_AI_PROMPT } from '../utils/aiChat.js';
+import { buildAiSystemPrompt, getAiResponse, DEFAULT_AI_PROMPT } from '../utils/aiChat.js';
 import { DEFAULT_AI_MODEL } from '../utils/aiConfig.js';
 import { buildAiMentionPolicy, sanitizeAiReplyMentions, buildAllowedMentions } from '../utils/aiMentions.js';
 import { logger } from '../utils/logger.js';
@@ -281,24 +281,16 @@ export function register(client) {
                     const displayText = userText || '（請看圖片）';
                     await message.channel.sendTyping();
 
-                    // 建立環境上下文
-                    const { getServerKnowledge } = await import('../utils/serverKnowledge.js');
-                    const serverInfo = getServerKnowledge(message.guild.id, isAdmin);
+                    // 建立必要的安全上下文，不注入伺服器功能或設定知識。
                     const now = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
                     const context = [
                         `[系統資訊]`,
                         `時間: ${now}`,
-                        `伺服器: ${message.guild.name} (成員數: ${message.guild.memberCount})`,
-                        `權限: ${isAdmin ? '管理員' : '一般成員'}`,
-                        `發訊者: ${message.member.displayName} (ID: ${message.author.id})`,
-                        `發訊者身分組: ${message.member.roles.cache.map(r => r.name).filter(n => n !== '@everyone').join(', ') || '無'}`,
-                        `\n[伺服器指南]\n${serverInfo}`,
-                        !isAdmin ? `\n[安全性規範]\n你目前正在與「一般成員」對話。你被嚴格禁止回答任何有關「伺服器管理、權限設定、後台操作、bot 內部系統配置」或「/設定」皇家管理控制台的問題。若對方詢問，請直接回絕並告知其「御前權限不足，本王無法呈上此類機密資訊」，不准有任何例外或引導。` : '',
                         `\n[提及規範]\n${buildMentionInstructions(message, mentionPolicy, isAdmin)}`,
                     ].join('\n');
 
                     const basePrompt = settings.system_prompt || DEFAULT_AI_PROMPT;
-                    const fullPrompt = `${basePrompt}\n\n${context}`;
+                    const fullPrompt = buildAiSystemPrompt(basePrompt, context);
 
                     const modelName = settings.model || DEFAULT_AI_MODEL;
                     const useSearch = settings.search_enabled || false;

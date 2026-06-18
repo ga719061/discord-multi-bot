@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getAiResponse } from '../src/utils/aiChat.js';
+import { buildAiSystemPrompt, DEFAULT_AI_PROMPT, getAiResponse, SERVER_INFO_RESTRICTION } from '../src/utils/aiChat.js';
 import { generateAiDraft } from '../src/utils/aiDrafts.js';
 import { shouldTriggerAi } from '../src/events/messageCreate.js';
 
@@ -131,6 +131,16 @@ test('Gemini image attachments skip unsafe MIME types and oversized downloads', 
             process.env.GOOGLE_AI_KEY = originalKey;
         }
     }
+});
+
+test('AI prompt keeps the royal persona but refuses Discord server information', () => {
+    assert.match(DEFAULT_AI_PROMPT, /吉吉國王/);
+    assert.match(DEFAULT_AI_PROMPT, /繁體中文/);
+    assert.match(SERVER_INFO_RESTRICTION, /沒有本 Discord 伺服器/);
+    assert.match(SERVER_INFO_RESTRICTION, /功能、指令、設定、權限或管理資訊/);
+    assert.match(buildAiSystemPrompt('自訂人格', '安全上下文'), /自訂人格/);
+    assert.match(buildAiSystemPrompt('自訂人格', '安全上下文'), /伺服器資訊限制/);
+    assert.match(buildAiSystemPrompt('自訂人格', '安全上下文'), /安全上下文/);
 });
 
 test('AI draft generator accepts valid JSON and rejects invalid JSON without partial drafts', async () => {

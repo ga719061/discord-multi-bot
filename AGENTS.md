@@ -51,7 +51,7 @@
 - Events：放在 `src/events/**`，由 `src/handlers/eventHandler.js` 遞迴載入。事件模組應 export `register(client)`。
 - Command loading：`src/handlers/commandHandler.js` 會掃描 `src/commands` 下各分類目錄。
 - Database：`src/utils/database.js` 負責 SQLite schema、簡易遷移、guild settings、AI settings、levels、reminders、giveaways、polls、reaction roles。
-- AI 知識：`src/knowledge/*` 放 persona、features、commands、permissions、lore；`src/utils/serverKnowledge.js` 與 `src/utils/aiChat.js` 組合 AI 上下文。
+- AI 上下文：`src/knowledge/persona.js` 僅提供角色語氣；AI 不注入伺服器功能、指令、設定、權限或管理知識，`src/events/messageCreate.js` 只附加時間、伺服器資訊拒答規則與 Discord mention 安全規則。
 - Components V2：互動式訊息與 notices 優先看 `src/utils/componentsV2.js`，避免混用不相容 payload。
 - 圖片渲染：公告、每日一汪、占卜與戰績圖片分散在 `src/utils/announcementImage.js`、`src/commands/fun/lib/funImage.js`、`src/commands/esports/lib/statsImage.js`，素材在 `assets/`。
 
