@@ -6,7 +6,6 @@ import { buildAiMentionPolicy, sanitizeAiReplyMentions, buildAllowedMentions } f
 import { logger } from '../utils/logger.js';
 import { embedsToV2Payload, v2Notice } from '../utils/componentsV2.js';
 import { UI_COLORS } from '../utils/style.js';
-import { buildAiQaActionRows } from '../utils/aiQaActions.js';
 
 const XP_COOLDOWN = 60_000;
 const XP_MIN = 15;
@@ -355,26 +354,14 @@ export function register(client) {
                     );
                     // 若回應超過 2000 字，自動分段發送
                     const MAX_LEN = 1990;
-                    const aiQaActionRows = settings.action_buttons_enabled !== 0
-                        ? buildAiQaActionRows({
-                            userId: message.author.id,
-                            isAdmin,
-                            userText: displayText,
-                            aiReply,
-                        })
-                        : [];
                     if (aiReply.length <= MAX_LEN) {
-                        const replyOptions = { content: aiReply, allowedMentions };
-                        if (aiQaActionRows.length) replyOptions.components = aiQaActionRows;
-                        await message.reply(replyOptions);
+                        await message.reply({ content: aiReply, allowedMentions });
                     } else {
                         const chunks = [];
                         for (let i = 0; i < aiReply.length; i += MAX_LEN) {
                             chunks.push(aiReply.slice(i, i + MAX_LEN));
                         }
-                        const replyOptions = { content: chunks[0], allowedMentions };
-                        if (aiQaActionRows.length) replyOptions.components = aiQaActionRows;
-                        await message.reply(replyOptions);
+                        await message.reply({ content: chunks[0], allowedMentions });
                         for (let i = 1; i < chunks.length; i++) {
                             await message.channel.send({ content: chunks[i], allowedMentions });
                         }

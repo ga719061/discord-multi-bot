@@ -98,7 +98,6 @@ export function initDatabase(options = {}) {
       admin_ids TEXT DEFAULT '[]',
       search_enabled INTEGER DEFAULT 0,
       context_enabled INTEGER DEFAULT 1,
-      action_buttons_enabled INTEGER DEFAULT 1,
       party_channel_id TEXT DEFAULT NULL,
       party_expires_at INTEGER DEFAULT NULL
     );
@@ -171,8 +170,10 @@ export function initDatabase(options = {}) {
   if (!aiColumns.includes('context_enabled')) {
     db.prepare("ALTER TABLE ai_settings ADD COLUMN context_enabled INTEGER DEFAULT 1").run();
   }
-  if (!aiColumns.includes('action_buttons_enabled')) {
-    db.prepare("ALTER TABLE ai_settings ADD COLUMN action_buttons_enabled INTEGER DEFAULT 1").run();
+  if (aiColumns.includes('action_buttons_enabled')) {
+    db.transaction(() => {
+      db.prepare('ALTER TABLE ai_settings DROP COLUMN action_buttons_enabled').run();
+    })();
   }
   if (!aiColumns.includes('party_channel_id')) {
     db.prepare("ALTER TABLE ai_settings ADD COLUMN party_channel_id TEXT DEFAULT NULL").run();
@@ -395,7 +396,7 @@ export function getAiSettings(guildId) {
   };
 }
 
-const ALLOWED_AI_KEYS = ['enabled', 'expires_at', 'system_prompt', 'whitelist', 'model', 'admin_ids', 'search_enabled', 'context_enabled', 'action_buttons_enabled', 'party_channel_id', 'party_expires_at'];
+const ALLOWED_AI_KEYS = ['enabled', 'expires_at', 'system_prompt', 'whitelist', 'model', 'admin_ids', 'search_enabled', 'context_enabled', 'party_channel_id', 'party_expires_at'];
 
 export function updateAiSetting(guildId, key, value) {
   if (!ALLOWED_AI_KEYS.includes(key)) throw new Error(`不允許的欄位名稱: ${key}`);

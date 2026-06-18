@@ -386,7 +386,7 @@ async function handleButton(component, context, action, value) {
   if (action === 'self_clear_requirement') context.pending.selfRequirement = null;
   if (action === 'ai_toggle') {
     if (!requireAiUnlock(component, context)) return;
-    updateAiSetting(context.guild.id, value, getAiSettings(context.guild.id)[value] ? 0 : 1);
+    toggleAiSetting(context.guild.id, value);
     context.notice = '國王智慧核心開關已更新。';
   }
   if (action === 'ai_user_add' || action === 'ai_user_remove') {
@@ -472,6 +472,19 @@ async function handleButton(component, context, action, value) {
     context.view = 'confirm';
   }
   await updateView(component, context);
+}
+
+function toggleAiSetting(guildId, key) {
+  const settings = getAiSettings(guildId);
+  const currentValue = key === 'enabled'
+    ? settings.enabled === 1 && (settings.expires_at === null || Date.now() <= settings.expires_at)
+    : Boolean(settings[key]);
+  const nextValue = currentValue ? 0 : 1;
+  updateAiSetting(guildId, key, nextValue);
+  if (key === 'enabled' && nextValue === 1) {
+    updateAiSetting(guildId, 'expires_at', null);
+  }
+  return nextValue;
 }
 
 async function openModal(component, context, type) {
@@ -988,16 +1001,16 @@ function renderAi(context) {
   }
   const settings = getAiSettings(context.guild.id);
   const whitelistCount = new Set(settings.whitelist.filter(Boolean).map(String)).size;
-  const actionButtonsEnabled = settings.action_buttons_enabled !== 0;
-  const panel = modulePanel(context, 'AI 設定', `國王大腦：\`${settings.model || DEFAULT_AI_MODEL}\`\n天文地理聯網：**${settings.search_enabled ? '開啟' : '關閉'}** | 御前對話記憶：**${settings.context_enabled ? '開啟' : '關閉'}** | 回答操作按鈕：**${actionButtonsEnabled ? '開啟' : '關閉'}**\n御准白名單：${whitelistCount} 人`)
+  const aiEnabled = settings.enabled === 1 && (settings.expires_at === null || Date.now() <= settings.expires_at);
+  const panel = modulePanel(context, 'AI 設定', `智慧核心：**${aiEnabled ? '啟用' : '停用'}** | 國王大腦：\`${settings.model || DEFAULT_AI_MODEL}\`\n天文地理聯網：**${settings.search_enabled ? '開啟' : '關閉'}** | 御前對話記憶：**${settings.context_enabled ? '開啟' : '關閉'}**\n御准白名單：${whitelistCount} 人`)
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder().setCustomId(id(context, 'ai_model')).setPlaceholder('選擇 AI 模型')
         .addOptions(AI_MODELS.map((model) => ({ label: model, value: model, default: model === settings.model })))
     ))
     .addActionRowComponents(actionButtons(context, [
+      ['ai_toggle:enabled', aiEnabled ? '停用 AI 核心' : '啟用 AI 核心', aiEnabled ? ButtonStyle.Danger : ButtonStyle.Success],
       ['ai_toggle:search_enabled', settings.search_enabled ? '關閉聯網' : '開啟聯網', settings.search_enabled ? ButtonStyle.Secondary : ButtonStyle.Success],
       ['ai_toggle:context_enabled', settings.context_enabled ? '關閉記憶' : '開啟記憶', settings.context_enabled ? ButtonStyle.Secondary : ButtonStyle.Success],
-      ['ai_toggle:action_buttons_enabled', actionButtonsEnabled ? '關閉回答按鈕' : '開啟回答按鈕', actionButtonsEnabled ? ButtonStyle.Secondary : ButtonStyle.Success],
       ['modal:ai_prompt', '編輯提示詞', ButtonStyle.Secondary],
     ]));
   addAiDraftCenter(panel, context);
@@ -1845,4 +1858,5 @@ export const settingsViewTesting = {
   closePanel,
   buildSelfRoleMenuPayload,
   extractEmojiAndLabel,
+  toggleAiSetting,
 };

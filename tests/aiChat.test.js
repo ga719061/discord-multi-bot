@@ -1,7 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { getAiResponse } from '../src/utils/aiChat.js';
-import { buildAiQaActionRows } from '../src/utils/aiQaActions.js';
 import { generateAiDraft } from '../src/utils/aiDrafts.js';
 import { shouldTriggerAi } from '../src/events/messageCreate.js';
 
@@ -132,34 +131,6 @@ test('Gemini image attachments skip unsafe MIME types and oversized downloads', 
             process.env.GOOGLE_AI_KEY = originalKey;
         }
     }
-});
-
-test('AI QA action rows expose public actions without admin-only buttons', () => {
-    const rows = buildAiQaActionRows({
-        userId: 'user-a',
-        isAdmin: false,
-        userText: '我要設定公告，也想查 Steam 特價和戰績',
-        aiReply: '可以使用 /幫助、/特價查詢、/戰績。',
-    });
-    const buttons = rows.flatMap((row) => row.toJSON().components);
-
-    assert.deepEqual(buttons.map((button) => button.label), ['開啟幫助', 'Steam 查詢', '戰績查詢']);
-    assert.equal(buttons.some((button) => button.label === '管理設定'), false);
-    assert.equal(buttons.some((button) => button.label === '公告草稿'), false);
-    assert.equal(buttons.every((button) => button.custom_id.startsWith('aiqa:user-a:')), true);
-});
-
-test('AI QA action rows include admin draft actions for announcement questions', () => {
-    const rows = buildAiQaActionRows({
-        userId: 'admin-a',
-        isAdmin: true,
-        userText: '幫我弄公告草稿和設定',
-        aiReply: '可以前往管理設定。',
-    });
-    const labels = rows.flatMap((row) => row.toJSON().components).map((button) => button.label);
-
-    assert.equal(labels.includes('管理設定'), true);
-    assert.equal(labels.includes('公告草稿'), true);
 });
 
 test('AI draft generator accepts valid JSON and rejects invalid JSON without partial drafts', async () => {

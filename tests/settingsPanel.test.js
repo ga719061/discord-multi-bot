@@ -227,9 +227,9 @@ test('AI settings page exposes unlocked private draft center', () => {
   assert.equal(ids.includes('settings:admin:modal:ai_draft'), true);
 });
 
-test('AI settings page exposes action-button toggle and defaults it on', () => {
+test('AI settings page exposes the core enable toggle and current status', () => {
   initTestDatabase();
-  const guildId = `settings-ai-action-buttons-${process.pid}`;
+  const guildId = `settings-ai-enabled-${process.pid}`;
   updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
   const context = {
     userId: 'admin',
@@ -239,20 +239,44 @@ test('AI settings page exposes action-button toggle and defaults it on', () => {
     notice: null,
   };
 
-  assert.equal(getAiSettings(guildId).action_buttons_enabled, 1);
-  const panel = settingsViewTesting.renderAi(context).components[0].toJSON();
-  const text = JSON.stringify(panel);
-  const buttons = panel.components
+  const disabledPanel = settingsViewTesting.renderAi(context).components[0].toJSON();
+  const disabledText = JSON.stringify(disabledPanel);
+  const disabledButtons = disabledPanel.components
     .filter((component) => component.type === ComponentType.ActionRow)
     .flatMap((row) => row.components);
 
-  assert.match(text, /回答操作按鈕/);
-  assert.equal(buttons.some((button) => button.custom_id === 'settings:admin:ai_toggle:action_buttons_enabled'), true);
+  assert.match(disabledText, /智慧核心.+停用/);
+  assert.equal(disabledButtons.some((button) =>
+    button.custom_id === 'settings:admin:ai_toggle:enabled' && button.label === '啟用 AI 核心'
+  ), true);
 
-  updateAiSetting(guildId, 'action_buttons_enabled', 0);
-  assert.equal(getAiSettings(guildId).action_buttons_enabled, 0);
-  const disabledText = JSON.stringify(settingsViewTesting.renderAi(context).components[0].toJSON());
-  assert.match(disabledText, /回答操作按鈕.+關閉/);
+  updateAiSetting(guildId, 'enabled', 1);
+  const enabledView = settingsViewTesting.renderAi(context);
+  const enabledPanel = enabledView.components[0].toJSON();
+  const enabledText = JSON.stringify(enabledPanel);
+  const enabledButtons = enabledPanel.components
+    .filter((component) => component.type === ComponentType.ActionRow)
+    .flatMap((row) => row.components);
+
+  assert.match(enabledText, /智慧核心.+啟用/);
+  assert.equal(enabledButtons.some((button) =>
+    button.custom_id === 'settings:admin:ai_toggle:enabled' && button.label === '停用 AI 核心'
+  ), true);
+  assert.equal(countV2Components(enabledView.components) <= 40, true);
+});
+
+test('enabling the AI core clears an expired global deadline', () => {
+  initTestDatabase();
+  const guildId = `settings-ai-enable-action-${process.pid}`;
+  updateAiSetting(guildId, 'enabled', 1);
+  updateAiSetting(guildId, 'expires_at', 1);
+
+  assert.equal(settingsViewTesting.toggleAiSetting(guildId, 'enabled'), 1);
+  assert.equal(getAiSettings(guildId).enabled, 1);
+  assert.equal(getAiSettings(guildId).expires_at, null);
+
+  assert.equal(settingsViewTesting.toggleAiSetting(guildId, 'enabled'), 0);
+  assert.equal(getAiSettings(guildId).enabled, 0);
 });
 
 test('AI announcement draft panel offers preview controls only after a draft exists', () => {

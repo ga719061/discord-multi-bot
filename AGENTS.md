@@ -63,7 +63,7 @@
 - 改資料庫欄位時，在 `initDatabase()` 補 `CREATE TABLE` 預設欄位，也補既有 DB 的 `ALTER TABLE` 遷移。
 - 依賴新欄位的 SQLite 索引必須在既有資料庫完成 `ALTER TABLE` 遷移後建立，並以舊 schema temp DB 測試驗證。
 - 改 guild 或 AI setting key 時，同步更新 allowlist，例如 `ALLOWED_GUILD_KEYS` 或 `ALLOWED_AI_KEYS`。
-- AI 回答操作按鈕由 `ai_settings.action_buttons_enabled` 控制，預設開啟；關閉時 mention AI 仍回覆文字但不附操作按鈕。
+- AI 白名單與派對模式仍受 `ai_settings.enabled` 全域開關限制；AI 設定面板必須顯示並提供核心啟用／停用控制，重新啟用時清除舊的 `expires_at`。
 - 會呼叫 `initDatabase()` 的測試要使用 temp DB helper，不要寫入真實 `data/bot.db`。
 - 改互動 UI 時，先找現有 builder/helper，特別是 Components V2 payload、settings panel、announcement preview、Steam detail、reaction role。
 - Components V2 單則訊息最多 40 個元件；擴充 settings panel 或 AI 草稿中心時要用 `countV2Components()` 補 regression test。

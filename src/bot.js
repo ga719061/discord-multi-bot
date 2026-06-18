@@ -21,7 +21,6 @@ import {
 } from './utils/announcementTools.js';
 import { buildSteamDealDetailPayload, fetchSteamAppDetails, getSteamFailureMessage } from './utils/steamDeals.js';
 import { inviteCache } from './utils/inviteCache.js';
-import { AI_QA_SCOPE, handleAiQaAction, parseAiQaAction } from './utils/aiQaActions.js';
 
 dns.setDefaultResultOrder('ipv4first');
 
@@ -184,14 +183,6 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (interaction.isButton()) {
     try {
-      if (interaction.customId.startsWith(`${AI_QA_SCOPE}:`)) {
-        const action = parseAiQaAction(interaction.customId, interaction.user.id);
-        if (!action) {
-          return interaction.reply(v2Notice('🐕🛡️ 這顆入口不屬於你', '請重新向本王提問，或使用 `/幫助` 開啟自己的功能入口。', UI_COLORS.WARNING));
-        }
-        return handleAiQaAction(interaction, action);
-      }
-
       if (interaction.customId.startsWith('poll_')) {
         const optionIndex = parseInt(interaction.customId.split('_')[1], 10);
         const messageId = interaction.message.id;
