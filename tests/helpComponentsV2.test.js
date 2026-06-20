@@ -115,11 +115,14 @@ test('interactive help pages offer direct launch buttons instead of command-entr
             },
             {
                 id: 'esports',
-                label: '戰績',
-                emoji: '📊',
-                description: '皇家戰報。',
+                label: '遊戲查詢',
+                emoji: '🎮',
+                description: '遊戲資料查詢。',
                 group: 'public',
-                commands: [createCommand('戰績', '皇家戰報查詢')],
+                commands: [
+                    createCommand('戰績', '皇家戰報查詢'),
+                    createCommand('鳴潮抽卡', '皇家鳴潮喚取卷宗'),
+                ],
             },
             {
                 id: 'general',
@@ -165,9 +168,13 @@ test('interactive help pages offer direct launch buttons instead of command-entr
 
     const home = JSON.stringify(helpViewTesting.renderHome(context).components[0].toJSON());
     assert.match(home, /help:viewer:launch:steam/);
-    assert.match(home, /help:viewer:launch:stats/);
+    assert.match(home, /help:viewer:cat:esports:0/);
+    assert.match(home, /遊戲查詢/);
     assert.equal(home.includes('help:viewer:cat:steam'), false);
-    assert.equal(home.includes('help:viewer:cat:esports'), false);
+
+    const gameCategory = JSON.stringify(helpViewTesting.renderCategory(context, context.catalog[1], 0).components[0].toJSON());
+    assert.match(gameCategory, /help:viewer:launch:stats/);
+    assert.match(gameCategory, /help:viewer:launch:wuwa/);
 
     const reminderDetail = JSON.stringify(helpViewTesting.renderDetail(context, context.catalog[2], 0, 0).components[0].toJSON());
     const reminderCategory = JSON.stringify(helpViewTesting.renderCategory(context, context.catalog[2], 0).components[0].toJSON());
@@ -184,7 +191,7 @@ test('interactive help pages offer direct launch buttons instead of command-entr
     assert.equal(funCategory.includes('### 皇家抽獎'), false);
 });
 
-test('help home opens Steam and stats directly while other features stay categorized', () => {
+test('help home opens Steam directly and groups game queries into one category', () => {
     const context = {
         userId: 'viewer',
         canOpenSettings: false,
@@ -207,11 +214,14 @@ test('help home opens Steam and stats directly while other features stay categor
             },
             {
                 id: 'esports',
-                label: '戰績',
-                emoji: '📊',
-                description: '皇家戰報。',
+                label: '遊戲查詢',
+                emoji: '🎮',
+                description: '遊戲資料查詢。',
                 group: 'public',
-                commands: [createCommand('戰績', '皇家戰報查詢')],
+                commands: [
+                    createCommand('戰績', '皇家戰報查詢'),
+                    createCommand('鳴潮抽卡', '皇家鳴潮喚取卷宗'),
+                ],
             },
             {
                 id: 'fun',
@@ -240,14 +250,42 @@ test('help home opens Steam and stats directly while other features stay categor
 
     assert.equal((payload.flags & MessageFlags.IsComponentsV2) !== 0, true);
     assert.equal(rows.every((row) => row.components.length >= 1 && row.components.length <= 5), true);
-    assert.equal(launchButtons.length, 2);
-    assert.equal(categoryButtons.length, 2);
+    assert.equal(launchButtons.length, 1);
+    assert.equal(categoryButtons.length, 3);
     assert.match(JSON.stringify(container), /help:viewer:cat:general/);
     assert.match(JSON.stringify(container), /help:viewer:launch:steam/);
-    assert.match(JSON.stringify(container), /help:viewer:launch:stats/);
+    assert.match(JSON.stringify(container), /help:viewer:cat:esports:0/);
+    assert.match(JSON.stringify(container), /遊戲查詢/);
     assert.equal(JSON.stringify(container).includes('help:viewer:cat:steam'), false);
-    assert.equal(JSON.stringify(container).includes('help:viewer:cat:esports'), false);
     assert.equal(countComponents(container) <= 40, true);
+});
+
+test('help catalog merges esports and Wuthering Waves under game queries', () => {
+    const merged = helpViewTesting.mergeGameQueryCategories([
+        {
+            id: 'esports',
+            label: '戰績',
+            emoji: '📊',
+            description: '皇家戰報。',
+            order: 45,
+            group: 'public',
+            commands: [createCommand('戰績', '皇家戰報查詢')],
+        },
+        {
+            id: 'gacha',
+            label: '鳴潮',
+            emoji: '🌊',
+            description: '鳴潮抽卡。',
+            order: 47,
+            group: 'public',
+            commands: [createCommand('鳴潮抽卡', '皇家鳴潮喚取卷宗')],
+        },
+    ]);
+
+    assert.equal(merged.length, 1);
+    assert.equal(merged[0].id, 'esports');
+    assert.equal(merged[0].label, '遊戲查詢');
+    assert.deepEqual(merged[0].commands.map((command) => command.name), ['戰績', '鳴潮抽卡']);
 });
 
 test('help expiration disables every interactive control and adds a V2 status notice', () => {

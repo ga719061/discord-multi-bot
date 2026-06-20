@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "playerUid": "900123456",
+  "region": "SEA",
+  "languageCode": "zh-Hant",
+  "pools": {
+    "1": [
+      {
+        "resourceId": "1107",
+        "qualityLevel": 5,
+        "resourceType": "角色",
+        "cardPoolType": "1",
+        "name": "五星角色甲",
+        "count": 1,
+        "time": "2026-06-18 12:00:00",
+        "languageCode": "zh-Hant"
+      },
+      {
+        "resourceId": "21010016",
+        "qualityLevel": 3,
+        "resourceType": "武器",
+        "cardPoolType": "1",
+        "name": "練習武器",
+        "count": 1,
+        "time": "2026-06-17 12:00:00",
+        "languageCode": "zh-Hant"
+      }
+    ],
+    "2": [],
+    "3": [],
+    "4": [],
+    "5": [],
+    "6": [],
+    "8": [],
+    "9": [],
+    "10": [],
+    "11": []
+  }
+}

@@ -115,6 +115,16 @@ export function initDatabase(options = {}) {
       next_retry_at INTEGER DEFAULT NULL,
       last_error TEXT DEFAULT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS wuwa_accounts (
+      discord_user_id TEXT PRIMARY KEY,
+      player_uid TEXT UNIQUE NOT NULL,
+      region TEXT,
+      language_code TEXT,
+      history_json TEXT NOT NULL,
+      bound_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
   `);
 
   try {
@@ -226,6 +236,7 @@ export function initDatabase(options = {}) {
     CREATE INDEX IF NOT EXISTS idx_giveaways_ended_status_time ON giveaways (ended, status, end_time);
     CREATE INDEX IF NOT EXISTS idx_polls_message_id ON polls (message_id);
     CREATE INDEX IF NOT EXISTS idx_reaction_roles_message_role ON reaction_roles (message_id, role_id);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_wuwa_accounts_player_uid ON wuwa_accounts (player_uid);
   `);
 
   return db;
@@ -239,6 +250,52 @@ export function closeDatabaseForTests() {
 export function getDb() {
   if (!db) throw new Error('資料庫尚未初始化。');
   return db;
+}
+
+export function getWuwaAccount(discordUserId) {
+  return getDb().prepare('SELECT * FROM wuwa_accounts WHERE discord_user_id = ?').get(discordUserId) ?? null;
+}
+
+export function bindWuwaAccount(discordUserId, account) {
+  const now = account.updatedAt ?? Date.now();
+  return getDb().prepare(`
+    INSERT INTO wuwa_accounts (
+      discord_user_id, player_uid, region, language_code, history_json, bound_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    discordUserId,
+    account.playerUid,
+    account.region ?? null,
+    account.languageCode ?? null,
+    JSON.stringify(account.history),
+    now,
+    now
+  );
+}
+
+export function updateWuwaAccount(discordUserId, account) {
+  return getDb().transaction(() => {
+    const existing = getWuwaAccount(discordUserId);
+    if (!existing) return { changes: 0 };
+    return getDb().prepare(`
+      UPDATE wuwa_accounts
+      SET region = ?, language_code = ?, history_json = ?, updated_at = ?
+      WHERE discord_user_id = ? AND player_uid = ?
+    `).run(
+      account.region ?? existing.region,
+      account.languageCode ?? existing.language_code,
+      JSON.stringify(account.history),
+      account.updatedAt ?? Date.now(),
+      discordUserId,
+      account.playerUid
+    );
+  })();
+}
+
+export function deleteWuwaAccount(discordUserId) {
+  return getDb().transaction(() =>
+    getDb().prepare('DELETE FROM wuwa_accounts WHERE discord_user_id = ?').run(discordUserId)
+  )();
 }
 
 // 伺服器設定

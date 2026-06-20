@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildAiSystemPrompt, DEFAULT_AI_PROMPT, getAiResponse, SERVER_INFO_RESTRICTION } from '../src/utils/aiChat.js';
+import {
+    buildAiSystemPrompt,
+    DEFAULT_AI_PROMPT,
+    getAiResponse,
+    SERVER_INFO_POLICY,
+} from '../src/utils/aiChat.js';
 import { generateAiDraft } from '../src/utils/aiDrafts.js';
 import { shouldTriggerAi } from '../src/events/messageCreate.js';
 
@@ -133,13 +138,15 @@ test('Gemini image attachments skip unsafe MIME types and oversized downloads', 
     }
 });
 
-test('AI prompt keeps the royal persona but refuses Discord server information', () => {
+test('AI prompt keeps the royal persona and safely permits supplied Discord server information', () => {
     assert.match(DEFAULT_AI_PROMPT, /吉吉國王/);
     assert.match(DEFAULT_AI_PROMPT, /繁體中文/);
-    assert.match(SERVER_INFO_RESTRICTION, /沒有本 Discord 伺服器/);
-    assert.match(SERVER_INFO_RESTRICTION, /功能、指令、設定、權限或管理資訊/);
+    assert.match(SERVER_INFO_POLICY, /伺服器公開上下文/);
+    assert.match(SERVER_INFO_POLICY, /不可信資料/);
+    assert.match(SERVER_INFO_POLICY, /不得猜測/);
+    assert.match(SERVER_INFO_POLICY, /管理設定/);
     assert.match(buildAiSystemPrompt('自訂人格', '安全上下文'), /自訂人格/);
-    assert.match(buildAiSystemPrompt('自訂人格', '安全上下文'), /伺服器資訊限制/);
+    assert.match(buildAiSystemPrompt('自訂人格', '安全上下文'), /Discord 伺服器資料政策/);
     assert.match(buildAiSystemPrompt('自訂人格', '安全上下文'), /安全上下文/);
 });
 

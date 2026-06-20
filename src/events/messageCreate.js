@@ -1,6 +1,7 @@
 import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { getUserLevel, addXp, getAiSettings, getRankTitle, getGuildSettings } from '../utils/database.js';
 import { buildAiSystemPrompt, getAiResponse, DEFAULT_AI_PROMPT } from '../utils/aiChat.js';
+import { buildAiGuildContext } from '../utils/aiGuildContext.js';
 import { DEFAULT_AI_MODEL } from '../utils/aiConfig.js';
 import { buildAiMentionPolicy, sanitizeAiReplyMentions, buildAllowedMentions } from '../utils/aiMentions.js';
 import { logger } from '../utils/logger.js';
@@ -261,7 +262,9 @@ export function register(client) {
             channelId: message.channel.id,
         })) {
             try {
-                const isAdmin = message.member.permissions.has(PermissionFlagsBits.Administrator);
+                const isAdmin = Boolean(
+                    message.member?.permissions?.has?.(PermissionFlagsBits.Administrator)
+                );
                 const mentionPolicy = buildAiMentionPolicy({
                     botUserId: client.user.id,
                     userIds: [...message.mentions.users.keys()],
@@ -281,13 +284,14 @@ export function register(client) {
                     const displayText = userText || '（請看圖片）';
                     await message.channel.sendTyping();
 
-                    // 建立必要的安全上下文，不注入伺服器功能或設定知識。
+                    // 建立最小化的公開伺服器上下文，不注入管理設定或敏感資訊。
                     const now = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+                    const guildContext = buildAiGuildContext(message);
                     const context = [
                         `[系統資訊]`,
                         `時間: ${now}`,
                         `\n[提及規範]\n${buildMentionInstructions(message, mentionPolicy, isAdmin)}`,
-                    ].join('\n');
+                    ].filter(Boolean).join('\n');
 
                     const basePrompt = settings.system_prompt || DEFAULT_AI_PROMPT;
                     const fullPrompt = buildAiSystemPrompt(basePrompt, context);
@@ -341,7 +345,14 @@ export function register(client) {
                     }
 
                     const aiReply = sanitizeAiReplyMentions(
-                        await getAiResponse(displayText, fullPrompt, modelName, useSearch, history, imageAttachments),
+                        await getAiResponse(
+                            `${displayText}\n\n${guildContext}`,
+                            fullPrompt,
+                            modelName,
+                            useSearch,
+                            history,
+                            imageAttachments
+                        ),
                         mentionPolicy
                     );
                     // 若回應超過 2000 字，自動分段發送

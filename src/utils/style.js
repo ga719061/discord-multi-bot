@@ -41,6 +41,7 @@ export const UI_COLORS = {
     STEAM: 0x1B75D0,
     VALORANT: 0xFA4454,
     LEAGUE: 0x0AC8B9,
+    WUWA: 0x29CFC7,
     BOOST: 0xF47FFF,
     FUN: 0xFF69B4,
     FOOD: 0xFF9F43,

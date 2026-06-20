@@ -17,6 +17,7 @@ import { parseScopedCustomId, scopedCustomId } from '../../utils/customIds.js';
 import { openSettingsPanelFromHelp } from '../admin/settings.js';
 import { execute as openSteamSearch } from '../steam/steam.js';
 import { execute as openStatsSearch } from '../esports/stats.js';
+import { execute as openWuwaSearch } from '../gacha/wuwa.js';
 import { openPollComposer } from '../fun/poll.js';
 import { openGiveawayComposer } from '../fun/giveaway.js';
 import { openReminderComposer, openReminderManager } from './remind.js';
@@ -26,9 +27,14 @@ const __dirname = path.dirname(__filename);
 
 const COMMANDS_PER_PAGE = 4;
 const COLLECTOR_TIME = 300000;
+const GAME_QUERY_COMMAND_ORDER = new Map([
+    ['戰績', 10],
+    ['鳴潮抽卡', 20],
+]);
 const DIRECT_QUERY_ACTIONS = {
     特價查詢: { action: 'steam', label: '開啟皇家採購查詢', style: ButtonStyle.Primary },
     戰績: { action: 'stats', label: '開啟皇家戰報查詢', style: ButtonStyle.Primary },
+    鳴潮抽卡: { action: 'wuwa', label: '開啟鳴潮喚取卷宗', style: ButtonStyle.Primary },
     投票: { action: 'poll', label: '建立皇家投票', style: ButtonStyle.Primary },
     抽獎: { action: 'giveaway', label: '建立皇家抽獎', style: ButtonStyle.Primary },
     提醒: { action: 'reminder_create', label: '新增皇家提醒', style: ButtonStyle.Primary },
@@ -38,9 +44,8 @@ const EXTRA_DIRECT_ACTIONS = {
 };
 const HOME_DIRECT_CATEGORY_ACTIONS = {
     steam: 'steam',
-    esports: 'stats',
 };
-const TEXTLESS_HELP_COMMANDS = new Set(['特價查詢', '戰績', '提醒']);
+const TEXTLESS_HELP_COMMANDS = new Set(['特價查詢', '戰績', '鳴潮抽卡', '提醒']);
 
 const CATEGORY_META = {
     general: {
@@ -72,10 +77,17 @@ const CATEGORY_META = {
         group: 'public'
     },
     esports: {
-        label: '戰績',
-        emoji: '📊',
-        description: '進入皇家戰報廳，私下查詢公開賽季戰績。',
+        label: '遊戲查詢',
+        emoji: '🎮',
+        description: '查詢公開賽季戰績，或管理鳴潮喚取紀錄與抽卡分析。',
         order: 45,
+        group: 'public'
+    },
+    gacha: {
+        label: '鳴潮',
+        emoji: '🌊',
+        description: '綁定 UID、更新喚取紀錄並生成抽卡分析圖片。',
+        order: 47,
         group: 'public'
     },
     welcome: {
@@ -127,6 +139,7 @@ const COMMAND_META = {
     排行榜: { label: '排行榜', examples: ['/排行榜'] },
     特價查詢: { label: '皇家採購查詢', examples: ['/特價查詢（輸入名稱後選取正確 Steam 遊戲）'] },
     戰績: { label: '皇家戰報查詢', examples: ['/戰績（彈窗內選擇遊戲並輸入 Riot ID）'] },
+    鳴潮抽卡: { label: '皇家鳴潮喚取卷宗', examples: ['/鳴潮抽卡（綁定 UID、更新或查詢指定卡池）'] },
     設定: { label: '皇家管理控制台', examples: ['/設定'] },
 };
 
@@ -215,6 +228,10 @@ async function openHelpPanel(interaction, replaceMessage) {
             await openStatsSearch(buttonInteraction);
             return;
         }
+        if (buttonInteraction.customId === makeCustomId(context, 'launch', 'wuwa')) {
+            await openWuwaSearch(buttonInteraction);
+            return;
+        }
         if (buttonInteraction.customId === makeCustomId(context, 'launch', 'poll')) {
             await openPollComposer(buttonInteraction);
             return;
@@ -300,7 +317,38 @@ async function buildCatalog(interaction) {
         });
     }
 
-    return catalog.sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+    return mergeGameQueryCategories(catalog)
+        .sort((a, b) => a.order - b.order || a.label.localeCompare(b.label));
+}
+
+function mergeGameQueryCategories(catalog) {
+    const gameCategories = catalog.filter((category) =>
+        category.id === 'esports' || category.id === 'gacha'
+    );
+    if (gameCategories.length === 0) return catalog;
+
+    const gameCategory = {
+        id: 'esports',
+        ...CATEGORY_META.esports,
+        commands: gameCategories
+            .flatMap((category) => category.commands)
+            .sort((a, b) =>
+                (GAME_QUERY_COMMAND_ORDER.get(a.name) ?? 999)
+                - (GAME_QUERY_COMMAND_ORDER.get(b.name) ?? 999)
+                || a.name.localeCompare(b.name)
+            ),
+    };
+    const insertAt = Math.min(...gameCategories.map((category) => catalog.indexOf(category)));
+
+    return [
+        ...catalog.filter((category, index) =>
+            index < insertAt && category.id !== 'esports' && category.id !== 'gacha'
+        ),
+        gameCategory,
+        ...catalog.filter((category, index) =>
+            index > insertAt && category.id !== 'esports' && category.id !== 'gacha'
+        ),
+    ];
 }
 
 async function getApplicationCommandIds(interaction) {
@@ -878,6 +926,7 @@ export const helpViewTesting = {
     renderHome,
     renderCategory,
     renderDetail,
+    mergeGameQueryCategories,
     makeCustomId,
     parseHelpCustomId,
     disableComponents,

@@ -20,7 +20,7 @@
 
 ## 專案速讀
 
-這是「吉吉國王」Discord bot 專案，使用 Node.js 20+、Discord.js v14、SQLite/better-sqlite3。目前專案部署於 Synology DS920+ Container Manager (Docker) 容器環境。功能包含 AI 對話與知識庫、管理控制台、等級與排行榜、提醒、Steam 特價查詢、VALORANT/LoL 戰績、抽獎、投票、身分組、伺服器紀錄與圖片渲染。
+這是「吉吉國王」Discord bot 專案，使用 Node.js 20+、Discord.js v14、SQLite/better-sqlite3。目前專案部署於 Synology DS920+ Container Manager (Docker) 容器環境。功能包含 AI 對話與知識庫、管理控制台、等級與排行榜、提醒、Steam 特價查詢、VALORANT/LoL 戰績、鳴潮抽卡紀錄、抽獎、投票、身分組、伺服器紀錄與圖片渲染。
 
 新對話開始時，先讀這份文件，再依需求查看 `README.md`、`package.json` 與相關原始碼。
 
@@ -51,9 +51,10 @@
 - Events：放在 `src/events/**`，由 `src/handlers/eventHandler.js` 遞迴載入。事件模組應 export `register(client)`。
 - Command loading：`src/handlers/commandHandler.js` 會掃描 `src/commands` 下各分類目錄。
 - Database：`src/utils/database.js` 負責 SQLite schema、簡易遷移、guild settings、AI settings、levels、reminders、giveaways、polls、reaction roles。
-- AI 上下文：`src/knowledge/persona.js` 僅提供角色語氣；AI 不注入伺服器功能、指令、設定、權限或管理知識，`src/events/messageCreate.js` 只附加時間、伺服器資訊拒答規則與 Discord mention 安全規則。
+- AI 上下文：`src/knowledge/persona.js` 僅提供角色語氣；`src/utils/aiGuildContext.js` 按需提供提問者、明確提及成員與目前伺服器／頻道的公開摘要。不得注入完整名冊、不可見頻道、管理設定、權限診斷或憑證，Discord mention 安全規則仍須強制套用。
 - Components V2：互動式訊息與 notices 優先看 `src/utils/componentsV2.js`，避免混用不相容 payload。
 - 圖片渲染：公告、每日一汪、占卜與戰績圖片分散在 `src/utils/announcementImage.js`、`src/commands/fun/lib/funImage.js`、`src/commands/esports/lib/statsImage.js`，素材在 `assets/`。
+- 鳴潮抽卡：`src/commands/gacha/wuwa.js` 負責綁定、更新、查詢與解除綁定；`src/commands/gacha/lib/` 負責喚取 API、匯入、歷史合併、統計與 1600×900 圖片渲染。
 
 ## 開發規則
 
@@ -82,6 +83,9 @@
 - 大檔案下載防禦：對於外部資源下載，優先使用 `fetchWithLimit(url, fetchImpl, { maxBytes })`，並設定適當的 `maxBytes` (例如公告圖片 8MB/15MB，AI 圖片 5MB)，以防無 `content-length` 的超大檔案在下載時被全部載入記憶體而導致崩潰。
 - 提醒系統優化：`reminders` 表支援錯誤重試 (最大 5 次，重試間隔為 attempts 分鐘，使用 `attempts`、`next_retry_at` 與 `last_error` 欄位) 與跨伺服器隔離 (查詢/刪除時帶入 `guildId`)，特定永久性錯誤 (找不到 guild/channel) 應直接改為對應失敗狀態。
 - 抽獎結果可靠性：抽出得主後先持久化 `winner_ids` 與 `drawn_pending_notify`；公開結果成功發送後才能標記 `completed`，通知失敗重試時不得重新抽獎。
+- 鳴潮喚取授權：完整 URL、`recordId`、`serverId`、`cardPoolId` 只能存在單次記憶體流程，不得寫入資料庫或 log；`wuwa_accounts` 只保存 Discord user、UID 與版本化歷史。更新紀錄要以有序序列合併，不能用時間作唯一鍵。
+- 鳴潮 URL 教學在私人首頁直接顯示 WuWa Tracker 官方固定 commit 的 PowerShell 指令，並附腳本檢視與遠端執行警告；若更新 commit 必須先核對官方 repo。圖片 renderer 必須載入直接生成的點陣底圖 `assets/wuwa/card-background-v3.png`，不得以 SVG 轉檔替代；最近五星頭像依實際筆數動態置中。
+- `/幫助` 會將 `esports` 與 `gacha` 模組合併顯示為「遊戲查詢」分類，分類內分別提供 `/戰績` 與 `/鳴潮抽卡` 的直接入口；不可在首頁拆成兩個獨立分類。
 
 ## 驗證方式
 
@@ -89,6 +93,7 @@
 - 指令新增、移除、改名或 alias 變更：至少跑 `npm run verify:commands`，必要時再跑 `npm run deploy`。
 - 資料庫 schema 或設定面板改動：跑 settings/database 相關測試，例如 `tests/settingsPanel.test.js`、`tests/guildDiagnostics.test.js`。
 - 圖片或卡片排版改動：跑相關 image tests，例如 `tests/imageRendering.test.js`、`tests/funImage.test.js`、`src/commands/esports/__tests__/embed.test.js`。
+- 鳴潮綁定、匯入、合併、統計或圖片改動：跑 `tests/wuwaGacha.test.js`，並確認不會輸出完整授權欄位。
 - 文件-only 變更通常不需要跑完整測試；確認 diff 與內容可讀即可。
 
 ## AI 維護本文件
