@@ -1,7 +1,7 @@
 # 🐕👑 吉吉王國 (Gigi Kingdom Bot)
 
 ![Kingdom Banner](https://img.shields.io/badge/Status-Royal_Monitoring-gold?style=for-the-badge&logo=discord)
-![Node Version](https://img.shields.io/badge/Node-20%2B-blue?style=for-the-badge&logo=node.js)
+![Node Version](https://img.shields.io/badge/Node-24%2B-blue?style=for-the-badge&logo=node.js)
 ![Database](https://img.shields.io/badge/Database-SQLite-lightgrey?style=for-the-badge&logo=sqlite)
 
 「汪！歡迎來到吉吉王國。本王可以陪聊、記錄、提醒、查遊戲情報，也能替管理員巡視領地。」
@@ -24,6 +24,7 @@
 ### AI 聊天
 - AI 核心啟用時，白名單成員或派對模式頻道中標記吉吉國王即可 AI 對話。
 - 支援上下文記憶、Google Search grounding、圖片提問與多模型切換。
+- 只有提問者具備讀取歷史訊息權限時才會提供上下文，並排除 system、webhook 與第三方 bot 訊息。
 - AI 僅能標記提問訊息中已明確標記且被允許的對象；永遠阻擋 `@everyone` 與 `@here`。
 
 ### 公開互動
@@ -69,6 +70,8 @@
 docker-compose up -d --build
 ```
 
+Compose 會以 root 啟動 entrypoint，保留既有 `bot-data` volume，修正 `/app/data` 與 `/app/logs` 的擁有者及 owner 寫入權限後，先以 UID 1000 驗證 `bot.db` 可寫，再立即降權成 `node` 使用者執行 bot。若 volume 或 Synology ACL 仍阻擋寫入，entrypoint 會輸出明確錯誤並停止，避免 SQLite 反覆以模糊的 readonly 錯誤重啟。
+
 ### 手動啟動
 
 ```bash
@@ -88,7 +91,7 @@ npm run deploy
 
 ## 🛠️ 開發
 
-- 語言：JavaScript (Node.js 20+)
+- 語言：JavaScript (Node.js 24+)
 - 框架：discord.js v14
 - 資料庫：Better-SQLite3
 - 檢查：`npm run check`

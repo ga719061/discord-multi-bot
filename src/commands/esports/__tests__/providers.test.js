@@ -134,6 +134,34 @@ test('provider falls back to ValoCheck when OP.GG profile is not public', async 
   assert.equal(result.stats.kd, '0.72');
 });
 
+test('provider does not follow script URLs outside OP.GG hosts', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    calls.push(String(url));
+    if (calls.length === 1) {
+      return new Response(
+        '<script src="http://127.0.0.1/valorant/profile/route.js"></script>',
+        { status: 200 }
+      );
+    }
+    return new Response('', { status: 404 });
+  };
+
+  await fetchValorantStats('SEN TenZ', '2906', fetchImpl);
+
+  assert.equal(calls.some((url) => url.startsWith('http://127.0.0.1/')), false);
+});
+
+test('ValoCheck parser rejects avatar URLs outside approved hosts', async () => {
+  const html = (await fixture('valorant.html'))
+    .replace(
+      'https://media.valorant-api.com/playercards/example/smallart.png',
+      'http://127.0.0.1/private.png'
+    );
+
+  assert.equal(parseValorantHtml(html, 'SEN Tenz', '2906').avatarUrl, null);
+});
+
 test('parseLolHtml extracts ranked and champion season summary', async () => {
   const stats = parseLolHtml(
     await fixture('lol-summary.html'),

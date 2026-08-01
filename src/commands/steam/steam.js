@@ -37,7 +37,7 @@ export async function execute(interaction) {
     const candidates = await findSteamCandidates(submit, query);
     if (!candidates) return;
 
-    const state = { result: null, published: false };
+    const state = { result: null, publishedAppIds: new Set() };
     await submit.editReply(v2EditPayload(buildSteamSelectionPayload(sessionId, query, candidates)));
     const response = await submit.fetchReply();
     const collector = response.createMessageComponentCollector({ time: QUERY_TIMEOUT });
@@ -64,15 +64,27 @@ export async function execute(interaction) {
                 await component.deferUpdate();
                 const details = await fetchSteamDetails(component, appId);
                 if (!details) return;
-                state.result = { appId, details };
+                state.result = { appId, details, published: state.publishedAppIds.has(appId) };
                 return component.editReply(v2EditPayload(buildSteamSearchResultPayload(appId, details, {
                     ephemeral: true,
                     publishCustomId: steamId(sessionId, 'publish'),
+                    backCustomId: steamId(sessionId, 'back'),
+                    requeryCustomId: steamId(sessionId, 'requery'),
+                    published: state.result.published,
                 })));
+            }
+            if (component.customId === steamId(sessionId, 'back')) {
+                state.result = null;
+                await component.deferUpdate();
+                return component.editReply(v2EditPayload(buildSteamSelectionPayload(sessionId, query, candidates)));
+            }
+            if (component.customId === steamId(sessionId, 'requery')) {
+                collector.stop('restart');
+                return await execute(component);
             }
             if (component.customId !== steamId(sessionId, 'publish')) return;
             if (!state.result) return;
-            if (state.published) {
+            if (state.result.published) {
                 return component.reply(v2Notice(
                     '🐕👑 聖旨已頒布',
                     '汪！本王已將這份採購情報張貼至原頻道，不得重複頒布！',
@@ -82,10 +94,13 @@ export async function execute(interaction) {
 
             await component.deferUpdate();
             await interaction.channel.send(buildSteamSearchResultPayload(state.result.appId, state.result.details));
-            state.published = true;
+            state.result.published = true;
+            state.publishedAppIds.add(state.result.appId);
             await component.editReply(v2EditPayload(buildSteamSearchResultPayload(state.result.appId, state.result.details, {
                 ephemeral: true,
                 publishCustomId: steamId(sessionId, 'publish'),
+                backCustomId: steamId(sessionId, 'back'),
+                requeryCustomId: steamId(sessionId, 'requery'),
                 published: true,
             })));
         } catch (error) {
@@ -101,7 +116,9 @@ export async function execute(interaction) {
             ? buildSteamSearchResultPayload(state.result.appId, state.result.details, {
                 ephemeral: true,
                 publishCustomId: steamId(sessionId, 'publish'),
-                published: state.published,
+                backCustomId: steamId(sessionId, 'back'),
+                requeryCustomId: steamId(sessionId, 'requery'),
+                published: state.result.published,
                 expired: true,
             })
             : buildSteamSelectionPayload(sessionId, query, candidates, true);
@@ -133,7 +150,7 @@ export function buildSteamSelectionPayload(sessionId, query, candidates, disable
         .setMinValues(1)
         .setMaxValues(1)
         .setDisabled(disabled)
-        .addOptions(candidates.slice(0, 10).map((game) => ({
+        .addOptions(candidates.slice(0, 25).map((game) => ({
             label: truncateOption(game.name, 100),
             description: truncateOption(`Steam App ${game.id} | 選取後覲見目前價格`, 100),
             value: String(game.id),
@@ -196,6 +213,24 @@ export function buildSteamSearchResultPayload(appId, details, options = {}) {
                 .setDisabled(Boolean(options.published || options.expired))
         );
     }
+    if (options.backCustomId) {
+        buttons.push(
+            new ButtonBuilder()
+                .setCustomId(options.backCustomId)
+                .setLabel('返回候選清單')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(Boolean(options.expired)),
+        );
+    }
+    if (options.requeryCustomId) {
+        buttons.push(
+            new ButtonBuilder()
+                .setCustomId(options.requeryCustomId)
+                .setLabel('重新搜尋')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(Boolean(options.expired)),
+        );
+    }
     const embed = new EmbedBuilder()
         .setColor(color)
         .setAuthor({ name: options.ephemeral === true ? '吉吉國王皇家採購廳 | 私人情報呈報' : '吉吉國王皇家採購廳 | 公開採購情報' })
@@ -226,7 +261,7 @@ async function findSteamCandidates(interaction, query) {
             return null;
         }
 
-        return searchData.items.slice(0, 10);
+        return searchData.items.slice(0, 25);
     } catch (error) {
         logger.warn(`[SteamSearch] 查詢失敗 guild=${interaction.guildId} code=${error.code || 'unavailable'}: ${error.message}`);
         await interaction.editReply(v2EditPayload(v2Notice('🎮 皇家採購查詢失敗', getSteamFailureMessage(error), UI_COLORS.WARNING)));

@@ -1,7 +1,7 @@
 import {
   cacheKeyFor,
   escapeXml,
-  fetchWithTimeout,
+  fetchWithLimit,
   imageFileToDataUri,
   imageUrlToDataUri,
   svgToPngAttachment,
@@ -13,6 +13,8 @@ const CARD_FILENAME = 'stats-card.png';
 const FONT = '"Noto Sans CJK TC", "Microsoft JhengHei", "Segoe UI", Arial, sans-serif';
 const FONT_ATTR = 'Noto Sans CJK TC, Microsoft JhengHei, Segoe UI, Arial, sans-serif';
 const IMAGE_TIMEOUT_MS = 3500;
+const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
+const JSON_MAX_BYTES = 5 * 1024 * 1024;
 const RIOT_CDN = 'https://ddragon.leagueoflegends.com';
 const VALORANT_API = 'https://valorant-api.com/v1';
 const VALORANT_LOCALE = 'zh-TW';
@@ -707,7 +709,11 @@ async function jsonFromUrl(url, fetchImpl) {
   if (!url) return null;
   const cacheKey = cacheKeyFor(fetchImpl, url);
   if (!jsonCache.has(cacheKey)) {
-    jsonCache.set(cacheKey, fetchWithTimeout(url, fetchImpl, IMAGE_TIMEOUT_MS)
+    jsonCache.set(cacheKey, fetchWithLimit(url, fetchImpl, {
+      timeoutMs: IMAGE_TIMEOUT_MS,
+      maxBytes: JSON_MAX_BYTES,
+      redirect: 'error',
+    })
       .then((response) => response?.ok ? response.json() : null)
       .catch(() => null));
   }
@@ -715,11 +721,33 @@ async function jsonFromUrl(url, fetchImpl) {
 }
 
 async function dataUriFromUrl(url, fetchImpl, imageOptions = {}) {
+  if (!isAllowedStatsAssetUrl(url)) return null;
   return imageUrlToDataUri(url, fetchImpl, {
     ...imageOptions,
     cache: imageCache,
     timeoutMs: IMAGE_TIMEOUT_MS,
+    maxBytes: IMAGE_MAX_BYTES,
+    redirect: 'error',
   });
+}
+
+function isAllowedStatsAssetUrl(url) {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') return false;
+    const hostname = parsed.hostname.toLowerCase();
+    return hostname === 'assets.test'
+      || hostname === 'ddragon.leagueoflegends.com'
+      || hostname === 'valorant-api.com'
+      || hostname.endsWith('.valorant-api.com')
+      || hostname === 'op.gg'
+      || hostname.endsWith('.op.gg')
+      || hostname === 'valocheck.com'
+      || hostname.endsWith('.valocheck.com')
+      || hostname === 'opgg-static.akamaized.net';
+  } catch {
+    return false;
+  }
 }
 
 function icon(name, x, y, size, color) {

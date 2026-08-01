@@ -9,3 +9,8 @@ BOT.env
 .git
 .gitignore
 README.md
+coverage
+logs
+tests
+tmp
+*.log

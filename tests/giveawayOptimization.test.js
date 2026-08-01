@@ -241,4 +241,209 @@ test('Giveaway Logic & Reliability Optimization', async (t) => {
     assert.strictEqual(completed.ended, 1);
     assert.strictEqual(completed.status, 'completed');
   });
+
+  await t.test('5. Should fetch a second page when exactly 100 users reacted', async () => {
+    addGiveaway('guild_1', 'channel_1', 'msg_100', 'Prize', 1, Date.now() + 1000);
+    const db = getDb();
+    const giveaway = db.prepare("SELECT * FROM giveaways WHERE message_id = 'msg_100'").get();
+    const users = Array.from({ length: 100 }, (_, index) => ({
+      id: String(index + 1),
+      bot: index !== 99,
+      username: `user_${index + 1}`,
+      toString: () => `<@${index + 1}>`,
+    }));
+    const fetchOptions = [];
+    const pages = [
+      new Map(users.map(user => [user.id, user])),
+      new Map(),
+    ];
+    const mockMessage = {
+      reactions: {
+        cache: {
+          get: () => ({
+            users: {
+              fetch: async (options) => {
+                fetchOptions.push(options);
+                return pages[fetchOptions.length - 1];
+              },
+            },
+          }),
+        },
+      },
+      embeds: [],
+    };
+    const mockChannel = {
+      isTextBased: () => true,
+      messages: { fetch: async () => mockMessage },
+      send: async () => {},
+    };
+    const mockGuild = {
+      channels: { fetch: async () => mockChannel },
+      members: { fetch: async (id) => ({ displayName: `User ${id}` }) },
+    };
+    const mockClient = {
+      guilds: { fetch: async () => mockGuild },
+      users: { fetch: async (id) => users.find(user => user.id === id) },
+    };
+
+    const { initGiveawayManager } = await import('../src/utils/giveawayManager.js');
+    initGiveawayManager(mockClient);
+    await endGiveaway(giveaway);
+
+    assert.deepStrictEqual(fetchOptions, [
+      { limit: 100 },
+      { limit: 100, after: '100' },
+    ]);
+    const completed = db.prepare("SELECT winner_ids, status FROM giveaways WHERE id = ?").get(giveaway.id);
+    assert.deepStrictEqual(JSON.parse(completed.winner_ids), ['100']);
+    assert.strictEqual(completed.status, 'completed');
+  });
+
+  await t.test('6. Should include the 101st reaction user and exclude bots', async () => {
+    addGiveaway('guild_1', 'channel_1', 'msg_101', 'Prize', 1, Date.now() + 1000);
+    const db = getDb();
+    const giveaway = db.prepare("SELECT * FROM giveaways WHERE message_id = 'msg_101'").get();
+    const firstPage = Array.from({ length: 100 }, (_, index) => ({
+      id: String(index + 1),
+      bot: true,
+      username: `bot_${index + 1}`,
+      toString: () => `<@${index + 1}>`,
+    }));
+    const lastUser = {
+      id: '101',
+      bot: false,
+      username: 'eligible_user',
+      toString: () => '<@101>',
+    };
+    const fetchOptions = [];
+    const pages = [
+      new Map(firstPage.map(user => [user.id, user])),
+      new Map([[lastUser.id, lastUser]]),
+    ];
+    const mockMessage = {
+      reactions: {
+        cache: {
+          get: () => ({
+            users: {
+              fetch: async (options) => {
+                fetchOptions.push(options);
+                return pages[fetchOptions.length - 1];
+              },
+            },
+          }),
+        },
+      },
+      embeds: [],
+    };
+    const mockChannel = {
+      isTextBased: () => true,
+      messages: { fetch: async () => mockMessage },
+      send: async () => {},
+    };
+    const mockGuild = {
+      channels: { fetch: async () => mockChannel },
+      members: { fetch: async () => ({ displayName: 'Eligible User' }) },
+    };
+    const mockClient = {
+      guilds: { fetch: async () => mockGuild },
+      users: { fetch: async () => lastUser },
+    };
+
+    const { initGiveawayManager } = await import('../src/utils/giveawayManager.js');
+    initGiveawayManager(mockClient);
+    await endGiveaway(giveaway);
+
+    assert.deepStrictEqual(fetchOptions, [
+      { limit: 100 },
+      { limit: 100, after: '100' },
+    ]);
+    const completed = db.prepare("SELECT winner_ids, status FROM giveaways WHERE id = ?").get(giveaway.id);
+    assert.deepStrictEqual(JSON.parse(completed.winner_ids), ['101']);
+    assert.strictEqual(completed.status, 'completed');
+  });
+
+  await t.test('7. Should merge and deduplicate reaction users across multiple pages', async () => {
+    addGiveaway('guild_1', 'channel_1', 'msg_pages', 'Prize', 2, Date.now() + 1000);
+    const db = getDb();
+    const giveaway = db.prepare("SELECT * FROM giveaways WHERE message_id = 'msg_pages'").get();
+    const firstWinner = {
+      id: '100',
+      bot: false,
+      username: 'first_winner',
+      toString: () => '<@100>',
+    };
+    const secondWinner = {
+      id: '200',
+      bot: false,
+      username: 'second_winner',
+      toString: () => '<@200>',
+    };
+    const firstPage = [
+      ...Array.from({ length: 99 }, (_, index) => ({
+        id: String(index + 1),
+        bot: true,
+        username: `bot_${index + 1}`,
+        toString: () => `<@${index + 1}>`,
+      })),
+      firstWinner,
+    ];
+    const secondPage = [
+      firstWinner,
+      ...Array.from({ length: 99 }, (_, index) => ({
+        id: String(index + 101),
+        bot: true,
+        username: `bot_${index + 101}`,
+        toString: () => `<@${index + 101}>`,
+      })),
+    ];
+    const pages = [
+      new Map(firstPage.map(user => [user.id, user])),
+      new Map(secondPage.map(user => [user.id, user])),
+      new Map([[secondWinner.id, secondWinner]]),
+    ];
+    const fetchOptions = [];
+    const mockMessage = {
+      reactions: {
+        cache: {
+          get: () => ({
+            users: {
+              fetch: async (options) => {
+                fetchOptions.push(options);
+                return pages[fetchOptions.length - 1];
+              },
+            },
+          }),
+        },
+      },
+      embeds: [],
+    };
+    const mockChannel = {
+      isTextBased: () => true,
+      messages: { fetch: async () => mockMessage },
+      send: async () => {},
+    };
+    const mockGuild = {
+      channels: { fetch: async () => mockChannel },
+      members: { fetch: async (id) => ({ displayName: `User ${id}` }) },
+    };
+    const mockClient = {
+      guilds: { fetch: async () => mockGuild },
+      users: {
+        fetch: async (id) => id === firstWinner.id ? firstWinner : secondWinner,
+      },
+    };
+
+    const { initGiveawayManager } = await import('../src/utils/giveawayManager.js');
+    initGiveawayManager(mockClient);
+    await endGiveaway(giveaway);
+
+    assert.deepStrictEqual(fetchOptions, [
+      { limit: 100 },
+      { limit: 100, after: '100' },
+      { limit: 100, after: '199' },
+    ]);
+    const completed = db.prepare("SELECT winner_ids, status FROM giveaways WHERE id = ?").get(giveaway.id);
+    assert.deepStrictEqual(new Set(JSON.parse(completed.winner_ids)), new Set(['100', '200']));
+    assert.strictEqual(completed.status, 'completed');
+  });
 });

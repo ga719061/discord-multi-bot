@@ -33,7 +33,11 @@ export async function imageUrlToDataUri(url, fetchImpl = fetch, options = {}) {
   if (cache?.has(cacheKey)) return cache.get(cacheKey);
 
   const request = options.maxBytes
-    ? fetchWithLimit(url, fetchImpl, { timeoutMs: options.timeoutMs, maxBytes: options.maxBytes })
+    ? fetchWithLimit(url, fetchImpl, {
+      timeoutMs: options.timeoutMs,
+      maxBytes: options.maxBytes,
+      ...(options.redirect ? { redirect: options.redirect } : {}),
+    })
     : fetchWithTimeout(url, fetchImpl, options.timeoutMs);
   const promise = request
     .then(async (response) => {

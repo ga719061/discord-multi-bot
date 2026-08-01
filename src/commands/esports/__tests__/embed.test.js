@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import { ComponentType, MessageFlags } from 'discord.js';
 import { buildStatsReply } from '../lib/embed.js';
 import { buildStatsSvg, renderStatsImage, resolveStatsAssets } from '../lib/statsImage.js';
-import { buildStatsModal, data } from '../stats.js';
+import { applyStatsSessionResult, buildStatsModal, data } from '../stats.js';
+import { countV2Components } from '../../../utils/componentsV2.js';
 
 const tinyPng = Buffer.from(
-  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==',
   'base64'
 );
 
@@ -189,6 +190,71 @@ test('buildStatsReply creates a fallback card when a source is blocked', async (
   assert.equal('files' in payload, false);
 });
 
+test('failed stats replies keep an owner retry entry until timeout', async () => {
+  for (const status of ['not_found', 'blocked', 'unavailable', 'parse_error']) {
+    const result = {
+      game: 'lol',
+      status,
+      source: 'OP.GG',
+      sourceUrl: 'https://op.gg/lol/summoners/tw/test-TW2',
+    };
+    const active = await buildStatsReply(result, 'test', 'TW2', {
+      ephemeral: true,
+      retryCustomId: 'stats:query-session:retry',
+    });
+    const expired = await buildStatsReply(result, 'test', 'TW2', {
+      ephemeral: true,
+      retryCustomId: 'stats:query-session:retry',
+      expired: true,
+    });
+    const activeJson = active.components.map((component) => component.toJSON());
+    const expiredJson = expired.components.map((component) => component.toJSON());
+
+    assert.match(serializedCard(active), status === 'not_found' ? /修正資料/ : /重新查詢/);
+    assert.equal(findCustomId(activeJson, 'stats:query-session:retry').disabled, false);
+    assert.equal(findCustomId(expiredJson, 'stats:query-session:retry').disabled, true);
+    assert.ok(countV2Components(active.components) <= 40);
+  }
+});
+
+test('stats retry modal pre-fills the original game, Riot ID, tag and region', () => {
+  const modal = buildStatsModal('query-session', {
+    game: 'lol',
+    playerName: 'Hide on bush',
+    tag: 'KR1',
+    region: 'kr',
+  }).toJSON();
+  const game = findCustomId(modal, 'game');
+  const playerName = findCustomId(modal, 'player_name');
+  const tag = findCustomId(modal, 'tag');
+  const region = findCustomId(modal, 'region');
+
+  assert.equal(game.options.find((option) => option.value === 'lol').default, true);
+  assert.equal(playerName.value, 'Hide on bush');
+  assert.equal(tag.value, 'KR1');
+  assert.equal(region.options.find((option) => option.value === 'kr').default, true);
+});
+
+test('stats retry state can transition from failure to success and resets publishing', () => {
+  const state = { published: true };
+  applyStatsSessionResult(state, {
+    game: 'lol', playerName: 'test', tag: 'TW2', region: 'tw',
+  }, { status: 'not_found' });
+  assert.equal(state.result.status, 'not_found');
+  assert.equal(state.published, false);
+
+  state.published = true;
+  applyStatsSessionResult(state, {
+    game: 'valorant', playerName: 'SEN Tenz', tag: '2906', region: 'ap',
+  }, { status: 'ok' });
+  assert.equal(state.result.status, 'ok');
+  assert.equal(state.game, 'valorant');
+  assert.equal(state.playerName, 'SEN Tenz');
+  assert.equal(state.tag, '2906');
+  assert.equal(state.region, 'ap');
+  assert.equal(state.published, false);
+});
+
 test('/戰績 opens one direct modal containing game selection and Riot ID fields', () => {
   const command = data.toJSON();
   const modalJson = buildStatsModal('query-session').toJSON();
@@ -365,6 +431,50 @@ test('renderer fetches only needed Valorant asset indexes and keeps weapon thumb
   assert.match(svg, /x="538" y="521" width="88" height="40" preserveAspectRatio="xMidYMid meet"/);
 });
 
+test('renderer rejects untrusted asset hosts before fetching', async () => {
+  let calls = 0;
+  const assets = await resolveStatsAssets({
+    game: 'lol',
+    stats: {
+      avatarUrl: 'http://127.0.0.1/private.png',
+      topChampions: [],
+    },
+  }, {
+    fetchImpl: async () => {
+      calls += 1;
+      return new Response(tinyPng);
+    },
+  });
+
+  assert.equal(assets.avatar, null);
+  assert.equal(calls, 0);
+});
+
+test('renderer limits external image downloads and disables redirects', async () => {
+  let requestOptions;
+  const assets = await resolveStatsAssets({
+    game: 'lol',
+    stats: {
+      avatarUrl: 'https://opgg-static.akamaized.net/oversized.png',
+      topChampions: [],
+    },
+  }, {
+    fetchImpl: async (_url, options) => {
+      requestOptions = options;
+      return new Response(tinyPng, {
+        status: 200,
+        headers: {
+          'content-type': 'image/png',
+          'content-length': String(6 * 1024 * 1024),
+        },
+      });
+    },
+  });
+
+  assert.equal(assets.avatar, null);
+  assert.equal(requestOptions.redirect, 'error');
+});
+
 test('renderer keeps long League names, ranks and KDA values from colliding', async () => {
   const result = {
     game: 'lol',
@@ -400,3 +510,17 @@ test('renderer keeps long League names, ranks and KDA values from colliding', as
   assert.doesNotMatch(svg, /Bronze\.\.\./);
   assert.doesNotMatch(svg, /8\.2 \/ \.\.\./);
 });
+
+function findCustomId(value, customId) {
+  if (!value) return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findCustomId(item, customId);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof value !== 'object') return null;
+  if (value.custom_id === customId) return value;
+  return findCustomId(Object.values(value), customId);
+}

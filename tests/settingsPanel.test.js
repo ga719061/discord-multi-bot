@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { ButtonStyle, ComponentType, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { data, settingsViewTesting } from '../src/commands/admin/settings.js';
 import { countV2Components, ephemeralV2Payload } from '../src/utils/componentsV2.js';
-import { getAiSettings, getDb, updateAiSetting } from '../src/utils/database.js';
+import { getAiSettings, getDb, getGuildSettings, updateAiSetting, updateGuildSetting } from '../src/utils/database.js';
 import { AI_MODELS, DEFAULT_AI_MODEL } from '../src/utils/aiConfig.js';
 import { normalizeSelfRoleSettings } from '../src/utils/roleSettings.js';
 import { cleanupTestDatabase, initTestDatabase } from './helpers/database.js';
@@ -31,6 +31,39 @@ test('confirmation page is private Components V2 UI with confirm and cancel acti
   assert.equal((payload.flags & MessageFlags.IsComponentsV2) !== 0, true);
   assert.deepEqual(buttons.map((button) => button.label), ['確認執行', '取消']);
   assert.match(JSON.stringify(panel), /Steam/);
+});
+
+test('welcome settings can be disabled without deleting the custom message', async () => {
+  initTestDatabase();
+  const guildId = `settings-welcome-disable-${process.pid}`;
+  updateGuildSetting(guildId, 'welcome_channel', 'welcome-channel');
+  updateGuildSetting(guildId, 'welcome_message', '歡迎 {user}');
+  let edited;
+  const context = {
+    userId: 'admin',
+    guild: { id: guildId },
+    view: 'welcome',
+    pending: {},
+    notice: null,
+    editResponse: async (payload) => { edited = payload; },
+  };
+  const before = settingsViewTesting.renderWelcome(context).components[0].toJSON();
+  const beforeText = JSON.stringify(before);
+  const component = {
+    deferred: false,
+    replied: false,
+    async deferUpdate() { this.deferred = true; },
+  };
+
+  assert.match(beforeText, /停用歡迎訊息/);
+  assert.ok(countV2Components(settingsViewTesting.renderWelcome(context).components) <= 40);
+  await settingsViewTesting.handleButton(component, context, 'welcome_disable');
+
+  const settings = getGuildSettings(guildId);
+  assert.equal(settings.welcome_channel, null);
+  assert.equal(settings.welcome_message, '歡迎 {user}');
+  assert.match(JSON.stringify(edited), /尚未設定/);
+  assert.doesNotMatch(JSON.stringify(edited), /停用歡迎訊息/);
 });
 
 test('settings custom ids preserve the existing wire format and owner checks', () => {
@@ -277,6 +310,33 @@ test('enabling the AI core clears an expired global deadline', () => {
 
   assert.equal(settingsViewTesting.toggleAiSetting(guildId, 'enabled'), 0);
   assert.equal(getAiSettings(guildId).enabled, 0);
+});
+
+test('AI party activation restores previous settings when its public notice fails', async () => {
+  initTestDatabase();
+  const guildId = `settings-ai-party-compensation-${process.pid}`;
+  updateAiSetting(guildId, 'enabled', 0);
+  updateAiSetting(guildId, 'party_channel_id', 'previous-channel');
+  updateAiSetting(guildId, 'party_expires_at', 123456789);
+  const guild = {
+    id: guildId,
+    channels: {
+      fetch: async () => ({
+        isTextBased: () => true,
+        send: async () => { throw new Error('Discord send failed'); },
+      }),
+    },
+  };
+
+  await assert.rejects(
+    settingsViewTesting.startAiParty(guild, 'new-channel', 30),
+    /Discord send failed/
+  );
+
+  const settings = getAiSettings(guildId);
+  assert.equal(settings.enabled, 0);
+  assert.equal(settings.party_channel_id, 'previous-channel');
+  assert.equal(settings.party_expires_at, 123456789);
 });
 
 test('AI announcement draft panel offers preview controls only after a draft exists', () => {

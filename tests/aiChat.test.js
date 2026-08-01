@@ -1,13 +1,25 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+    AI_RESPONSE_TIMEOUT_MS,
+    AiResponseTimeoutError,
     buildAiSystemPrompt,
     DEFAULT_AI_PROMPT,
     getAiResponse,
     SERVER_INFO_POLICY,
 } from '../src/utils/aiChat.js';
 import { generateAiDraft } from '../src/utils/aiDrafts.js';
-import { shouldTriggerAi } from '../src/events/messageCreate.js';
+import {
+    AI_REQUEST_LIMITS,
+    buildAiHistory,
+    canReadAiHistory,
+    register,
+    resetAiRequestLimitsForTests,
+    shouldTriggerAi,
+    stopMessageCreate,
+    tryAcquireAiRequest,
+} from '../src/events/messageCreate.js';
+import { loadEvents, stopLoadedEvents } from '../src/handlers/eventHandler.js';
 
 test('Gemini requests preserve search, chat history, and image attachments', async () => {
     const originalKey = process.env.GOOGLE_AI_KEY;
@@ -138,6 +150,25 @@ test('Gemini image attachments skip unsafe MIME types and oversized downloads', 
     }
 });
 
+test('Gemini requests enforce one total response deadline', async () => {
+    const originalKey = process.env.GOOGLE_AI_KEY;
+    const originalFetch = globalThis.fetch;
+    process.env.GOOGLE_AI_KEY = 'test-key';
+    globalThis.fetch = async () => new Promise(() => {});
+
+    try {
+        assert.equal(AI_RESPONSE_TIMEOUT_MS, 45_000);
+        await assert.rejects(
+            getAiResponse('逾時測試', 'system', 'gemini-3.5-flash', false, null, [], 2, { timeoutMs: 20 }),
+            (error) => error instanceof AiResponseTimeoutError && error.code === 'AI_TIMEOUT'
+        );
+    } finally {
+        globalThis.fetch = originalFetch;
+        if (originalKey === undefined) delete process.env.GOOGLE_AI_KEY;
+        else process.env.GOOGLE_AI_KEY = originalKey;
+    }
+});
+
 test('AI prompt keeps the royal persona and safely permits supplied Discord server information', () => {
     assert.match(DEFAULT_AI_PROMPT, /吉吉國王/);
     assert.match(DEFAULT_AI_PROMPT, /繁體中文/);
@@ -219,4 +250,122 @@ test('AI trigger always respects global enabled and expiry state', () => {
         channelId: 'party',
         now: 1000,
     }), true);
+});
+
+test('AI history requires requester permission and excludes non-conversation messages', () => {
+    let checkedPermission;
+    const member = { id: 'requester' };
+    const message = {
+        member,
+        channel: {
+            permissionsFor(value) {
+                assert.equal(value, member);
+                return {
+                    has(permission) {
+                        checkedPermission = permission;
+                        return false;
+                    },
+                };
+            },
+        },
+    };
+
+    assert.equal(canReadAiHistory(message), false);
+    assert.ok(checkedPermission);
+    message.channel.permissionsFor = () => ({ has: () => true });
+    assert.equal(canReadAiHistory(message), true);
+    message.channel.permissionsFor = () => {
+        throw new Error('partial channel');
+    };
+    assert.equal(canReadAiHistory(message), false);
+
+    const messages = new Map([
+        ['system', { system: true, content: '系統訊息', author: { id: 'system' } }],
+        ['webhook', { webhookId: 'hook', content: 'Webhook 注入', author: { id: 'hook-user' } }],
+        ['other-bot', { content: '第三方 bot 指令', author: { id: 'other-bot', bot: true } }],
+        ['bot-reply', { content: '先前回答', author: { id: 'bot', bot: true } }],
+        ['human', { content: '先前問題', author: { id: 'human', username: 'alice', bot: false } }],
+    ]);
+
+    assert.deepEqual(buildAiHistory(messages, 'bot'), [
+        { role: 'user', parts: [{ text: '[alice]: 先前問題' }] },
+        { role: 'model', parts: [{ text: '先前回答' }] },
+    ]);
+});
+
+test('AI request limits enforce cooldown and guild/global in-flight caps with idempotent release', () => {
+    resetAiRequestLimitsForTests();
+    const first = tryAcquireAiRequest({ guildId: 'guild-1', userId: 'user-1', now: 1000 });
+    assert.equal(first.ok, true);
+    first.release();
+    first.release();
+
+    const cooldown = tryAcquireAiRequest({ guildId: 'guild-1', userId: 'user-1', now: 1001 });
+    assert.equal(cooldown.ok, false);
+    assert.equal(cooldown.reason, 'cooldown');
+    assert.equal(cooldown.retryAfterMs, AI_REQUEST_LIMITS.userCooldownMs - 1);
+
+    resetAiRequestLimitsForTests();
+    const guildLeases = Array.from(
+        { length: AI_REQUEST_LIMITS.maxGuildInFlight },
+        (_, index) => tryAcquireAiRequest({
+            guildId: 'guild-1',
+            userId: `guild-user-${index}`,
+            now: 1000,
+        })
+    );
+    assert.equal(guildLeases.every((lease) => lease.ok), true);
+    assert.equal(
+        tryAcquireAiRequest({ guildId: 'guild-1', userId: 'guild-overflow', now: 1000 }).reason,
+        'guild_busy'
+    );
+    guildLeases.forEach((lease) => lease.release());
+
+    resetAiRequestLimitsForTests();
+    const globalLeases = Array.from(
+        { length: AI_REQUEST_LIMITS.maxGlobalInFlight },
+        (_, index) => tryAcquireAiRequest({
+            guildId: `global-guild-${index}`,
+            userId: `global-user-${index}`,
+            now: 1000,
+        })
+    );
+    assert.equal(globalLeases.every((lease) => lease.ok), true);
+    assert.equal(
+        tryAcquireAiRequest({ guildId: 'global-overflow', userId: 'global-overflow', now: 1000 }).reason,
+        'global_busy'
+    );
+    globalLeases.forEach((lease) => lease.release());
+    resetAiRequestLimitsForTests();
+});
+
+test('messageCreate cleanup timer can be stopped idempotently', () => {
+    stopMessageCreate();
+    const listeners = [];
+    register({
+        on(eventName, listener) {
+            listeners.push([eventName, listener]);
+        },
+    });
+
+    assert.equal(listeners.length, 1);
+    assert.equal(listeners[0][0], 'messageCreate');
+    assert.equal(stopMessageCreate(), true);
+    assert.equal(stopMessageCreate(), false);
+});
+
+test('event loader registers and runs event cleanup hooks', async () => {
+    stopMessageCreate();
+    await stopLoadedEvents();
+    const listeners = [];
+    await loadEvents({
+        on(eventName, listener) {
+            listeners.push([eventName, listener]);
+        },
+    });
+
+    assert.ok(listeners.length > 0);
+    assert.equal(await stopLoadedEvents(), 1);
+    assert.equal(await stopLoadedEvents(), 0);
+    assert.equal(stopMessageCreate(), false);
 });

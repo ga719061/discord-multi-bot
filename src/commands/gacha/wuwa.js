@@ -47,6 +47,14 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const sessionId = interaction.id;
   const ownerId = interaction.user.id;
+  let sessionActive = true;
+  let homeRefresh = Promise.resolve(false);
+  const refreshHome = () => {
+    homeRefresh = homeRefresh
+      .catch(() => false)
+      .then(() => refreshWuwaHome(interaction, ownerId, () => sessionActive));
+    return homeRefresh;
+  };
   await interaction.reply(buildHomePayload(ownerId, getAccount(ownerId)));
   const response = await interaction.fetchReply();
   const collector = response.createMessageComponentCollector({
@@ -61,10 +69,10 @@ export async function execute(interaction) {
     try {
       const action = parseAction(component.customId, sessionId);
       if (!action) return;
-      if (action === 'bind') return openImportFlow(component, sessionId, false);
-      if (action === 'update') return openImportFlow(component, sessionId, true);
+      if (action === 'bind') return await openImportFlow(component, sessionId, false, refreshHome);
+      if (action === 'update') return await openImportFlow(component, sessionId, true, refreshHome);
       if (action === 'query') return openPoolSelector(component, sessionId);
-      if (action === 'unbind') return openUnbindConfirm(component, sessionId);
+      if (action === 'unbind') return await openUnbindConfirm(component, sessionId, refreshHome);
     } catch (error) {
       logger.warn(`[Wuwa] action failed user=${ownerId} code=${safeCode(error)}: ${error.message}`);
       const notice = v2Notice('🌊 皇家喚取卷宗處理失敗', userErrorMessage(error), UI_COLORS.WARNING);
@@ -73,9 +81,17 @@ export async function execute(interaction) {
     }
   });
 
-  collector.on('end', () => {
-    interaction.editReply(v2EditPayload(buildHomePayload(ownerId, getAccount(ownerId), true))).catch(() => {});
+  collector.on('end', async () => {
+    sessionActive = false;
+    await homeRefresh.catch(() => false);
+    await interaction.editReply(v2EditPayload(buildHomePayload(ownerId, getAccount(ownerId), true))).catch(() => {});
   });
+}
+
+export async function refreshWuwaHome(interaction, userId, isSessionActive = () => true) {
+  if (!isSessionActive()) return false;
+  await interaction.editReply(v2EditPayload(buildHomePayload(userId, getAccount(userId))));
+  return true;
 }
 
 export function buildHomePayload(userId, account, expired = false) {
@@ -188,7 +204,7 @@ export function buildPoolSelectionPayload(sessionId, expired = false) {
   return ephemeralV2Payload([panel]);
 }
 
-async function openImportFlow(component, sessionId, updating) {
+async function openImportFlow(component, sessionId, updating, onAccountChanged = async () => {}) {
   const existing = getAccount(component.user.id);
   if (updating && !existing) return component.reply(v2Notice('尚未綁定帳號', '請先完成鳴潮帳號綁定。', UI_COLORS.WARNING));
   if (!updating && existing) return component.reply(v2Notice('已綁定帳號', '每位使用者限綁一個 UID；如需更換請先解除綁定。', UI_COLORS.WARNING));
@@ -245,11 +261,13 @@ async function openImportFlow(component, sessionId, updating) {
       history: merged.history,
       updatedAt: now,
     });
-    return choice.update(v2EditPayload(v2Notice(
+    await choice.update(v2EditPayload(v2Notice(
       '🌊 喚取紀錄已更新',
       `已合併 **${merged.added}** 筆新紀錄；${partialFailureText(result.failedPools)}`,
       UI_COLORS.SUCCESS
     )));
+    await refreshAfterAccountChange(onAccountChanged, component.user.id);
+    return;
   }
 
   try {
@@ -266,11 +284,12 @@ async function openImportFlow(component, sessionId, updating) {
     }
     throw error;
   }
-  return choice.update(v2EditPayload(v2Notice(
+  await choice.update(v2EditPayload(v2Notice(
     '🌊 鳴潮帳號綁定完成',
     `已綁定 UID **${maskWuwaUid(result.playerUid)}**；${partialFailureText(result.failedPools)}`,
     UI_COLORS.SUCCESS
   )));
+  await refreshAfterAccountChange(onAccountChanged, component.user.id);
 }
 
 async function openPoolSelector(component, sessionId) {
@@ -334,7 +353,7 @@ async function openPoolSelector(component, sessionId) {
   });
 }
 
-async function openUnbindConfirm(component, sessionId) {
+async function openUnbindConfirm(component, sessionId, onAccountChanged = async () => {}) {
   const account = getAccount(component.user.id);
   if (!account) return component.reply(v2Notice('尚未綁定帳號', '目前沒有可解除的鳴潮帳號。', UI_COLORS.WARNING));
   const row = new ActionRowBuilder().addComponents(
@@ -357,7 +376,8 @@ async function openUnbindConfirm(component, sessionId) {
     return choice.update(v2EditPayload(v2Notice('已取消', '鳴潮帳號與歷史紀錄保持不變。', UI_COLORS.MUTED)));
   }
   deleteWuwaAccount(component.user.id);
-  return choice.update(v2EditPayload(v2Notice('已解除綁定', '鳴潮 UID 與全部抽卡歷史已永久刪除。', UI_COLORS.SUCCESS)));
+  await choice.update(v2EditPayload(v2Notice('已解除綁定', '鳴潮 UID 與全部抽卡歷史已永久刪除。', UI_COLORS.SUCCESS)));
+  await refreshAfterAccountChange(onAccountChanged, component.user.id);
 }
 
 async function importFromCredential(imported) {
@@ -413,6 +433,14 @@ function parseAction(customId, sessionId) {
   const parts = String(customId).split(':');
   if (parts[0] !== 'wuwa') return null;
   return parts[2] ?? sessionId;
+}
+
+async function refreshAfterAccountChange(refresh, userId) {
+  try {
+    await refresh();
+  } catch (error) {
+    logger.warn(`[Wuwa] home refresh failed user=${userId} code=${safeCode(error)}: ${error.message}`);
+  }
 }
 
 function partialFailureText(failedPools = []) {

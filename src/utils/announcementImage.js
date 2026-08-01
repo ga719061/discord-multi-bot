@@ -313,6 +313,27 @@ function getTokenWeight(token) {
   return weight;
 }
 
+function splitTokenToFit(token, maxW) {
+  const chars = [...token.text];
+  let splitAt = 0;
+  let weight = 0;
+
+  while (splitAt < chars.length) {
+    const charWeight = chars[splitAt].charCodeAt(0) > 255 ? 2 : 1;
+    if (weight + charWeight > maxW) break;
+    weight += charWeight;
+    splitAt++;
+  }
+
+  // maxW is positive in production, but still consume one character to guarantee progress.
+  if (splitAt === 0) splitAt = 1;
+
+  const head = { ...token, text: chars.slice(0, splitAt).join('') };
+  const tailText = chars.slice(splitAt).join('');
+  const tail = tailText ? { ...token, text: tailText } : null;
+  return [head, tail];
+}
+
 function smartWrap(text, maxW, maxLines) {
   const tokens = tokenize(text);
   const lines = [];
@@ -348,6 +369,12 @@ function smartWrap(text, maxW, maxLines) {
       if (currentLineTokens.length > 0 && CANNOT_START.has(token.text)) {
         currentLineTokens.push(token);
         commitLine();
+      } else if (currentLineTokens.length === 0) {
+        const [head, tail] = splitTokenToFit(token, maxW);
+        currentLineTokens.push(head);
+        currentWeight = getTokenWeight(head);
+        if (tail) tokens.unshift(tail);
+        commitLine();
       } else {
         tokens.unshift(token);
         commitLine();
@@ -377,3 +404,7 @@ function highlightEmojis(text) {
     return `<tspan class="emoji">${emoji}</tspan>`;
   });
 }
+
+export const announcementImageTesting = {
+  smartWrap,
+};

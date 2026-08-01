@@ -1,4 +1,4 @@
-import { EmbedBuilder } from 'discord.js';
+import { Collection, EmbedBuilder } from 'discord.js';
 import { getDb, markGiveawayEnded, updateGiveawayError, updateGiveawayState } from './database.js';
 import { fmt, COLORS, ansiBlock } from './style.js';
 import { logger } from './logger.js';
@@ -107,9 +107,8 @@ export async function endGiveaway(giveaway) {
                 return;
             }
 
-            // 強制抓取所有使用者確保清單正確
-            const users = await reaction.users.fetch();
-            const participants = users.filter(u => !u.bot);
+            // Discord 每頁最多回傳 100 位反應使用者，必須完整分頁後再抽獎。
+            const participants = await fetchReactionParticipants(reaction);
 
             if (participants.size === 0) {
                 await announceNoParticipants(channel, giveaway);
@@ -205,6 +204,39 @@ export async function endGiveaway(giveaway) {
         } else {
             updateGiveawayError(giveaway.id, err.message);
         }
+    }
+}
+
+async function fetchReactionParticipants(reaction) {
+    const participants = new Collection();
+    const seenCursors = new Set();
+    let after;
+
+    while (true) {
+        const page = await reaction.users.fetch({
+            limit: 100,
+            ...(after ? { after } : {}),
+        });
+
+        // 保留既有測試／替代實作的單頁 collection 相容性。
+        if (!page || typeof page.values !== 'function') {
+            return page.filter(user => !user.bot);
+        }
+
+        for (const user of page.values()) {
+            if (!user.bot) participants.set(user.id, user);
+        }
+
+        if (page.size < 100) return participants;
+
+        const pageUsers = [...page.values()];
+        const nextAfter = pageUsers.at(-1)?.id;
+        if (!nextAfter || seenCursors.has(nextAfter)) {
+            throw new Error('Reaction user pagination did not advance');
+        }
+
+        seenCursors.add(nextAfter);
+        after = nextAfter;
     }
 }
 

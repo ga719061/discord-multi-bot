@@ -20,10 +20,13 @@ import {
     pendingAnnouncements,
     restorePendingAnnouncement,
 } from '../src/utils/announcementTools.js';
-import { renderAnnouncementScrollImage } from '../src/utils/announcementImage.js';
+import {
+    announcementImageTesting,
+    renderAnnouncementScrollImage,
+} from '../src/utils/announcementImage.js';
 
 const tinyPng = Buffer.from(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=',
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAPoAAAD6AG1e1JrAAAADUlEQVQImWP4////fwAJ+wP9CNHoHgAAAABJRU5ErkJggg==',
     'base64'
 );
 
@@ -115,6 +118,20 @@ test('announcement scroll renderer returns a non-empty PNG and tolerates missing
     assert.equal(Buffer.isBuffer(card.buffer), true);
     assert.equal(card.buffer.subarray(0, 8).toString('hex'), '89504e470d0a1a0a');
     assert.equal(card.buffer.length > 1000, true);
+});
+
+test('announcement smart wrapping splits oversized ASCII and URL tokens without losing text', () => {
+    const longAscii = 'A'.repeat(80);
+    assert.deepEqual(announcementImageTesting.smartWrap(longAscii, 38, 3), [
+        'A'.repeat(38),
+        'A'.repeat(38),
+        'A'.repeat(4),
+    ]);
+
+    const longUrl = `https://example.com/${'release-notes-'.repeat(6)}download`;
+    const urlLines = announcementImageTesting.smartWrap(longUrl, 36, 10);
+    assert.equal(urlLines.join(''), longUrl);
+    assert.equal(urlLines.every((line) => line.length <= 36), true);
 });
 
 test('announcement composer opens a modal with file upload', async () => {

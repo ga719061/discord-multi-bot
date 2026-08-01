@@ -18,6 +18,15 @@ export async function buildStatsReply(result, playerName, tag, options = {}) {
         .setDisabled(Boolean(options.published || options.expired))
     );
   }
+  if (result.status !== 'ok' && options.retryCustomId) {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(options.retryCustomId)
+        .setLabel(result.status === 'not_found' ? '修正資料' : '重新查詢')
+        .setStyle(ButtonStyle.Primary)
+        .setDisabled(Boolean(options.expired))
+    );
+  }
 
   if (result.status === 'ok') {
     const { attachment, filename } = await renderStatsImage(result, { fetchImpl: options.fetchImpl });

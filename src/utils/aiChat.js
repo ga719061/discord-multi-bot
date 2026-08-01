@@ -15,6 +15,15 @@ export const SERVER_INFO_POLICY = [
 ].join('');
 const IMAGE_FETCH_TIMEOUT_MS = 3500;
 const MAX_AI_IMAGE_BYTES = 5 * 1024 * 1024;
+export const AI_RESPONSE_TIMEOUT_MS = 45_000;
+
+export class AiResponseTimeoutError extends Error {
+    constructor(timeoutMs) {
+        super(`AI response timed out after ${timeoutMs}ms`);
+        this.name = 'AiResponseTimeoutError';
+        this.code = 'AI_TIMEOUT';
+    }
+}
 
 export function buildAiSystemPrompt(basePrompt, context = '') {
     return [
@@ -88,8 +97,13 @@ async function fetchImageAttachment(img) {
  * @param {number} retryCount - 重試次數 (預設 2)
  * @returns {Promise<string>} AI 回應文字
  */
-export async function getAiResponse(userMessage, systemPrompt, modelName = DEFAULT_AI_MODEL, useSearch = false, history = null, imageAttachments = [], retryCount = 2) {
+export async function getAiResponse(userMessage, systemPrompt, modelName = DEFAULT_AI_MODEL, useSearch = false, history = null, imageAttachments = [], retryCount = 2, options = {}) {
     const client = getGeminiClient();
+    const requestedTimeout = Number(options?.timeoutMs);
+    const timeoutMs = Number.isFinite(requestedTimeout) && requestedTimeout > 0
+        ? requestedTimeout
+        : AI_RESPONSE_TIMEOUT_MS;
+    const deadline = Date.now() + timeoutMs;
     const config = {
         systemInstruction: systemPrompt || DEFAULT_AI_PROMPT,
     };
@@ -114,17 +128,29 @@ export async function getAiResponse(userMessage, systemPrompt, modelName = DEFAU
     }
 
     const performRequest = async (currentRetry) => {
+        const controller = new AbortController();
+        const requestConfig = { ...config, abortSignal: controller.signal };
         try {
             if (history && history.length > 0) {
-                const chat = client.chats.create({ model: modelName, config, history });
-                const response = await chat.sendMessage({ message: parts });
+                const chat = client.chats.create({ model: modelName, config: requestConfig, history });
+                const response = await waitWithinDeadline(
+                    chat.sendMessage({ message: parts }),
+                    deadline,
+                    timeoutMs,
+                    () => controller.abort()
+                );
                 return response.text || '';
             } else {
-                const response = await client.models.generateContent({
-                    model: modelName,
-                    contents: [{ role: 'user', parts }],
-                    config,
-                });
+                const response = await waitWithinDeadline(
+                    client.models.generateContent({
+                        model: modelName,
+                        contents: [{ role: 'user', parts }],
+                        config: requestConfig,
+                    }),
+                    deadline,
+                    timeoutMs,
+                    () => controller.abort()
+                );
                 return response.text || '';
             }
         } catch (err) {
@@ -140,7 +166,11 @@ export async function getAiResponse(userMessage, systemPrompt, modelName = DEFAU
             if (isRetryable && currentRetry > 0) {
                 const delay = (3 - currentRetry) * 2000; // 指數退避延遲 2s, 4s
                 logger.warn(`[AI] Google API 暫時不可用 (${status})，${delay}ms 後重試 (剩餘: ${currentRetry})`);
-                await new Promise(resolve => setTimeout(resolve, delay));
+                await waitWithinDeadline(
+                    new Promise(resolve => setTimeout(resolve, delay)),
+                    deadline,
+                    timeoutMs
+                );
                 return performRequest(currentRetry - 1);
             }
             logger.error(`[AI] Gemini 請求失敗 model=${modelName} search=${useSearch} history=${history?.length || 0} status=${status}: ${message}`);
@@ -149,4 +179,27 @@ export async function getAiResponse(userMessage, systemPrompt, modelName = DEFAU
     };
 
     return performRequest(retryCount);
+}
+
+async function waitWithinDeadline(promise, deadline, timeoutMs, onTimeout) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+        onTimeout?.();
+        throw new AiResponseTimeoutError(timeoutMs);
+    }
+
+    let timer;
+    try {
+        return await Promise.race([
+            promise,
+            new Promise((_, reject) => {
+                timer = setTimeout(() => {
+                    reject(new AiResponseTimeoutError(timeoutMs));
+                    onTimeout?.();
+                }, remaining);
+            }),
+        ]);
+    } finally {
+        clearTimeout(timer);
+    }
 }

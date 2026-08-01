@@ -2,7 +2,7 @@ import 'dotenv/config';
 import dns from 'node:dns';
 import { Client, GatewayIntentBits, Collection, Partials, Events, EmbedBuilder, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { loadCommands } from './handlers/commandHandler.js';
-import { loadEvents } from './handlers/eventHandler.js';
+import { loadEvents, stopLoadedEvents } from './handlers/eventHandler.js';
 import { initDatabase, getDb, updateGuildSetting, getGuildSettings, getButtonRoleByMessageAndRole, closeDatabaseForTests } from './utils/database.js';
 import { logger } from './utils/logger.js';
 import { startHealthServer, stopHealthServer } from './utils/healthServer.js';
@@ -64,7 +64,15 @@ client.cooldowns = new Collection();
 client.on(Events.InteractionCreate, async (interaction) => {
   if (interaction.isChatInputCommand()) {
     const command = client.commands.get(interaction.commandName);
-    if (!command) return;
+    if (!command) {
+      logger.error(`[Command] 收到未載入的指令: /${interaction.commandName}`);
+      return interaction.reply(v2Notice(
+        '⚠️ 指令目前無法使用',
+        '這個指令未成功載入，請稍後再試或通知管理員。',
+        UI_COLORS.WARNING,
+        { ephemeral: true }
+      ));
+    }
 
     try {
       await command.execute(interaction);
@@ -384,6 +392,26 @@ client.on(Events.InteractionCreate, async (interaction) => {
   }
 });
 
+const cleanups = [
+  stopLoadedEvents,
+  stopScheduledJobs,
+  stopHealthServer,
+  closeDatabaseForTests,
+];
+
+async function cleanupBot() {
+  for (const cleanup of cleanups) {
+    try {
+      await cleanup();
+    } catch (err) {
+      logger.error('[Bot] 清理出錯:', err);
+    }
+  }
+  try {
+    client.destroy();
+  } catch {}
+}
+
 async function start() {
   try {
     initDatabase();
@@ -399,7 +427,14 @@ async function start() {
 
     startScheduledJobs(client);
 
-    startHealthServer({ logger });
+    await startHealthServer({
+      logger,
+      isReady: () => {
+        if (!client.isReady()) return false;
+        getDb().prepare('SELECT 1').get();
+        return true;
+      },
+    });
     logger.info('機器人已成功登入！');
 
     // 登入後緩存所有邀請碼
@@ -424,36 +459,19 @@ async function start() {
     });
   } catch (error) {
     logger.error('啟動失敗:', error);
-    try {
-      client.destroy();
-    } catch {}
+    await cleanupBot();
     process.exitCode = 1;
   }
 }
 
-start();
-
-const cleanups = [
-  stopScheduledJobs,
-  stopHealthServer,
-  closeDatabaseForTests,
-];
-
 async function gracefulShutdown(signal) {
   logger.info(`[Bot] 收到 ${signal} 信號，啟動優雅退出程序...`);
-  for (const cleanup of cleanups) {
-    try {
-      await cleanup();
-    } catch (err) {
-      logger.error(`[Bot] 清理出錯:`, err);
-    }
-  }
-  try {
-    client.destroy();
-  } catch {}
+  await cleanupBot();
   logger.info('[Bot] 優雅退出完成。');
   process.exit(0);
 }
 
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+start();

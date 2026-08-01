@@ -20,7 +20,7 @@
 
 ## 專案速讀
 
-這是「吉吉國王」Discord bot 專案，使用 Node.js 20+、Discord.js v14、SQLite/better-sqlite3。目前專案部署於 Synology DS920+ Container Manager (Docker) 容器環境。功能包含 AI 對話與知識庫、管理控制台、等級與排行榜、提醒、Steam 特價查詢、VALORANT/LoL 戰績、鳴潮抽卡紀錄、抽獎、投票、身分組、伺服器紀錄與圖片渲染。
+這是「吉吉國王」Discord bot 專案，使用 Node.js 24+、Discord.js v14、SQLite/better-sqlite3。目前專案部署於 Synology DS920+ Container Manager (Docker) 容器環境。功能包含 AI 對話與知識庫、管理控制台、等級與排行榜、提醒、Steam 特價查詢、VALORANT/LoL 戰績、鳴潮抽卡紀錄、抽獎、投票、身分組、伺服器紀錄與圖片渲染。
 
 新對話開始時，先讀這份文件，再依需求查看 `README.md`、`package.json` 與相關原始碼。
 
@@ -65,6 +65,7 @@
 - 依賴新欄位的 SQLite 索引必須在既有資料庫完成 `ALTER TABLE` 遷移後建立，並以舊 schema temp DB 測試驗證。
 - 改 guild 或 AI setting key 時，同步更新 allowlist，例如 `ALLOWED_GUILD_KEYS` 或 `ALLOWED_AI_KEYS`。
 - AI 白名單與派對模式仍受 `ai_settings.enabled` 全域開關限制；AI 設定面板必須顯示並提供核心啟用／停用控制，重新啟用時清除舊的 `expires_at`。
+- AI 對話歷史只可在提問者具備 `ReadMessageHistory` 時讀取，並排除 system、webhook 與第三方 bot；AI 請求維持每使用者 8 秒冷卻、每 guild 2 個及全域 6 個 in-flight 上限，整個 Gemini 請求與重試流程共用 45 秒 deadline，逾時須中止 client request 並釋放 slot。
 - 會呼叫 `initDatabase()` 的測試要使用 temp DB helper，不要寫入真實 `data/bot.db`。
 - 改互動 UI 時，先找現有 builder/helper，特別是 Components V2 payload、settings panel、announcement preview、Steam detail、reaction role。
 - Components V2 單則訊息最多 40 個元件；擴充 settings panel 或 AI 草稿中心時要用 `countV2Components()` 補 regression test。
@@ -79,13 +80,17 @@
 - SVG 表情符號渲染優化：為防止 `sharp` / `librsvg` 因繼承粗體樣式而使黑白 Emoji 輪廓被填滿成無細節色塊，在 SVG `<tspan>` 中中必須顯式設定 `font-weight="normal"`，且 `font-size` 建議調整為 `1.3em`，並使其繼承文字的深色（不設 `fill` 屬性）以融入卷軸古典風格。為防止 XML 屬性單引號解析失敗，需在 `<style>` 中定義 `.emoji` 樣式類別，並用 `<tspan class="emoji">` 套用。
 - 群暉 Docker 容器字型加載：本專案部署於 Synology Container Manager 環境。當圖片渲染模組（如公告卷軸、戰績卡）因為容器缺少系統字型而出現中文字型缺失或表情符號顯示為帶十六進位編碼的「豆腐塊」方框時，應在大易（Dockerfile）中以 `RUN apt-get update && apt-get install -y fonts-noto-cjk fonts-noto-color-emoji` 補齊 Linux 字型，或在群暉 Container Manager 介面中，將包含 `Noto Sans CJK` 和 `Segoe UI Emoji` 的本地字型資料夾掛載映射至容器內的 `/usr/share/fonts/truetype/` 目錄中，即可在不重建鏡像的情況下即時加載。
 - 快取與資源管理：模組級快取 Map 必須實施容量上限限制（如 100）與 FIFO 淘汰以防止記憶體無界膨脹；每日產生的日誌檔案須實施保留天數清理（如 30 天）。
-- 資源與生命週期管理：所有定時排程應提供對應的 `stop` 函數以支援 Graceful Shutdown，並在 `src/utils/scheduledJobs.js` 中統一經由 `stopScheduledJobs()` 關閉；健康檢查伺服器可由 `stopHealthServer()` 關閉。
+- 資源與生命週期管理：所有定時排程應提供對應的 `stop` 函數以支援 Graceful Shutdown，並在 `src/utils/scheduledJobs.js` 中統一經由 `stopScheduledJobs()` 關閉；健康檢查伺服器可由 `stopHealthServer()` 關閉。`/livez`（以及相容用 `/`）只檢查 HTTP 存活，`/readyz` 必須同時確認 Discord ready 與 SQLite 可查詢；Docker healthcheck 使用 `/readyz`。
+- 語音 XP 必須依實際在線毫秒累積，每滿 10 分鐘才結算一次，離線後保留未滿一個區塊的餘額；語音獎勵不得更新文字訊息 XP 的 `last_xp_time` cooldown。
 - 大檔案下載防禦：對於外部資源下載，優先使用 `fetchWithLimit(url, fetchImpl, { maxBytes })`，並設定適當的 `maxBytes` (例如公告圖片 8MB/15MB，AI 圖片 5MB)，以防無 `content-length` 的超大檔案在下載時被全部載入記憶體而導致崩潰。
+- 戰績圖片只下載允許清單內的 HTTPS 資產，拒絕 redirect，圖片與 metadata 上限皆為 5MB；不得重新接受上游 HTML 提供的任意 host。
 - 提醒系統優化：`reminders` 表支援錯誤重試 (最大 5 次，重試間隔為 attempts 分鐘，使用 `attempts`、`next_retry_at` 與 `last_error` 欄位) 與跨伺服器隔離 (查詢/刪除時帶入 `guildId`)，特定永久性錯誤 (找不到 guild/channel) 應直接改為對應失敗狀態。
 - 抽獎結果可靠性：抽出得主後先持久化 `winner_ids` 與 `drawn_pending_notify`；公開結果成功發送後才能標記 `completed`，通知失敗重試時不得重新抽獎。
+- 抽獎反應使用者必須以每頁 100 人完整分頁並依 ID 去重後才抽出得主，不得只使用 `reaction.users.fetch()` 的第一頁。
 - 鳴潮喚取授權：完整 URL、`recordId`、`serverId`、`cardPoolId` 只能存在單次記憶體流程，不得寫入資料庫或 log；`wuwa_accounts` 只保存 Discord user、UID 與版本化歷史。更新紀錄要以有序序列合併，不能用時間作唯一鍵。
 - 鳴潮 URL 教學在私人首頁直接顯示 WuWa Tracker 官方固定 commit 的 PowerShell 指令，並附腳本檢視與遠端執行警告；若更新 commit 必須先核對官方 repo。圖片 renderer 必須載入直接生成的點陣底圖 `assets/wuwa/card-background-v3.png`，不得以 SVG 轉檔替代；最近五星頭像依實際筆數動態置中。
 - `/幫助` 會將 `esports` 與 `gacha` 模組合併顯示為「遊戲查詢」分類，分類內分別提供 `/戰績` 與 `/鳴潮抽卡` 的直接入口；不可在首頁拆成兩個獨立分類。
+- Docker image 使用 Node.js 24 多階段建置，runtime 不保留編譯工具；Compose 必須以 `user: "0:0"` 啟動 entrypoint，對掛載的 `/app/data` 與 `/app/logs` 執行 `chown node:node`、`chmod u+rwX` 並以 UID 1000 驗證可寫後，隨即透過 `gosu` 降權成 `node` 執行 bot。不得刪除或重建既有 volume 來處理 SQLite 權限問題。
 
 ## 驗證方式
 

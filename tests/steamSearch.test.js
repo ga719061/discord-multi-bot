@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ComponentType, MessageFlags } from 'discord.js';
 import { buildSteamSearchModal, buildSteamSearchResultPayload, buildSteamSelectionPayload, data } from '../src/commands/steam/steam.js';
+import { countV2Components } from '../src/utils/componentsV2.js';
 
 const details = {
   name: 'Royal Game',
@@ -56,10 +57,25 @@ test('Steam keyword search offers a private candidate game selector before showi
   assert.match(text, /steam_search:session:select/);
 });
 
+test('Steam candidate selector keeps the Discord maximum of 25 choices', () => {
+  const candidates = Array.from({ length: 30 }, (_, index) => ({
+    id: index + 1,
+    name: `Royal Game ${index + 1}`,
+  }));
+  const payload = buildSteamSelectionPayload('session', 'Royal', candidates);
+  const select = findCustomId(payload.components.map((component) => component.toJSON()), 'steam_search:session:select');
+
+  assert.equal(select.options.length, 25);
+  assert.equal(select.options.at(-1).value, '25');
+  assert.ok(countV2Components(payload.components) <= 40);
+});
+
 test('Steam result is private until the owner publishes it once', () => {
   const privatePayload = buildSteamSearchResultPayload(42, details, {
     ephemeral: true,
     publishCustomId: 'steam_search:session:publish',
+    backCustomId: 'steam_search:session:back',
+    requeryCustomId: 'steam_search:session:requery',
   });
   const publishedPayload = buildSteamSearchResultPayload(42, details, {
     ephemeral: true,
@@ -74,8 +90,40 @@ test('Steam result is private until the owner publishes it once', () => {
   assert.match(publicCard, /"url":"https:\/\/store\.steampowered\.com\/app\/42\/"/);
   assert.match(serialize(privatePayload), /皇家採購廳/);
   assert.match(serialize(privatePayload), /頒布至目前頻道/);
+  assert.match(serialize(privatePayload), /返回候選清單/);
+  assert.match(serialize(privatePayload), /重新搜尋/);
+  assert.ok(countV2Components(privatePayload.components) <= 40);
   assert.match(serialize(publishedPayload), /聖旨已頒布/);
   assert.equal(serialize(publicPayload).includes('頒布至目前頻道'), false);
   assert.match(serialize(publicPayload), /公開採購情報/);
   assert.equal(serialize(publicPayload).includes('私人情報呈報'), false);
 });
+
+test('expired Steam details disable navigation and publishing actions', () => {
+  const payload = buildSteamSearchResultPayload(42, details, {
+    ephemeral: true,
+    publishCustomId: 'steam_search:session:publish',
+    backCustomId: 'steam_search:session:back',
+    requeryCustomId: 'steam_search:session:requery',
+    expired: true,
+  });
+  const json = payload.components.map((component) => component.toJSON());
+
+  assert.equal(findCustomId(json, 'steam_search:session:publish').disabled, true);
+  assert.equal(findCustomId(json, 'steam_search:session:back').disabled, true);
+  assert.equal(findCustomId(json, 'steam_search:session:requery').disabled, true);
+});
+
+function findCustomId(value, customId) {
+  if (!value) return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findCustomId(item, customId);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof value !== 'object') return null;
+  if (value.custom_id === customId) return value;
+  return findCustomId(Object.values(value), customId);
+}

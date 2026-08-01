@@ -22,6 +22,7 @@ import {
   addReactionRole,
   deleteReactionRolesByMessage,
   getAiSettings,
+  getDb,
   getGuildSettings,
   getReactionRolesByGuild,
   getRankTitle,
@@ -357,6 +358,10 @@ async function handleButton(component, context, action, value) {
   if (action === 'level') {
     updateGuildSetting(context.guild.id, 'level_up_announcement_enabled', value === 'on' ? 1 : 0);
     context.notice = '爵位晉升公告狀態已更新。';
+  }
+  if (action === 'welcome_disable') {
+    updateGuildSetting(context.guild.id, 'welcome_channel', null);
+    context.notice = '皇家迎賓佈告已停用；自訂內容仍保留。';
   }
   if (action === 'steam_toggle') {
     updateGuildSetting(context.guild.id, 'steam_deal_enabled', value === 'on' ? 1 : 0);
@@ -840,7 +845,10 @@ function renderWelcome(context) {
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder().setCustomId(id(context, 'welcome_channel')).setPlaceholder('選擇歡迎頻道').addChannelTypes(ChannelType.GuildText)
     ))
-    .addActionRowComponents(actionButtons(context, [['modal:welcome_message', '編輯訊息', ButtonStyle.Primary]]));
+    .addActionRowComponents(actionButtons(context, [
+      ['modal:welcome_message', '編輯訊息', ButtonStyle.Primary],
+      ...(settings.welcome_channel ? [['welcome_disable', '停用歡迎訊息', ButtonStyle.Secondary]] : []),
+    ]));
   return { components: [finishPanel(panel, context)] };
 }
 
@@ -1820,10 +1828,32 @@ async function publishSteamFreeGames(guild) {
 async function startAiParty(guild, channelId, minutes) {
   const channel = await guild.channels.fetch(channelId).catch(() => null);
   if (!channel?.isTextBased()) throw new Error('派對頻道不存在或無法發送訊息。');
-  updateAiSetting(guild.id, 'party_channel_id', channelId);
-  updateAiSetting(guild.id, 'party_expires_at', Date.now() + minutes * 60_000);
-  updateAiSetting(guild.id, 'enabled', 1);
-  await channel.send(v2Notice('🎉 皇家 AI 宴會開席', `接下來 ${minutes} 分鐘內，任何子民都可在此頻道提及本王進行聊天。`, UI_COLORS.ROYAL, { ephemeral: false }));
+  const previous = getAiSettings(guild.id);
+  const expiresAt = Date.now() + minutes * 60_000;
+  const db = getDb();
+  db.prepare(`
+    UPDATE ai_settings
+    SET party_channel_id = ?, party_expires_at = ?, enabled = 1
+    WHERE guild_id = ?
+  `).run(channelId, expiresAt, guild.id);
+
+  try {
+    await channel.send(v2Notice('🎉 皇家 AI 宴會開席', `接下來 ${minutes} 分鐘內，任何子民都可在此頻道提及本王進行聊天。`, UI_COLORS.ROYAL, { ephemeral: false }));
+  } catch (error) {
+    db.prepare(`
+      UPDATE ai_settings
+      SET party_channel_id = ?, party_expires_at = ?, enabled = ?
+      WHERE guild_id = ? AND party_channel_id = ? AND party_expires_at = ?
+    `).run(
+      previous.party_channel_id,
+      previous.party_expires_at,
+      previous.enabled,
+      guild.id,
+      channelId,
+      expiresAt
+    );
+    throw error;
+  }
 }
 
 function closePanel(components) {
@@ -1858,5 +1888,7 @@ export const settingsViewTesting = {
   closePanel,
   buildSelfRoleMenuPayload,
   extractEmojiAndLabel,
+  handleButton,
+  startAiParty,
   toggleAiSetting,
 };

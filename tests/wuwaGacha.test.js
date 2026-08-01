@@ -33,6 +33,7 @@ import {
   buildImportModal,
   buildPoolSelectionPayload,
   data,
+  refreshWuwaHome,
 } from '../src/commands/gacha/wuwa.js';
 import { countV2Components } from '../src/utils/componentsV2.js';
 
@@ -308,6 +309,47 @@ test('Discord command exposes safe modal and component layouts', () => {
   assert.match(JSON.stringify(selection.components.map((item) => item.toJSON())), /角色聯動喚取/);
 });
 
+test('active WuWa session redraws the private home after bind, update and unbind', async () => {
+  initTestDatabase('wuwa-home-refresh');
+  const edits = [];
+  const interaction = {
+    editReply: async (payload) => edits.push(payload),
+  };
+  const account = {
+    playerUid: '900123456',
+    region: 'SEA',
+    languageCode: 'zh-Hant',
+    history: emptyWuwaHistory(),
+    updatedAt: 1000,
+  };
+
+  bindWuwaAccount('user', account);
+  assert.equal(await refreshWuwaHome(interaction, 'user'), true);
+  let home = serializeComponents(edits.at(-1));
+  assert.match(JSON.stringify(home), /900\*{4}56/);
+  assert.equal(findCustomId(home, 'wuwa:user:bind').disabled, true);
+  assert.equal(findCustomId(home, 'wuwa:user:query').disabled, false);
+  assert.equal(findCustomId(home, 'wuwa:user:update').disabled, false);
+  assert.equal(findCustomId(home, 'wuwa:user:unbind').disabled, false);
+
+  updateWuwaAccount('user', { ...account, updatedAt: 2000 });
+  await refreshWuwaHome(interaction, 'user');
+  home = serializeComponents(edits.at(-1));
+  assert.match(JSON.stringify(home), /<t:2:R>/);
+
+  deleteWuwaAccount('user');
+  await refreshWuwaHome(interaction, 'user');
+  home = serializeComponents(edits.at(-1));
+  assert.equal(findCustomId(home, 'wuwa:user:bind').disabled, false);
+  assert.equal(findCustomId(home, 'wuwa:user:query').disabled, true);
+  assert.equal(findCustomId(home, 'wuwa:user:update').disabled, true);
+  assert.equal(findCustomId(home, 'wuwa:user:unbind').disabled, true);
+
+  const editCount = edits.length;
+  assert.equal(await refreshWuwaHome(interaction, 'user', () => false), false);
+  assert.equal(edits.length, editCount);
+});
+
 test('history merge validates versioned storage', async () => {
   const parsed = parseWuwaJson(await fs.readFile(fixtureUrl, 'utf8'));
   const normalized = normalizeHistory(parsed.history);
@@ -327,4 +369,22 @@ function record(name, time, qualityLevel, resourceId) {
     time,
     languageCode: 'zh-Hant',
   };
+}
+
+function serializeComponents(payload) {
+  return payload.components.map((component) => component.toJSON());
+}
+
+function findCustomId(value, customId) {
+  if (!value) return null;
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = findCustomId(item, customId);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (typeof value !== 'object') return null;
+  if (value.custom_id === customId) return value;
+  return findCustomId(Object.values(value), customId);
 }

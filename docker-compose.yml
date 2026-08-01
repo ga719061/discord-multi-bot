@@ -3,6 +3,8 @@ services:
   discord-bot:
     build: .
     container_name: chihuahua-king-bot
+    # entrypoint 需要先修正既有 volume 權限，之後會立即降權為 node。
+    user: "0:0"
     restart: unless-stopped
     network_mode: host
     env_file:

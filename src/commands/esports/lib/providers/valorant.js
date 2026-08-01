@@ -100,7 +100,8 @@ async function fetchOpggStats(sourceUrl, playerName, tag, fetchImpl) {
 async function resolveOpggActions(html, sourceUrl, fetchImpl) {
   const scriptUrls = [...String(html).matchAll(/<script[^>]+src=["']([^"']+)["']/gi)]
     .map((match) => match[1])
-    .map((src) => new URL(src, sourceUrl).href);
+    .map((src) => new URL(src, sourceUrl).href)
+    .filter(isAllowedOpggUrl);
   const routeScript = scriptUrls.find((src) => /valorant\/profile/i.test(decodeURIComponent(src)));
   if (!routeScript) return null;
 
@@ -416,5 +417,27 @@ function parseRecentHighlights(text) {
 
 function absoluteValocheckUrl(url) {
   if (!url) return null;
-  return url.startsWith('/') ? new URL(url, VALOCHECK_BASE).href : url;
+  const absoluteUrl = url.startsWith('/') ? new URL(url, VALOCHECK_BASE).href : url;
+  try {
+    const parsed = new URL(absoluteUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    return parsed.protocol === 'https:' && (
+      hostname === 'valocheck.com'
+      || hostname.endsWith('.valocheck.com')
+      || hostname === 'valorant-api.com'
+      || hostname.endsWith('.valorant-api.com')
+    ) ? parsed.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function isAllowedOpggUrl(url) {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    return parsed.protocol === 'https:' && (hostname === 'op.gg' || hostname.endsWith('.op.gg'));
+  } catch {
+    return false;
+  }
 }

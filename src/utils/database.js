@@ -351,19 +351,25 @@ export function addXp(guildId, userId, amount, options = { source: 'message' }) 
   const xpNeeded = getXpForLevel(user.level + 1);
   let leveledUp = false;
 
-  const countColumn = options.source === 'voice' ? 'total_voice_mins' : 'total_messages';
-  const increment = options.source === 'voice' ? 10 : 1; // 語音經驗值每 10 分鐘檢查一次
+  const isVoice = options.source === 'voice';
+  const countColumn = isVoice ? 'total_voice_mins' : 'total_messages';
+  const increment = isVoice ? (options.voiceMinutes ?? 10) : 1;
+  const lastXpUpdate = isVoice ? '' : ', last_xp_time = ?';
+  const updateValues = (xp) => isVoice
+    ? [xp, increment, guildId, userId]
+    : [xp, increment, Date.now(), guildId, userId];
+
   if (newXp >= xpNeeded) {
     db.prepare(`
-      UPDATE user_levels SET xp = ?, level = level + 1, ${countColumn} = ${countColumn} + ?, last_xp_time = ?
+      UPDATE user_levels SET xp = ?, level = level + 1, ${countColumn} = ${countColumn} + ?${lastXpUpdate}
       WHERE guild_id = ? AND user_id = ?
-    `).run(newXp - xpNeeded, increment, Date.now(), guildId, userId);
+    `).run(...updateValues(newXp - xpNeeded));
     leveledUp = true;
   } else {
     db.prepare(`
-      UPDATE user_levels SET xp = ?, ${countColumn} = ${countColumn} + ?, last_xp_time = ?
+      UPDATE user_levels SET xp = ?, ${countColumn} = ${countColumn} + ?${lastXpUpdate}
       WHERE guild_id = ? AND user_id = ?
-    `).run(newXp, increment, Date.now(), guildId, userId);
+    `).run(...updateValues(newXp));
   }
 
   return { leveledUp, newLevel: user.level + (leveledUp ? 1 : 0) };

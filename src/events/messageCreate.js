@@ -11,6 +11,12 @@ import { UI_COLORS } from '../utils/style.js';
 const XP_COOLDOWN = 60_000;
 const XP_MIN = 15;
 const XP_MAX = 25;
+const XP_MIN_MEANINGFUL_CHARS = 4;
+export const AI_REQUEST_LIMITS = Object.freeze({
+    userCooldownMs: 8_000,
+    maxGuildInFlight: 2,
+    maxGlobalInFlight: 6,
+});
 
 class LimitedMap extends Map {
     constructor(limit = 10000) {
@@ -30,6 +36,9 @@ class LimitedMap extends Map {
 const xpCooldownCache = new LimitedMap(5000);
 let cleanupInterval = null;
 const xpMessageCache = new LimitedMap(10000); // 用於防重複發言的快取
+const aiUserCooldownCache = new LimitedMap(5000);
+const aiGuildInFlight = new Map();
+let aiGlobalInFlight = 0;
 
 // 定期清理快取避免記憶體無限增長 (每 10 分鐘清理超過 5 分鐘未更新的條目)
 function startCleanupInterval() {
@@ -39,7 +48,119 @@ function startCleanupInterval() {
         for (const [key, time] of xpCooldownCache) {
             if (time < cutoff) xpCooldownCache.delete(key);
         }
+        for (const [key, time] of aiUserCooldownCache) {
+            if (time < cutoff) aiUserCooldownCache.delete(key);
+        }
     }, 10 * 60_000);
+    cleanupInterval.unref?.();
+}
+
+export function stopMessageCreate() {
+    if (!cleanupInterval) return false;
+    clearInterval(cleanupInterval);
+    cleanupInterval = null;
+    return true;
+}
+
+export { stopMessageCreate as stop };
+
+export function resetAiRequestLimitsForTests() {
+    aiUserCooldownCache.clear();
+    aiGuildInFlight.clear();
+    aiGlobalInFlight = 0;
+}
+
+export function tryAcquireAiRequest({ guildId, userId, now = Date.now() }) {
+    const key = `${guildId}:${userId}`;
+    const lastAcceptedAt = aiUserCooldownCache.get(key);
+    const retryAfterMs = lastAcceptedAt === undefined
+        ? 0
+        : AI_REQUEST_LIMITS.userCooldownMs - (now - lastAcceptedAt);
+
+    if (retryAfterMs > 0) {
+        return { ok: false, reason: 'cooldown', retryAfterMs };
+    }
+    if (aiGlobalInFlight >= AI_REQUEST_LIMITS.maxGlobalInFlight) {
+        return { ok: false, reason: 'global_busy' };
+    }
+
+    const guildInFlight = aiGuildInFlight.get(guildId) || 0;
+    if (guildInFlight >= AI_REQUEST_LIMITS.maxGuildInFlight) {
+        return { ok: false, reason: 'guild_busy' };
+    }
+
+    aiUserCooldownCache.set(key, now);
+    aiGuildInFlight.set(guildId, guildInFlight + 1);
+    aiGlobalInFlight += 1;
+
+    let released = false;
+    return {
+        ok: true,
+        release() {
+            if (released) return;
+            released = true;
+            aiGlobalInFlight = Math.max(0, aiGlobalInFlight - 1);
+            const remaining = Math.max(0, (aiGuildInFlight.get(guildId) || 1) - 1);
+            if (remaining === 0) aiGuildInFlight.delete(guildId);
+            else aiGuildInFlight.set(guildId, remaining);
+        },
+    };
+}
+
+export function canReadAiHistory(message) {
+    if (!message?.member || typeof message?.channel?.permissionsFor !== 'function') return false;
+    try {
+        return Boolean(
+            message.channel.permissionsFor(message.member)?.has?.(PermissionFlagsBits.ReadMessageHistory)
+        );
+    } catch {
+        return false;
+    }
+}
+
+export function buildAiHistory(messages, botUserId) {
+    const validMessages = [...(messages?.values?.() ?? [])]
+        .filter((message) => {
+            const content = String(message?.content || '');
+            return !message?.system
+                && !message?.webhookId
+                && (!message?.author?.bot || message.author.id === botUserId)
+                && content.length > 0
+                && !content.startsWith('/')
+                && !content.startsWith('!');
+        })
+        .reverse();
+
+    const rawHistory = [];
+    for (const message of validMessages) {
+        const role = message.author.id === botUserId ? 'model' : 'user';
+        let textInfo = message.content.replace(/<@!?\d+>/g, '').trim();
+        if (!textInfo) continue;
+        if (role === 'user') {
+            const displayName = message.author.displayName
+                || message.member?.displayName
+                || message.author.username
+                || '使用者';
+            textInfo = `[${displayName}]: ${textInfo}`;
+        }
+        rawHistory.push({ role, parts: [{ text: textInfo }] });
+    }
+
+    const history = [];
+    for (const entry of rawHistory) {
+        if (history.length === 0) {
+            if (entry.role === 'user') history.push(entry);
+            continue;
+        }
+        const last = history[history.length - 1];
+        if (last.role === entry.role) {
+            last.parts[0].text += `\n${entry.parts[0].text}`;
+        } else {
+            history.push(entry);
+        }
+    }
+    if (history.at(-1)?.role === 'user') history.pop();
+    return history;
 }
 
 // ========== 吉吉國王互動系統 ==========
@@ -154,6 +275,17 @@ export function shouldTriggerAi({ settings, isMention, userId, channelId, now = 
     return isWhitelistedUser || Boolean(isPartyActive);
 }
 
+export function isEligibleXpMessage(message) {
+    const content = String(message?.content || '').trim();
+    if (!content) return false;
+
+    const withoutDiscordTokens = content
+        .replace(/<a?:[^:\s>]+:\d+>/g, '')
+        .replace(/<(?:@!?|@&|#)\d+>/g, '');
+    const meaningfulCharacters = withoutDiscordTokens.match(/[\p{L}\p{N}]/gu) || [];
+    return meaningfulCharacters.length >= XP_MIN_MEANINGFUL_CHARS;
+}
+
 async function handleKingInteraction(message) {
     const content = message.content;
     const mention = message.mentions.has(message.client.user);
@@ -261,26 +393,40 @@ export function register(client) {
             userId: message.author.id,
             channelId: message.channel.id,
         })) {
-            try {
-                const isAdmin = Boolean(
-                    message.member?.permissions?.has?.(PermissionFlagsBits.Administrator)
-                );
-                const mentionPolicy = buildAiMentionPolicy({
-                    botUserId: client.user.id,
-                    userIds: [...message.mentions.users.keys()],
-                    roleIds: [...message.mentions.roles.keys()],
-                    allowRoleMentions: isAdmin,
-                });
-                const allowedMentions = buildAllowedMentions(mentionPolicy);
-                const userText = message.content
-                    .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
-                    .trim();
-                // 抓取圖片附件（最多 3 張）
-                const imageAttachments = [...message.attachments.values()]
-                    .filter(att => att.contentType?.startsWith('image/'))
-                    .slice(0, 3);
+            const userText = message.content
+                .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
+                .trim();
+            const imageAttachments = [...message.attachments.values()]
+                .filter(att => att.contentType?.startsWith('image/'))
+                .slice(0, 3);
 
-                if (userText.length > 0 || imageAttachments.length > 0) {
+            if (userText.length > 0 || imageAttachments.length > 0) {
+                const requestSlot = tryAcquireAiRequest({
+                    guildId: message.guild.id,
+                    userId: message.author.id,
+                });
+                if (!requestSlot.ok) {
+                    const content = requestSlot.reason === 'cooldown'
+                        ? '🐕⏳ 本王還在整理你的上一個問題，請幾秒後再試。'
+                        : '🐕🧠 皇家智慧核心正忙，請稍後再試。';
+                    await message.reply({
+                        content,
+                        allowedMentions: { parse: [], repliedUser: false },
+                    }).catch(() => {});
+                    return;
+                }
+
+                try {
+                    const isAdmin = Boolean(
+                        message.member?.permissions?.has?.(PermissionFlagsBits.Administrator)
+                    );
+                    const mentionPolicy = buildAiMentionPolicy({
+                        botUserId: client.user.id,
+                        userIds: [...message.mentions.users.keys()],
+                        roleIds: [...message.mentions.roles.keys()],
+                        allowRoleMentions: isAdmin,
+                    });
+                    const allowedMentions = buildAllowedMentions(mentionPolicy);
                     const displayText = userText || '（請看圖片）';
                     await message.channel.sendTyping();
 
@@ -301,44 +447,10 @@ export function register(client) {
                     const useContext = settings.context_enabled !== false; // 預設開啟
 
                     let history = [];
-                    if (useContext) {
+                    if (useContext && canReadAiHistory(message)) {
                         try {
                             const messages = await message.channel.messages.fetch({ limit: 12, before: message.id });
-                            const validMessages = messages.filter(m =>
-                                !m.system &&
-                                m.content.length > 0 &&
-                                !m.content.startsWith('/') &&
-                                !m.content.startsWith('!')
-                            ).reverse();
-
-                            const rawHistory = [];
-                            for (const msg of validMessages.values()) {
-                                const role = msg.author.id === client.user.id ? 'model' : 'user';
-                                let textInfo = msg.content.replace(/<@!?\d+>/g, '').trim();
-                                if (!textInfo) continue;
-                                if (role === 'user') {
-                                    textInfo = `[${msg.author.displayName}]: ${textInfo}`;
-                                }
-                                rawHistory.push({ role, parts: [{ text: textInfo }] });
-                            }
-
-                            // 合併連續相同 role 的訊息，確保歷史紀錄遵循 Gemini 要求的 user -> model 交替格式
-                            for (const h of rawHistory) {
-                                if (history.length === 0) {
-                                    if (h.role === 'user') history.push(h);
-                                    continue;
-                                }
-                                const last = history[history.length - 1];
-                                if (last.role === h.role) {
-                                    last.parts[0].text += `\n${h.parts[0].text}`;
-                                } else {
-                                    history.push(h);
-                                }
-                            }
-                            // 如果最後一則是 user，將其移除，以確保能由當前的 userMessage 順接
-                            if (history.length > 0 && history[history.length - 1].role === 'user') {
-                                history.pop();
-                            }
+                            history = buildAiHistory(messages, client.user.id);
                         } catch (err) {
                             logger.warn(`[AI] 讀取對話歷史失敗 guild=${message.guild.id}: ${err.message}`);
                         }
@@ -370,11 +482,16 @@ export function register(client) {
                         }
                     }
                     return; // AI 處理完，不走後面的邏輯
+                } catch (err) {
+                    logger.error(`[AI] 回應失敗 guild=${message.guild.id}:`, err);
+                    const failureMessage = err?.code === 'AI_TIMEOUT'
+                        ? '🐕⏳ 本王思考太久了，這次先停止處理；請稍後再試。'
+                        : '🐕💥 汪！AI 突然腦子當機了... 等一下再試試？';
+                    await message.reply(failureMessage).catch(() => { });
+                    return;
+                } finally {
+                    requestSlot.release();
                 }
-            } catch (err) {
-                logger.error(`[AI] 回應失敗 guild=${message.guild.id}:`, err);
-                await message.reply('🐕💥 汪！AI 突然腦子當機了... 等一下再試試？').catch(() => { });
-                return;
             }
         }
 
@@ -388,14 +505,10 @@ export function register(client) {
         // ================= 防刷機制 (Anti-Spam) =================
         const content = message.content.trim();
 
-        // 1. 最低字數限制 (大於3個字)
-        if (content.length <= 3) return;
+        // 1. 排除空白、貼圖、純 emoji／符號、自訂 emoji 與過短內容
+        if (!isEligibleXpMessage(message)) return;
 
-        // 2. 表情符號與純貼圖過濾 (只剩符號或完全沒字)
-        const textOnly = content.replace(/<a?:.+?:\d+>/g, '').trim(); // 移除自定義表情符號
-        if (textOnly.length === 0) return;
-
-        // 3. 防重複發言 (與上一句完全相同)
+        // 2. 防重複發言 (與上一句完全相同)
         const userGuildKey = `${message.guild.id}-${message.author.id}`;
         const lastMessageContent = xpMessageCache.get(userGuildKey);
 

@@ -31,7 +31,7 @@ export const data = new SlashCommandBuilder()
 export async function execute(interaction) {
   const sessionId = interaction.id;
   const ownerId = interaction.user.id;
-  const state = { result: null, playerName: '', tag: '', published: false };
+  const state = { result: null, game: 'valorant', playerName: '', tag: '', region: 'ap', published: false };
   const modal = buildStatsModal(sessionId);
   await interaction.showModal(modal);
   const submit = await interaction.awaitModalSubmit({
@@ -40,23 +40,15 @@ export async function execute(interaction) {
   }).catch(() => null);
   if (!submit) return;
 
-  const game = submit.fields.getStringSelectValues('game')[0] || 'valorant';
-  state.playerName = submit.fields.getTextInputValue('player_name').trim();
-  state.tag = submit.fields.getTextInputValue('tag').replace(/^#/, '').trim();
-  const region = game === 'valorant'
-    ? 'ap'
-    : submit.fields.getStringSelectValues('region')[0] || 'tw';
-  const key = buildCacheKey(game, state.playerName, state.tag, region);
+  const query = readStatsQuery(submit);
   await submit.deferReply({ flags: MessageFlags.Ephemeral });
-  state.result = await cachedStats(key, () => game === 'valorant'
-    ? fetchValorantStats(state.playerName, state.tag)
-    : fetchLolStats(state.playerName, state.tag, region));
+  applyStatsSessionResult(state, query, await fetchStatsQuery(query, true));
 
   await submit.editReply(v2EditPayload(await buildStatsReply(state.result, state.playerName, state.tag, {
     ephemeral: true,
     publishCustomId: statsId(sessionId, 'publish'),
+    retryCustomId: statsId(sessionId, 'retry'),
   })));
-  if (state.result.status !== 'ok') return;
 
   const response = await submit.fetchReply();
   const collector = response.createMessageComponentCollector({ time: QUERY_TIMEOUT });
@@ -73,6 +65,25 @@ export async function execute(interaction) {
 
       const [scope, id, action] = component.customId.split(':');
       if (scope !== 'stats' || id !== sessionId) return;
+
+      if (action === 'retry' && state.result?.status !== 'ok') {
+        const retryModal = buildStatsModal(sessionId, state);
+        await component.showModal(retryModal);
+        const retrySubmit = await component.awaitModalSubmit({
+          time: 2 * 60_000,
+          filter: (candidate) => candidate.user.id === ownerId && candidate.customId === retryModal.data.custom_id,
+        }).catch(() => null);
+        if (!retrySubmit) return;
+
+        const retryQuery = readStatsQuery(retrySubmit);
+        await retrySubmit.deferUpdate();
+        applyStatsSessionResult(state, retryQuery, await fetchStatsQuery(retryQuery, false));
+        return retrySubmit.editReply(v2EditPayload(await buildStatsReply(state.result, state.playerName, state.tag, {
+          ephemeral: true,
+          publishCustomId: statsId(sessionId, 'publish'),
+          retryCustomId: statsId(sessionId, 'retry'),
+        })));
+      }
 
       if (action === 'publish' && state.result?.status === 'ok') {
         if (state.published) {
@@ -102,6 +113,7 @@ export async function execute(interaction) {
     buildStatsReply(state.result, state.playerName, state.tag, {
       ephemeral: true,
       publishCustomId: statsId(sessionId, 'publish'),
+      retryCustomId: statsId(sessionId, 'retry'),
       published: state.published,
       expired: true,
     })
@@ -110,7 +122,9 @@ export async function execute(interaction) {
   });
 }
 
-export function buildStatsModal(sessionId) {
+export function buildStatsModal(sessionId, initial = {}) {
+  const selectedGame = initial.game === 'lol' ? 'lol' : 'valorant';
+  const selectedRegion = LOL_REGIONS.some((region) => region.value === initial.region) ? initial.region : 'tw';
   return new ModalBuilder()
     .setCustomId(statsId(sessionId, 'submit'))
     .setTitle('皇家戰報廳 | 查詢公開戰績')
@@ -128,12 +142,12 @@ export function buildStatsModal(sessionId) {
             .setMinValues(1)
             .setMaxValues(1)
             .addOptions(
-              { label: '特戰英豪 (VALORANT)', value: 'valorant', default: true },
-              { label: '英雄聯盟 (League of Legends)', value: 'lol' }
+              { label: '特戰英豪 (VALORANT)', value: 'valorant', default: selectedGame === 'valorant' },
+              { label: '英雄聯盟 (League of Legends)', value: 'lol', default: selectedGame === 'lol' }
             )
         ),
-      textLabel('玩家名稱', 'player_name', 'Riot ID 的玩家名稱，例如 Hide on bush'),
-      textLabel('標籤', 'tag', '不含或包含 # 均可，例如 TW2'),
+      textLabel('玩家名稱', 'player_name', 'Riot ID 的玩家名稱，例如 Hide on bush', initial.playerName),
+      textLabel('標籤', 'tag', '不含或包含 # 均可，例如 TW2', initial.tag),
       new LabelBuilder()
         .setLabel('英雄聯盟查詢區服')
         .setDescription('僅英雄聯盟使用；特戰英豪會自動忽略此選項。')
@@ -142,22 +156,51 @@ export function buildStatsModal(sessionId) {
             .setCustomId('region')
             .setMinValues(1)
             .setMaxValues(1)
-            .addOptions(LOL_REGIONS)
+            .addOptions(LOL_REGIONS.map((region) => ({
+              ...region,
+              default: region.value === selectedRegion,
+            })))
         )
     );
 }
 
-function textLabel(label, customId, placeholder) {
+function textLabel(label, customId, placeholder, value = '') {
+  const input = new TextInputBuilder()
+    .setCustomId(customId)
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder(placeholder)
+    .setMaxLength(100)
+    .setRequired(true);
+  if (value) input.setValue(String(value).slice(0, 100));
   return new LabelBuilder()
     .setLabel(label)
-    .setTextInputComponent(
-      new TextInputBuilder()
-        .setCustomId(customId)
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder(placeholder)
-        .setMaxLength(100)
-        .setRequired(true)
-    );
+    .setTextInputComponent(input);
+}
+
+export function applyStatsSessionResult(state, query, result) {
+  Object.assign(state, query, { result, published: false });
+  return state;
+}
+
+function readStatsQuery(submit) {
+  const game = submit.fields.getStringSelectValues('game')[0] || 'valorant';
+  return {
+    game,
+    playerName: submit.fields.getTextInputValue('player_name').trim(),
+    tag: submit.fields.getTextInputValue('tag').replace(/^#/, '').trim(),
+    region: game === 'valorant'
+      ? 'ap'
+      : submit.fields.getStringSelectValues('region')[0] || 'tw',
+  };
+}
+
+function fetchStatsQuery(query, useCache) {
+  const load = () => query.game === 'valorant'
+    ? fetchValorantStats(query.playerName, query.tag)
+    : fetchLolStats(query.playerName, query.tag, query.region);
+  return useCache
+    ? cachedStats(buildCacheKey(query.game, query.playerName, query.tag, query.region), load)
+    : load();
 }
 
 function statsId(sessionId, action) {
