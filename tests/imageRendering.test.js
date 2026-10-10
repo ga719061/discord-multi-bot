@@ -60,6 +60,24 @@ test('imageUrlToDataUri returns null for failed remote assets and caches success
   assert.equal(calls, 2);
 });
 
+test('imageUrlToDataUri retries a transient failure instead of caching a missing image forever', async () => {
+  const cache = new Map();
+  let calls = 0;
+  const fetchImpl = async () => {
+    calls += 1;
+    return calls === 1
+      ? new Response('', { status: 503 })
+      : new Response(tinyPng, { status: 200, headers: { 'content-type': 'image/png' } });
+  };
+
+  const first = await imageUrlToDataUri('https://assets.test/retry.png', fetchImpl, { cache });
+  const second = await imageUrlToDataUri('https://assets.test/retry.png', fetchImpl, { cache });
+
+  assert.equal(first, null);
+  assert.match(second, /^data:image\/png;base64,/);
+  assert.equal(calls, 2);
+});
+
 test('fetchWithLimit downloads within size limits', async () => {
   const fetchImpl = async () => new Response('hello world');
   const response = await fetchWithLimit('http://test', fetchImpl, { maxBytes: 20 });

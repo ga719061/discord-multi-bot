@@ -13,8 +13,11 @@ import { UI_COLORS } from './style.js';
 const STEAM_FEATURED_URL = 'https://store.steampowered.com/api/featuredcategories?l=tchinese&cc=tw';
 const STEAM_SEARCH_SPECIALS_URL = 'https://store.steampowered.com/search/results/?query&start=0&count=50&dynamic_data=&sort_by=_ASC&specials=1&cc=tw&l=tchinese&infinite=1';
 const STEAM_SEARCH_LIMITED_FREE_URL = 'https://store.steampowered.com/search/results/?query&start=0&count=50&dynamic_data=&sort_by=_ASC&specials=1&maxprice=free&cc=tw&l=tchinese&infinite=1';
+const STEAM_STORE_BROWSE_ITEMS_URL = 'https://api.steampowered.com/IStoreBrowseService/GetItems/v1/';
 const TAIPEI_TIME_ZONE = 'Asia/Taipei';
 const REQUEST_TIMEOUT_MS = 10_000;
+const STEAM_SEARCH_PAGE_SIZE = 50;
+const STEAM_BROWSE_BATCH_SIZE = 50;
 const STEAM_APP_DETAILS_CACHE_TTL_MS = 10 * 60_000;
 const steamAppDetailsCache = new Map();
 
@@ -104,6 +107,87 @@ export async function fetchSteamLimitedFreeGames(limit = 10, fetchImpl = fetch) 
 
   const games = parseSteamSearchDeals(data.results_html).filter(isLimitedFreeSteamGame);
   return uniqueSteamDeals(games, limit).map(cleanDeal);
+}
+
+export async function fetchSteamLimitedFreeGamesSnapshot(fetchImpl = fetch, options = {}) {
+  const candidates = await fetchAllSteamLimitedFreeCandidates(fetchImpl);
+  if (candidates.length === 0) return [];
+
+  const storeItems = new Map();
+  const failedCandidateIds = new Set();
+  for (let start = 0; start < candidates.length; start += STEAM_BROWSE_BATCH_SIZE) {
+    const batch = candidates.slice(start, start + STEAM_BROWSE_BATCH_SIZE);
+    try {
+      const data = await fetchSteamJson(buildSteamBrowseItemsUrl(batch), fetchImpl);
+      const items = data?.response?.store_items;
+      if (!Array.isArray(items)) {
+        throw new SteamServiceError('invalid_data', 'Steam returned invalid store browse data');
+      }
+
+      for (const item of items) {
+        const appId = Number(item?.appid);
+        if (appId) storeItems.set(appId, item);
+      }
+    } catch (error) {
+      options.logger?.warn?.(
+        `[SteamDeals] Store Browse enrichment failed for ${batch.length} free-game candidates; using search data:`,
+        error
+      );
+      for (const candidate of batch) failedCandidateIds.add(candidate.id);
+    }
+  }
+
+  const omittedCount = candidates.filter((candidate) => (
+    !storeItems.has(candidate.id) && !failedCandidateIds.has(candidate.id)
+  )).length;
+  if (omittedCount > 0) {
+    options.logger?.warn?.(
+      `[SteamDeals] Store Browse omitted ${omittedCount} free-game candidates; using search data.`
+    );
+  }
+
+  const nowEpoch = toSteamEpochSeconds(options.now ?? Date.now());
+  const games = [];
+  let incompleteCount = 0;
+  for (const candidate of candidates) {
+    const item = storeItems.get(candidate.id);
+    if (!item) {
+      games.push(fallbackSteamFreeGame(candidate));
+      continue;
+    }
+
+    const purchase = item?.best_purchase_option;
+    if (item.is_free_temporarily === false || purchase?.is_free_to_keep === false) continue;
+    if (item.is_free_temporarily !== true || purchase?.is_free_to_keep !== true) {
+      games.push(fallbackSteamFreeGame(candidate));
+      incompleteCount += 1;
+      continue;
+    }
+
+    const freeUntil = toSteamEpochSeconds(purchase.free_to_keep_ends ?? item.free_to_keep_ends);
+    if (freeUntil !== null && freeUntil <= nowEpoch) continue;
+
+    games.push(cleanDeal({
+      ...candidate,
+      name: item.name || candidate.name,
+      discount_percent: 100,
+      original_price: finiteNumberOr(purchase.original_price_in_cents, candidate.original_price),
+      final_price: finiteNumberOr(purchase.final_price_in_cents, candidate.final_price),
+      large_capsule_image: candidate.large_capsule_image || candidate.header_image,
+      free_until: freeUntil,
+    }));
+  }
+
+  if (incompleteCount > 0) {
+    options.logger?.warn?.(
+      `[SteamDeals] Store Browse returned incomplete verification for ${incompleteCount} free-game candidates; using search data.`
+    );
+  }
+  return games;
+}
+
+function fallbackSteamFreeGame(candidate) {
+  return cleanDeal({ ...candidate, free_until: null, browse_verified: false });
 }
 
 export function buildSteamDealsEmbeds(deals, options = {}) {
@@ -196,36 +280,48 @@ export function buildSteamFreeGamesPayload(games, options = {}) {
   const title = options.title || '🐕👑 吉吉王國・限時免費御賜情報';
   const intro = options.intro || '本王發現 Steam 商店正開放免費進貢！以下是 100% 折扣的限時免費遊戲，子民們速速領取領賞！汪！';
   const footer = options.footer || '吉吉王國限時免費聖旨';
-  const rankedGames = games.slice(0, 10);
-  const publishedAt = getTaipeiDateTime(options.publishedAt || new Date());
+  const rankedGames = games
+    .map((game, index) => ({ game, index, freeUntil: toSteamEpochSeconds(game.free_until) }))
+    .sort((left, right) => compareSteamFreeGames(left, right))
+    .slice(0, 10)
+    .map(({ game }) => game);
+  const checkedAt = getTaipeiDateTime(options.checkedAt || options.publishedAt || new Date());
+  const notices = buildSteamFreeBoardNotices(options);
   const panel = v2Panel(UI_COLORS.STEAM)
     .addTextDisplayComponents(v2Text(
-      `# ${title}\n${intro}\n-# 最多顯示 10 款遊戲；只列入原價遊戲目前折扣到免費的項目，不包含永久免費遊玩。`
+      `${notices.length ? `${notices.join('\n')}\n` : ''}# ${title}\n${intro}\n-# 最多顯示 10 款遊戲；只列入原價遊戲目前折扣到免費的項目，不包含永久免費遊玩。`
     ))
     .addSeparatorComponents(v2Divider());
 
-  rankedGames.forEach((game, index) => {
-    addSteamListItem(panel, game, index, buildRankedFreeGameText(game, index));
-  });
+  if (rankedGames.length === 0) {
+    panel.addTextDisplayComponents(v2Text('## 目前沒有 Steam 限時免費活動\n本王會在下次排程繼續巡視 Steam 商店。'));
+  } else {
+    rankedGames.forEach((game, index) => {
+      addSteamListItem(panel, game, index, buildRankedFreeGameText(game, index));
+    });
 
-  const selectRow = new ActionRowBuilder().addComponents(
-    new StringSelectMenuBuilder()
-      .setCustomId('steam_deal_detail')
-      .setPlaceholder('挑選一款限時免費遊戲查看皇家情報')
-      .addOptions(
-        rankedGames.map((game, index) => ({
-          label: truncateMenuText(`${getRankMedal(index)} ${game.name}`, 100),
-          description: truncateMenuText(buildFreeMenuDescription(game), 100),
-          value: String(game.id),
-        }))
-      )
-  );
+    const selectRow = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('steam_deal_detail')
+        .setPlaceholder('挑選一款限時免費遊戲查看皇家情報')
+        .addOptions(
+          rankedGames.map((game, index) => ({
+            label: truncateMenuText(`${getRankMedal(index)} ${game.name}`, 100),
+            description: truncateMenuText(buildFreeMenuDescription(game), 100),
+            value: String(game.id),
+          }))
+        )
+    );
 
-  panel
-    .addSeparatorComponents(v2Divider())
-    .addTextDisplayComponents(v2Text('## 覲見詳細情報\n挑選一款遊戲，本王將私下恩賜該遊戲的詳細情報與傳送門。'))
-    .addActionRowComponents(selectRow)
-    .addTextDisplayComponents(v2Text(`-# ${footer} | 發布 ${publishedAt.date} ${publishedAt.time} | 免費活動會隨 Steam 商店更新而變動`));
+    panel
+      .addSeparatorComponents(v2Divider())
+      .addTextDisplayComponents(v2Text('## 覲見詳細情報\n挑選一款遊戲，本王將私下恩賜該遊戲的詳細情報與傳送門。'))
+      .addActionRowComponents(selectRow);
+  }
+
+  panel.addTextDisplayComponents(v2Text(
+    `-# ${footer} | 最後檢查 ${checkedAt.date} ${checkedAt.time} | 免費活動會隨 Steam 商店更新而變動`
+  ));
 
   return v2Payload([panel]);
 }
@@ -324,6 +420,54 @@ function uniqueSteamDeals(items, limit) {
   }
 
   return unique;
+}
+
+async function fetchAllSteamLimitedFreeCandidates(fetchImpl) {
+  const candidates = [];
+  let start = 0;
+  let totalCount = null;
+
+  do {
+    const data = await fetchSteamJson(buildSteamLimitedFreeSearchUrl(start), fetchImpl);
+    if (typeof data?.results_html !== 'string') {
+      throw new SteamServiceError('invalid_data', 'Steam returned no limited free results');
+    }
+
+    const parsedDeals = parseSteamSearchDeals(data.results_html);
+    const reportedTotal = Number(data.total_count);
+    const pageShouldContainRows = Number.isFinite(reportedTotal) && reportedTotal > start;
+    if ((pageShouldContainRows || /<a\b/i.test(data.results_html)) && parsedDeals.length === 0) {
+      throw new SteamServiceError('invalid_data', 'Steam limited free results could not be parsed');
+    }
+
+    candidates.push(...parsedDeals.filter(isLimitedFreeSteamGame));
+    if (totalCount === null) {
+      totalCount = Number.isFinite(reportedTotal) && reportedTotal >= 0
+        ? reportedTotal
+        : start + STEAM_SEARCH_PAGE_SIZE;
+    }
+    start += STEAM_SEARCH_PAGE_SIZE;
+  } while (start < totalCount);
+
+  return uniqueSteamDeals(candidates, Number.POSITIVE_INFINITY);
+}
+
+function buildSteamLimitedFreeSearchUrl(start) {
+  const url = new URL(STEAM_SEARCH_LIMITED_FREE_URL);
+  url.searchParams.set('start', String(start));
+  url.searchParams.set('count', String(STEAM_SEARCH_PAGE_SIZE));
+  return url.toString();
+}
+
+function buildSteamBrowseItemsUrl(games) {
+  const input = {
+    ids: games.map((game) => ({ appid: game.id })),
+    context: { language: 'tchinese', country_code: 'TW' },
+    data_request: { include_all_purchase_options: true },
+  };
+  const url = new URL(STEAM_STORE_BROWSE_ITEMS_URL);
+  url.searchParams.set('input_json', JSON.stringify(input));
+  return url.toString();
 }
 
 async function fetchSteamSearchSpecialDeals() {
@@ -485,8 +629,14 @@ function buildRankedDealText(game, index) {
 
 function buildRankedFreeGameText(game, index) {
   const original = formatSteamPrice(game.original_price);
+  if (game.browse_verified === false) {
+    return `## ${getRankMedal(index)} [${escapeMarkdown(game.name)}](https://store.steampowered.com/app/${game.id})\n` +
+      `Steam 搜尋顯示 **100% 折扣** ~~${original}~~ -> **免費進貢**\n` +
+      '⚠️ 永久入庫狀態與截止時間暫時無法由 Steam 複核';
+  }
   return `## ${getRankMedal(index)} [${escapeMarkdown(game.name)}](https://store.steampowered.com/app/${game.id})\n` +
-    `限時免費 **-${Number(game.discount_percent) || 100}%** ~~${original}~~ -> **免費進貢**`;
+    `限時免費 **-${Number(game.discount_percent) || 100}%** ~~${original}~~ -> **免費進貢**\n` +
+    formatSteamFreeUntil(game.free_until);
 }
 
 function buildMenuDescription(game) {
@@ -495,7 +645,55 @@ function buildMenuDescription(game) {
 }
 
 function buildFreeMenuDescription(game) {
-  return `限時免費 | 原價 ${formatSteamPrice(game.original_price)}`;
+  if (game.browse_verified === false) return '100% 折扣 | 永久入庫狀態待 Steam 複核';
+  const freeUntil = toSteamEpochSeconds(game.free_until);
+  const taipeiDeadline = freeUntil === null ? null : formatTaipeiDateTime(freeUntil);
+  const deadline = taipeiDeadline === null
+    ? '截止時間未提供'
+    : `截止 ${taipeiDeadline.date} ${taipeiDeadline.time}`;
+  return `限時免費 | ${deadline}`;
+}
+
+function buildSteamFreeBoardNotices(options) {
+  const notices = [];
+  if (options.disabled) {
+    notices.push('## ⏸️ 自動更新已停用\n此貼文內容可能已過期。');
+  }
+  return notices;
+}
+
+function compareSteamFreeGames(left, right) {
+  if (left.freeUntil === null && right.freeUntil !== null) return 1;
+  if (left.freeUntil !== null && right.freeUntil === null) return -1;
+  if (left.freeUntil !== null && right.freeUntil !== null && left.freeUntil !== right.freeUntil) {
+    return left.freeUntil - right.freeUntil;
+  }
+  return left.index - right.index;
+}
+
+function formatSteamFreeUntil(value) {
+  const epoch = toSteamEpochSeconds(value);
+  if (epoch === null) return '📅 免費截止：Steam 未提供截止時間';
+  const { date, time } = formatTaipeiDateTime(epoch);
+  return `📅 免費截止：${date} ${time}（台灣時間，<t:${epoch}:R>）`;
+}
+
+function formatTaipeiDateTime(epochSeconds) {
+  const dateTime = getTaipeiDateTime(new Date(epochSeconds * 1000));
+  return { ...dateTime, date: dateTime.date.replaceAll('-', '/') };
+}
+
+function toSteamEpochSeconds(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const numeric = value instanceof Date ? value.getTime() : Number(value);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  return Math.floor(numeric > 10_000_000_000 ? numeric / 1000 : numeric);
+}
+
+function finiteNumberOr(value, fallback) {
+  if (value === null || value === undefined || value === '') return fallback;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
 }
 function truncateMenuText(text, maxLength) {
   const value = String(text || '-');

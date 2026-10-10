@@ -115,6 +115,38 @@ test('provider selects OP.GG All Modes data when public statistics are available
   assert.match(calls[3].options.body, /"queueId":"all"/);
 });
 
+test('provider skips OP.GG error routes and resolves actions from the player page dependencies', async () => {
+  const assetBase = 'https://c-valorant-web-v2.op.gg/prod/_next/static/chunks';
+  const errorRoute = `${assetBase}/app/en/valorant/profile/%5Bplayer%5D/not-found-fixture.js`;
+  const dependencyUrl = `${assetBase}/579-fixture.js`;
+  const page = (await fixture('valorant-opgg-page.html')).replace(
+    '<body>',
+    `<body><script src="${errorRoute}"></script><script src="${dependencyUrl}"></script>`
+  );
+  const actions = await fixture('valorant-opgg-route.js');
+  const profile = await fixture('valorant-opgg-profile.rsc');
+  const statistics = await fixture('valorant-opgg-stats.rsc');
+  const calls = [];
+  const fetchImpl = async (url, options = {}) => {
+    calls.push(String(url));
+    if (options.headers?.['next-action'] === 'profile-action-fixture') return new Response(profile);
+    if (options.headers?.['next-action'] === 'statistics-action-fixture') return new Response(statistics);
+    if (String(url).endsWith('/page-fixture.js')) return new Response('e.O(0,[579],()=>{});');
+    if (String(url) === dependencyUrl) return new Response(actions);
+    if (String(url) === errorRoute) return new Response('e.O(0,[1172],()=>{});');
+    if (String(url) === buildValorantProfileUrl('SEN TenZ', '2906')) return new Response(page);
+    return new Response('', { status: 503 });
+  };
+
+  const result = await fetchValorantStats('SEN TenZ', '2906', fetchImpl);
+
+  assert.equal(result.status, 'ok');
+  assert.equal(result.source, 'OP.GG');
+  assert.equal(result.stats.kd, '1.80');
+  assert.equal(calls.includes(errorRoute), false);
+  assert.equal(calls.some((url) => url.includes('valocheck.com')), false);
+});
+
 test('provider falls back to ValoCheck when OP.GG profile is not public', async () => {
   const privateProfile = '0:{"a":"$@1"}\n1:{"gameName":"SEN TenZ","tagLine":"2906","policy":"PRIVATE"}';
   const responses = [

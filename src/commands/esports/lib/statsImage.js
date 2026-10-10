@@ -15,6 +15,7 @@ const FONT_ATTR = 'Noto Sans CJK TC, Microsoft JhengHei, Segoe UI, Arial, sans-s
 const IMAGE_TIMEOUT_MS = 3500;
 const IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 const JSON_MAX_BYTES = 5 * 1024 * 1024;
+const METADATA_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
 const RIOT_CDN = 'https://ddragon.leagueoflegends.com';
 const VALORANT_API = 'https://valorant-api.com/v1';
 const VALORANT_LOCALE = 'zh-TW';
@@ -633,9 +634,18 @@ function assetRows(items = [], assetMap = new Map(), mapper, labelMap = new Map(
 async function attachRowAssets(items = [], target, index, fetchImpl, imageOptions = {}) {
   await Promise.all(items.slice(0, 4).map(async (item) => {
     const key = assetKey(item);
-    const url = item.imageUrl || indexedItemValue(index, item);
-    const dataUri = await dataUriFromUrl(url, fetchImpl, imageOptions);
-    if (dataUri) target.set(key, dataUri);
+    const indexed = indexedItemValue(index, item);
+    const candidates = [
+      item.imageUrl,
+      ...(Array.isArray(indexed) ? indexed : [indexed]),
+    ].filter(Boolean);
+    for (const url of candidates) {
+      const dataUri = await dataUriFromUrl(url, fetchImpl, imageOptions);
+      if (dataUri) {
+        target.set(key, dataUri);
+        break;
+      }
+    }
   }));
 }
 
@@ -652,10 +662,10 @@ async function valorantAssetIndex(type, fetchImpl) {
   const index = emptyAssetIndex();
   for (const item of payload?.data || []) {
     const imageUrl = type === 'maps'
-      ? item.splash || item.displayIcon || item.listViewIcon
+      ? [item.listViewIcon, item.displayIcon, item.splash].filter(Boolean)
       : item.displayIcon || item.killStreamIcon || item.fullPortrait;
     const label = localizedNames.get(item.uuid);
-    setAssetIndexValue(index.images, [item.displayName, item.uuid], imageUrl);
+    setAssetIndexValue(index.images, [item.displayName, item.uuid, label], imageUrl);
     setAssetIndexValue(index.labels, [item.displayName, item.uuid], label);
   }
   return index;
@@ -708,16 +718,23 @@ function localizedNameFor(item, labels) {
 async function jsonFromUrl(url, fetchImpl) {
   if (!url) return null;
   const cacheKey = cacheKeyFor(fetchImpl, url);
-  if (!jsonCache.has(cacheKey)) {
-    jsonCache.set(cacheKey, fetchWithLimit(url, fetchImpl, {
-      timeoutMs: IMAGE_TIMEOUT_MS,
-      maxBytes: JSON_MAX_BYTES,
-      redirect: 'error',
-    })
-      .then((response) => response?.ok ? response.json() : null)
-      .catch(() => null));
-  }
-  return jsonCache.get(cacheKey);
+  const cached = jsonCache.get(cacheKey);
+  if (cached?.expiresAt > Date.now()) return cached.promise;
+  if (cached) jsonCache.delete(cacheKey);
+
+  const promise = fetchWithLimit(url, fetchImpl, {
+    timeoutMs: IMAGE_TIMEOUT_MS,
+    maxBytes: JSON_MAX_BYTES,
+    redirect: 'error',
+  })
+    .then((response) => response?.ok ? response.json() : null)
+    .catch(() => null);
+  const entry = { promise, expiresAt: Date.now() + METADATA_CACHE_TTL_MS };
+  jsonCache.set(cacheKey, entry);
+  promise.then((value) => {
+    if (value === null && jsonCache.get(cacheKey) === entry) jsonCache.delete(cacheKey);
+  });
+  return promise;
 }
 
 async function dataUriFromUrl(url, fetchImpl, imageOptions = {}) {
@@ -870,7 +887,10 @@ function itemKeys(item = {}) {
 }
 
 function normalizeKey(content) {
-  return String(content || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  return String(content || '')
+    .normalize('NFKC')
+    .toLocaleLowerCase('en-US')
+    .replace(/[^\p{Letter}\p{Number}]+/gu, '');
 }
 
 export { LimitedMap, imageCache, jsonCache };

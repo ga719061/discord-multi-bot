@@ -82,13 +82,16 @@ test('legacy giveaway and reminder schemas migrate before indexes are created', 
   }
 });
 
-test('new AI settings schema does not include the removed action button setting', () => {
+test('new AI settings schema replaces the removed action button setting with disabled action tools', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dc-new-ai-db-'));
   const dbPath = path.join(dir, 'new-ai.db');
 
   try {
     const fresh = initDatabase({ dbPath });
-    assert.equal(fresh.pragma('table_info(ai_settings)').some((column) => column.name === 'action_buttons_enabled'), false);
+    const aiColumns = fresh.pragma('table_info(ai_settings)');
+    assert.equal(aiColumns.some((column) => column.name === 'action_buttons_enabled'), false);
+    assert.equal(aiColumns.find((column) => column.name === 'citations_enabled')?.dflt_value, '0');
+    assert.equal(aiColumns.find((column) => column.name === 'action_tools_enabled')?.dflt_value, '0');
   } finally {
     closeDatabaseForTests();
     fs.rmSync(dir, { recursive: true, force: true });
@@ -127,11 +130,14 @@ test('legacy AI action button setting is removed without changing other AI setti
 
   try {
     let migrated = initDatabase({ dbPath });
-    assert.equal(migrated.pragma('table_info(ai_settings)').some((column) => column.name === 'action_buttons_enabled'), false);
+    let aiColumns = migrated.pragma('table_info(ai_settings)');
+    assert.equal(aiColumns.some((column) => column.name === 'action_buttons_enabled'), false);
+    assert.equal(aiColumns.find((column) => column.name === 'action_tools_enabled')?.dflt_value, '0');
     assert.deepEqual(
       migrated.prepare(`
         SELECT guild_id, enabled, system_prompt, whitelist, model, admin_ids,
-               search_enabled, context_enabled, party_channel_id, party_expires_at
+               search_enabled, citations_enabled, action_tools_enabled, context_enabled,
+               party_channel_id, party_expires_at
         FROM ai_settings WHERE guild_id = 'guild'
       `).get(),
       {
@@ -142,6 +148,8 @@ test('legacy AI action button setting is removed without changing other AI setti
         model: 'gemini-2.5-flash',
         admin_ids: '["admin"]',
         search_enabled: 1,
+        citations_enabled: 0,
+        action_tools_enabled: 0,
         context_enabled: 0,
         party_channel_id: 'party',
         party_expires_at: 123456789,
@@ -149,7 +157,9 @@ test('legacy AI action button setting is removed without changing other AI setti
     );
 
     migrated = initDatabase({ dbPath });
-    assert.equal(migrated.pragma('table_info(ai_settings)').some((column) => column.name === 'action_buttons_enabled'), false);
+    aiColumns = migrated.pragma('table_info(ai_settings)');
+    assert.equal(aiColumns.some((column) => column.name === 'action_buttons_enabled'), false);
+    assert.equal(aiColumns.find((column) => column.name === 'action_tools_enabled')?.dflt_value, '0');
   } finally {
     closeDatabaseForTests();
     fs.rmSync(dir, { recursive: true, force: true });

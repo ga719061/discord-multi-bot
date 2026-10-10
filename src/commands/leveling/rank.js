@@ -1,7 +1,7 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder } from 'discord.js';
 import { getUserLevel, getXpForLevel, getRankTitle } from '../../utils/database.js';
-import { fmt, COLORS, UI_COLORS, ansiBar, ansiBlock } from '../../utils/style.js';
-import { embedsToV2Payload } from '../../utils/componentsV2.js';
+import { UI_COLORS } from '../../utils/style.js';
+import { v2Card, v2Payload } from '../../utils/componentsV2.js';
 
 export const data = new SlashCommandBuilder()
     .setName('等級')
@@ -16,35 +16,44 @@ export async function execute(interaction) {
     const target = interaction.options.getUser('使用者') || interaction.user;
     const data = getUserLevel(interaction.guildId, target.id);
     const xpNeeded = getXpForLevel(data.level + 1);
-    const bar = ansiBar(data.xp, xpNeeded, COLORS.CYAN, 20);
-
     const rankTitle = getRankTitle(data.level);
 
     const targetMember = await interaction.guild.members.fetch(target.id).catch(() => null);
     const isBooster = targetMember && targetMember.premiumSince;
 
-    // 整合所有數據到一個 ANSI 區塊中
-    const mainBlock = ansiBlock([
-        { color: COLORS.GOLD, text: `👑 目前爵位: ${rankTitle}` },
-        { color: COLORS.BLUE, text: `⭐ 當前等級: Lv.${data.level}` },
-        { color: COLORS.WHITE, text: `💬 累計發言: ${data.total_messages} 次` },
-        { color: COLORS.WHITE, text: `🎤 語音修行: ${data.total_voice_mins || 0} 分鐘` },
-        '', // 分隔線
-        { color: COLORS.GRAY, text: `進度: ${data.xp} / ${xpNeeded} XP (${Math.round((data.xp / xpNeeded) * 100)}%)` },
-        { color: COLORS.CYAN, text: bar },
-        { color: isBooster ? COLORS.MAGENTA : COLORS.GRAY, text: isBooster ? '🚀 皇家贊助者 (1.5x 加成中)' : '📜 常規子民倍率' }
-    ]);
+    await interaction.reply(buildRankPayload({
+        displayName: targetMember?.displayName || target.username,
+        avatarUrl: target.displayAvatarURL({ size: 128 }),
+        levelData: data,
+        xpNeeded,
+        rankTitle,
+        isBooster,
+    }));
+}
 
-    const embed = new EmbedBuilder()
-        .setColor(isBooster ? UI_COLORS.BOOST : UI_COLORS.ROYAL)
-        .setAuthor({ name: `👑 ${targetMember?.displayName || target.username} 的皇家功勳紀錄`, iconURL: target.displayAvatarURL() })
-        .setThumbnail(target.displayAvatarURL({ size: 128 }))
-        .setDescription(
-            `汪！本王翻閱了領地史冊，以下是御前功勳資料：\n\n` +
-            mainBlock
-        )
-        .setFooter({ text: '🐕 繼續在王國內活躍，本王會賜予你更高的頭銜喔！汪！' })
-        .setTimestamp();
-
-    await interaction.reply(embedsToV2Payload([embed]));
+export function buildRankPayload({ displayName, avatarUrl, levelData, xpNeeded, rankTitle, isBooster }) {
+    const safeNeeded = Math.max(1, xpNeeded);
+    const percent = Math.max(0, Math.min(100, Math.round((levelData.xp / safeNeeded) * 100)));
+    const filled = Math.round(percent / 10);
+    const progressBar = `${'▰'.repeat(filled)}${'▱'.repeat(10 - filled)}`;
+    const panel = v2Card({
+        title: `${displayName} 的皇家功勳`,
+        description: '累積文字與語音貢獻的晉升狀態。',
+        accentColor: isBooster ? UI_COLORS.BOOST : UI_COLORS.ROYAL,
+        thumbnail: avatarUrl,
+        statusRows: [
+            { label: '爵位', value: rankTitle, tone: 'royal' },
+            { label: '等級', value: levelData.level, tone: 'special' },
+            { label: '經驗', value: `${levelData.xp} / ${xpNeeded} XP`, tone: 'info' },
+            { label: '進度', value: `${progressBar} ${percent}%`, tone: 'success' },
+        ],
+        fields: [
+            {
+                name: '王國貢獻',
+                value: `文字訊息：**${levelData.total_messages}** 則\n語音時間：**${levelData.total_voice_mins || 0}** 分鐘`,
+            },
+        ],
+        footer: isBooster ? '皇家贊助者 · 目前享有 1.5× 經驗加成' : '持續參與王國活動即可累積經驗。',
+    });
+    return v2Payload([panel]);
 }

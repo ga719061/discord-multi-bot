@@ -2,7 +2,7 @@ import {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    EmbedBuilder,
+    LabelBuilder,
     MessageFlags,
     ModalBuilder,
     SlashCommandBuilder,
@@ -11,10 +11,10 @@ import {
     TextInputBuilder,
     TextInputStyle,
 } from 'discord.js';
-import { fmt, COLORS, ansiBlock, UI_COLORS } from '../../utils/style.js';
+import { ansiRows, UI_COLORS } from '../../utils/style.js';
 import { fetchSteamJson, getSteamFailureMessage } from '../../utils/steamDeals.js';
 import { logger } from '../../utils/logger.js';
-import { embedsToV2Payload, ephemeralV2Payload, v2Divider, v2EditPayload, v2Notice, v2Panel, v2Text } from '../../utils/componentsV2.js';
+import { ephemeralV2Payload, v2Card, v2Divider, v2EditPayload, v2Notice, v2Panel, v2Payload, v2Text } from '../../utils/componentsV2.js';
 
 const QUERY_TIMEOUT = 10 * 60_000;
 
@@ -131,7 +131,6 @@ export function buildSteamSearchModal(sessionId) {
         .setContent('**功能說明**\n輸入 Steam 遊戲名稱後，本王會列出候選清單；子民選取遊戲即可查看台灣價格、折扣、上市日與評分，並可一鍵頒布到目前頻道。');
     const input = new TextInputBuilder()
         .setCustomId('game_name')
-        .setLabel('請子民輸入 Steam 遊戲名稱')
         .setPlaceholder('例如：Stardew Valley、Palworld、Monster Hunter')
         .setStyle(TextInputStyle.Short)
         .setMaxLength(120)
@@ -140,7 +139,12 @@ export function buildSteamSearchModal(sessionId) {
         .setCustomId(steamId(sessionId, 'submit'))
         .setTitle('皇家採購簿 | Steam 搜尋')
         .addTextDisplayComponents(description)
-        .addComponents(new ActionRowBuilder().addComponents(input));
+        .addLabelComponents(
+            new LabelBuilder()
+                .setLabel('Steam 遊戲名稱')
+                .setDescription('可輸入中文或英文名稱，送出後再從候選清單選擇。')
+                .setTextInputComponent(input)
+        );
 }
 
 export function buildSteamSelectionPayload(sessionId, query, candidates, disabled = false) {
@@ -158,9 +162,14 @@ export function buildSteamSelectionPayload(sessionId, query, candidates, disable
     const panel = v2Panel(UI_COLORS.STEAM)
         .addTextDisplayComponents(v2Text([
             '# 🐕🎮 皇家採購搜尋結果',
-            `汪！本王在 Steam 倉庫裡翻到了與 **${query}** 相符的遊戲，請子民挑選要查閱的一款。`,
+            '汪！本王已整理相符的遊戲，請子民挑選要查閱的一款。',
             '-# 選定後本王會私下呈上目前價格、評價與商店入口。',
         ].join('\n')))
+        .addSeparatorComponents(v2Divider())
+        .addTextDisplayComponents(v2Text(ansiRows([
+            { label: '搜尋', value: query, tone: 'info' },
+            { label: '候選', value: `${candidates.length} 款遊戲`, tone: 'success' },
+        ])))
         .addSeparatorComponents(v2Divider())
         .addActionRowComponents(new ActionRowBuilder().addComponents(select));
     if (disabled) {
@@ -173,31 +182,28 @@ export function buildSteamSearchResultPayload(appId, details, options = {}) {
     const price = details.price_overview;
     const isFree = details.is_free;
     const releaseDate = details.release_date?.date;
-    let statusLine = '';
+    let priceValue = '價格尚未公布';
+    let discountValue = '無折扣資訊';
+    let priceTone = 'warning';
     let color = UI_COLORS.STEAM;
 
     if (isFree) {
-        statusLine = fmt(COLORS.GREEN, '🆓 本王恩賜：全體子民免費開玩！汪！');
+        priceValue = '免費遊玩';
+        discountValue = '不適用';
+        priceTone = 'success';
         color = UI_COLORS.SUCCESS;
     } else if (price) {
-        const finalPrice = price.final_formatted;
+        priceValue = price.final_formatted;
         const discount = price.discount_percent;
         if (discount > 0) {
-            statusLine = fmt(COLORS.GOLD, `🔥 皇家特大促銷：現省 ${discount}%！只要 ${finalPrice}，汪！`);
+            discountValue = `-${discount}%`;
+            priceTone = 'success';
             color = UI_COLORS.SUCCESS;
         } else {
-            statusLine = fmt(COLORS.GRAY, `💰 皇家公定進貢價：${finalPrice} (目前無特價)`);
+            discountValue = '目前無折扣';
+            priceTone = 'neutral';
         }
-    } else {
-        statusLine = fmt(COLORS.BLUE, '📅 敬請期待：尚未面世或尚未公布進貢價格');
     }
-
-    const infoBlock = ansiBlock([
-        { color: COLORS.CYAN, text: `發行日期: ${releaseDate || '尚未面世'}` },
-        { color: COLORS.WHITE, text: `世人評價: ${details.metacritic?.score || '暫無評分'}` },
-        { color: COLORS.GOLD, text: '====================================' },
-        { color: COLORS.BLUE, text: statusLine },
-    ]);
     const buttons = [
         new ButtonBuilder()
             .setLabel('前往 Steam 商店覲見')
@@ -231,20 +237,30 @@ export function buildSteamSearchResultPayload(appId, details, options = {}) {
                 .setDisabled(Boolean(options.expired)),
         );
     }
-    const embed = new EmbedBuilder()
-        .setColor(color)
-        .setAuthor({ name: options.ephemeral === true ? '吉吉國王皇家採購廳 | 私人情報呈報' : '吉吉國王皇家採購廳 | 公開採購情報' })
-        .setTitle(`🐕🎮 ${details.name}`)
-        .setURL(`https://store.steampowered.com/app/${appId}/`)
-        .setImage(details.header_image)
-        .setDescription(`**本王點評：**\n${details.short_description || '本王對此遊戲暫無評語，汪！'}\n\n${infoBlock}`)
-        .setFooter({ text: '🛒 皇家採購手冊 | 汪！把錢錢變成喜歡的樣子吧，子民們！' });
-
-    return embedsToV2Payload([embed], {
+    const panel = v2Card({
+        title: `🎮 ${details.name}`,
+        description: options.ephemeral === true
+            ? '**皇家採購廳 · 私人情報**'
+            : '**皇家採購廳 · 公開採購情報**',
+        accentColor: color,
+        statusRows: [
+            { label: '範圍', value: options.ephemeral === true ? '私人情報' : '公開情報', tone: 'info' },
+            { label: '價格', value: priceValue, tone: priceTone },
+            { label: '折扣', value: discountValue, tone: priceTone },
+            { label: '評分', value: details.metacritic?.score ?? '暫無評分', tone: details.metacritic?.score == null ? 'neutral' : 'special' },
+            { label: '發售', value: releaseDate || '尚未公布', tone: 'neutral' },
+        ],
+        fields: [
+            { name: '遊戲簡介', value: details.short_description || '目前沒有遊戲簡介。' },
+        ],
+        images: details.header_image ? [{
+            url: details.header_image,
+            description: `${details.name} 的 Steam 商店封面`,
+        }] : [],
+        footer: '價格與評分以 Steam 商店目前顯示為準。',
         actionRows: [new ActionRowBuilder().addComponents(buttons)],
-        ephemeral: options.ephemeral === true,
-        linkTitle: false,
     });
+    return options.ephemeral === true ? ephemeralV2Payload([panel]) : v2Payload([panel]);
 }
 
 async function findSteamCandidates(interaction, query) {

@@ -36,6 +36,7 @@ test('Poll Creator Compensation Optimization', async (t) => {
       },
       deferReply: async () => {},
       channel: {
+        id: 'channel_123',
         send: async () => mockMessage
       },
       editReply: async (payload) => {

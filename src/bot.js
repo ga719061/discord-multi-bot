@@ -21,6 +21,8 @@ import {
 } from './utils/announcementTools.js';
 import { buildSteamDealDetailPayload, fetchSteamAppDetails, getSteamFailureMessage } from './utils/steamDeals.js';
 import { inviteCache } from './utils/inviteCache.js';
+import { handleAiActionInteraction, stopAiActionTools } from './utils/aiActionTools.js';
+import { tryAcquireAiRequest } from './events/messageCreate.js';
 
 dns.setDefaultResultOrder('ipv4first');
 
@@ -191,6 +193,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (interaction.isButton()) {
     try {
+      if (await handleAiActionInteraction(interaction, client, { acquireRequest: tryAcquireAiRequest })) {
+        return;
+      }
+
       if (interaction.customId.startsWith('poll_')) {
         const optionIndex = parseInt(interaction.customId.split('_')[1], 10);
         const messageId = interaction.message.id;
@@ -349,6 +355,10 @@ client.on(Events.InteractionCreate, async (interaction) => {
 
   if (interaction.isModalSubmit()) {
     try {
+      if (await handleAiActionInteraction(interaction, client, { acquireRequest: tryAcquireAiRequest })) {
+        return;
+      }
+
       if (interaction.customId.startsWith('announce_modal_')) {
         const uuid = interaction.customId.replace('announce_modal_', '');
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -396,6 +406,7 @@ const cleanups = [
   stopLoadedEvents,
   stopScheduledJobs,
   stopHealthServer,
+  stopAiActionTools,
   closeDatabaseForTests,
 ];
 

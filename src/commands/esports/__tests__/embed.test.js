@@ -15,6 +15,12 @@ function serializedCard(payload) {
   return JSON.stringify(payload.components.map((component) => component.toJSON()));
 }
 
+function stripAnsi(text) {
+  return text
+    .replace(/\\u001b\[[0-9;]*m/g, '')
+    .replace(/\u001b\[[0-9;]*m/g, '');
+}
+
 async function mockAssetFetch(url) {
   const href = String(url);
   if (href.includes('valorant-api.com/v1/agents')) {
@@ -31,9 +37,15 @@ async function mockAssetFetch(url) {
   }
   if (href.includes('valorant-api.com/v1/maps')) {
     if (href.includes('language=zh-TW')) {
-      return jsonResponse({ data: [{ uuid: 'map-split', displayName: '雙塔迷城' }] });
+      return jsonResponse({ data: [
+        { uuid: 'map-split', displayName: '雙塔迷城' },
+        { uuid: 'map-summit', displayName: '頂峰亭閣' },
+      ] });
     }
-    return jsonResponse({ data: [{ uuid: 'map-split', displayName: 'Split', splash: 'https://assets.test/split.png' }] });
+    return jsonResponse({ data: [
+      { uuid: 'map-split', displayName: 'Split', splash: 'https://assets.test/split.png' },
+      { uuid: 'map-summit', displayName: 'Summit', splash: 'https://assets.test/summit.png' },
+    ] });
   }
   if (href.includes('ddragon.leagueoflegends.com/api/versions.json')) {
     return jsonResponse(['15.1.1']);
@@ -94,6 +106,14 @@ test('buildStatsReply creates a Valorant image card with attachment and source a
 
   assert.match(card, /attachment:\/\/stats-card\.png/);
   assert.match(card, /op\.gg\/valorant/);
+  assert.match(card, /特戰英豪皇家戰報/);
+  assert.match(card, /SEN Tenz#2906/);
+  assert.match(card, /```ansi/);
+  assert.match(stripAnsi(card), /\[遊戲\] 特戰英豪/);
+  assert.match(stripAnsi(card), /\[玩家\] SEN Tenz#2906/);
+  assert.match(stripAnsi(card), /\[來源\] OP\.GG/);
+  assert.match(stripAnsi(card), /\[狀態\] 查詢成功/);
+  assert.match(card, /SEN Tenz#2906 的特戰英豪戰績圖片，資料來源 OP\.GG/);
   assert.equal(payload.files[0].name, 'stats-card.png');
   assert.equal((svg.match(/data-icon=/g) || []).length >= 6, true);
   assert.match(svg, /data-role="stats-background"/);
@@ -186,6 +206,12 @@ test('buildStatsReply creates a fallback card when a source is blocked', async (
   const card = serializedCard(payload);
 
   assert.match(card, /情報使者暫時被來源網站擋下/);
+  assert.match(card, /```ansi/);
+  assert.match(stripAnsi(card), /\[遊戲\] 英雄聯盟/);
+  assert.match(stripAnsi(card), /\[玩家\] test#TW2/);
+  assert.match(stripAnsi(card), /\[來源\] OP\.GG/);
+  assert.match(stripAnsi(card), /\[狀態\] 來源限制查詢/);
+  assert.equal('embeds' in payload, false);
   assert.equal(payload.components.length, 1);
   assert.equal('files' in payload, false);
 });
@@ -429,6 +455,132 @@ test('renderer fetches only needed Valorant asset indexes and keeps weapon thumb
   assert.equal(calls.some((call) => call.includes('/v1/maps')), false);
   assert.match(svg, /data-image-layout="wide"/);
   assert.match(svg, /x="538" y="521" width="88" height="40" preserveAspectRatio="xMidYMid meet"/);
+});
+
+test('renderer can resolve a Valorant asset by its localized name when the provider id is stale', async () => {
+  const result = {
+    game: 'valorant',
+    stats: {
+      maps: [{ id: 'stale-provider-map-id', name: '頂峰亭閣', record: '3勝 0和 4敗', winRate: '42.9%' }],
+    },
+  };
+
+  const assets = await resolveStatsAssets(result, { fetchImpl: mockAssetFetch });
+
+  assert.match(assets.maps.get('staleprovidermapid'), /^data:image\/png;base64,/);
+});
+
+test('renderer prefers the compact Valorant map list image over the oversized splash', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    const href = String(url);
+    calls.push(href);
+    if (href.includes('/v1/maps?language=zh-TW')) {
+      return jsonResponse({ data: [{ uuid: 'map-compact', displayName: '頂峰亭閣' }] });
+    }
+    if (href.endsWith('/v1/maps')) {
+      return jsonResponse({ data: [{
+        uuid: 'map-compact',
+        displayName: 'Summit',
+        listViewIcon: 'https://assets.test/summit-list.png',
+        displayIcon: 'https://assets.test/summit-layout.png',
+        splash: 'https://assets.test/summit-oversized.png',
+      }] });
+    }
+    return new Response(tinyPng, { status: 200, headers: { 'content-type': 'image/png' } });
+  };
+
+  const assets = await resolveStatsAssets({
+    game: 'valorant',
+    stats: { maps: [{ id: 'map-compact', name: 'Summit' }] },
+  }, { fetchImpl });
+
+  assert.match(assets.maps.get('mapcompact'), /^data:image\/png;base64,/);
+  assert.equal(calls.includes('https://assets.test/summit-list.png'), true);
+  assert.equal(calls.includes('https://assets.test/summit-oversized.png'), false);
+});
+
+test('renderer falls back to the compact map layout when the list image is unavailable', async () => {
+  const calls = [];
+  const fetchImpl = async (url) => {
+    const href = String(url);
+    calls.push(href);
+    if (href.includes('/v1/maps?language=zh-TW')) {
+      return jsonResponse({ data: [{ uuid: 'map-fallback', displayName: '頂峰亭閣' }] });
+    }
+    if (href.endsWith('/v1/maps')) {
+      return jsonResponse({ data: [{
+        uuid: 'map-fallback',
+        displayName: 'Summit',
+        listViewIcon: 'https://assets.test/missing-list.png',
+        displayIcon: 'https://assets.test/summit-layout.png',
+        splash: 'https://assets.test/summit-oversized.png',
+      }] });
+    }
+    if (href.endsWith('/missing-list.png')) return new Response('', { status: 503 });
+    return new Response(tinyPng, { status: 200, headers: { 'content-type': 'image/png' } });
+  };
+
+  const assets = await resolveStatsAssets({
+    game: 'valorant',
+    stats: { maps: [{ id: 'map-fallback', name: 'Summit' }] },
+  }, { fetchImpl });
+
+  assert.match(assets.maps.get('mapfallback'), /^data:image\/png;base64,/);
+  assert.equal(calls.includes('https://assets.test/missing-list.png'), true);
+  assert.equal(calls.includes('https://assets.test/summit-layout.png'), true);
+  assert.equal(calls.includes('https://assets.test/summit-oversized.png'), false);
+});
+
+test('renderer falls back to the trusted asset index when a row image URL is untrusted', async () => {
+  let untrustedCalls = 0;
+  const fetchImpl = async (url) => {
+    if (String(url).startsWith('https://untrusted.invalid/')) untrustedCalls += 1;
+    return mockAssetFetch(url);
+  };
+
+  const assets = await resolveStatsAssets({
+    game: 'valorant',
+    stats: { maps: [{
+      id: 'map-split',
+      name: 'Split',
+      imageUrl: 'https://untrusted.invalid/map.png',
+    }] },
+  }, { fetchImpl });
+
+  assert.match(assets.maps.get('mapsplit'), /^data:image\/png;base64,/);
+  assert.equal(untrustedCalls, 0);
+});
+
+test('renderer retries transient Valorant metadata failures on the next card', async () => {
+  let defaultMapCalls = 0;
+  const fetchImpl = async (url) => {
+    const href = String(url);
+    if (href.includes('/v1/maps?language=zh-TW')) {
+      return jsonResponse({ data: [{ uuid: 'map-summit-retry', displayName: '頂峰亭閣' }] });
+    }
+    if (href.endsWith('/v1/maps')) {
+      defaultMapCalls += 1;
+      if (defaultMapCalls === 1) return new Response('', { status: 503 });
+      return jsonResponse({ data: [{
+        uuid: 'map-summit-retry',
+        displayName: 'Summit',
+        splash: 'https://assets.test/summit-retry.png',
+      }] });
+    }
+    return new Response(tinyPng, { status: 200, headers: { 'content-type': 'image/png' } });
+  };
+  const result = {
+    game: 'valorant',
+    stats: { maps: [{ id: 'map-summit-retry', name: 'Summit' }] },
+  };
+
+  const first = await resolveStatsAssets(result, { fetchImpl });
+  const second = await resolveStatsAssets(result, { fetchImpl });
+
+  assert.equal(first.maps.size, 0);
+  assert.match(second.maps.get('mapsummitretry'), /^data:image\/png;base64,/);
+  assert.equal(defaultMapCalls, 2);
 });
 
 test('renderer rejects untrusted asset hosts before fetching', async () => {

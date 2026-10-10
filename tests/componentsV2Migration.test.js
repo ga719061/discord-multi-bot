@@ -1,16 +1,24 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
+import {
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ComponentType,
+    MessageFlags,
+    SeparatorSpacingSize,
+} from 'discord.js';
 import {
     assertValidV2Components,
     countV2Components,
     v2Card,
+    v2Divider,
     v2EditPayload,
     v2Notice,
     v2Payload,
     v2Text,
 } from '../src/utils/componentsV2.js';
-import { UI_COLORS } from '../src/utils/style.js';
+import { ANSI_TONES, ansiRows, COLORS, fmt, UI_COLORS } from '../src/utils/style.js';
 import { buildPollPayload } from '../src/commands/fun/poll.js';
 import {
     buildAnnouncementPayload,
@@ -83,6 +91,107 @@ test('new poll and announcement renders keep controlled mentions', async () => {
     assert.deepEqual(announcement.allowedMentions, { parse: [], roles: ['456'] });
     assert.equal(announcement.files[0].name, 'announcement-scroll.png');
     assert.equal(announcement.files[1].name, 'notice.png');
+});
+
+test('ANSI summary rows stay semantic, compact, and safe without relying on color', () => {
+    const output = ansiRows([
+        { label: '狀態', value: 0, tone: 'success' },
+        { label: '玩家', value: '測試```\n\u001b[31m危險\u009b31m名稱', tone: 'info' },
+        { label: '很長的標籤很長的標籤', value: '鳴'.repeat(80), tone: 'unknown' },
+    ]);
+    const plain = output
+        .replace(/```ansi\n|\n```/g, '')
+        .replace(/\u001b\[[0-9;]+m/g, '');
+
+    assert.match(output, /```ansi/);
+    assert.match(output, new RegExp(`\\u001b\\[${ANSI_TONES.success.replace(';', '\\;')}m`));
+    assert.match(plain, /\[狀態\] 0/);
+    assert.match(plain, /\[玩家\] 測試''' 危險31m名稱/);
+    assert.equal(plain.includes('\u001b'), false);
+    assert.equal(plain.includes('\u009b'), false);
+    assert.equal(plain.split('\n').every((line) => [...line].length <= 56), true);
+    assert.match(fmt(COLORS.CYAN, 0), /0/);
+});
+
+test('ANSI rows preserve exact legacy output unless labelTone is explicitly provided', () => {
+    const rows = Object.entries(ANSI_TONES).map(([tone]) => ({ label: '狀態', value: '正常', tone }));
+    const expected = '```ansi\n' + rows.map(({ tone }) => `\u001b[${ANSI_TONES[tone]}m[狀態] 正常\u001b[0m`).join('\n') + '\n```';
+    assert.equal(ansiRows(rows), expected);
+    assert.equal(ansiRows([{ label: '狀態', value: 0, tone: 'success', labelTone: undefined }]),
+        '```ansi\n\u001b[32m[狀態] 0\u001b[0m\n```');
+    assert.equal(ansiRows([]), '```ansi\n\u001b[37m[資訊] -\u001b[0m\n```');
+});
+
+test('ANSI rows reset and independently color labels and values using only own palette keys', () => {
+    assert.equal(ansiRows([{ label: '狀態', value: '正常', tone: 'success', labelTone: 'neutral' }]),
+        '```ansi\n\u001b[37m[狀態]\u001b[0m \u001b[32m正常\u001b[0m\n```');
+    assert.equal(ansiRows([{ label: '狀態', value: '正常', tone: 'info', labelTone: 'royal' }]),
+        '```ansi\n\u001b[33;1m[狀態]\u001b[0m \u001b[36m正常\u001b[0m\n```');
+    for (const unknown of ['unknown', 'constructor', 'toString', '__proto__']) {
+        assert.equal(ansiRows([{ label: '狀態', value: '正常', tone: unknown }]),
+            '```ansi\n\u001b[37m[狀態] 正常\u001b[0m\n```');
+        assert.equal(ansiRows([{ label: '狀態', value: '正常', tone: unknown, labelTone: unknown }]),
+            '```ansi\n\u001b[37m[狀態]\u001b[0m \u001b[37m正常\u001b[0m\n```');
+    }
+});
+
+test('ANSI summary sanitizes direction controls and escape injection while preserving joined emoji', () => {
+    const directionControls = '\u061c\u200e\u200f\u202a\u202b\u202c\u202d\u202e\u2066\u2067\u2068\u2069';
+    const output = ansiRows([{
+        label: `${directionControls}狀態\u001b[31m`,
+        value: `${directionControls}正常\u001b[31m\u001b]0;unsafe\u0007\n\t\`\`\` 👩‍💻`,
+        tone: 'success', labelTone: 'neutral',
+    }], { maxWidth: 40 });
+    const plain = output.replace(/^```ansi\n|\n```$/g, '').replace(/\u001b\[[0-9;]+m/g, '');
+    assert.doesNotMatch(plain, /[\u0000-\u001f\u007f-\u009f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069`]/);
+    assert.ok(plain.includes('[狀態] 正常'));
+    assert.ok(plain.includes('👩‍💻'), 'the zero-width joiner is required for composed emoji');
+    assert.equal((output.match(/\u001b\[/g) ?? []).length, 4, 'only the two generated colors and their resets survive');
+    const compact = ansiRows([{ label: '結果', value: '曲目'.repeat(30), tone: 'royal', labelTone: 'neutral' }], { maxWidth: 40 });
+    const compactPlain = compact.replace(/^```ansi\n|\n```$/g, '').replace(/\u001b\[[0-9;]+m/g, '');
+    const width = [...compactPlain].reduce((sum, character) => sum + (/[^\x00-\x7f]/.test(character) && character !== '…' ? 2 : 1), 0);
+    assert.ok(width <= 40);
+    assert.ok(compactPlain.endsWith('…'));
+});
+
+test('V2 cards can render one ANSI status summary before details', () => {
+    const card = v2Card({
+        title: '皇家情報',
+        statusRows: [
+            { label: '狀態', value: '正常', tone: 'success' },
+            { label: '範圍', value: '私人', tone: 'royal' },
+        ],
+        fields: [{ name: '說明', value: '完整內容保留在一般文字。' }],
+    }).toJSON();
+    const texts = card.components.filter((component) => component.type === ComponentType.TextDisplay);
+
+    assert.equal(texts.some((component) => component.content.includes('```ansi')), true);
+    assert.equal(texts.some((component) => component.content.includes('[狀態]')), true);
+    assert.equal(countV2Components([card]) <= 40, true);
+});
+
+test('V2 dividers and card images support richer display metadata', () => {
+    const defaultDivider = v2Divider().toJSON();
+    const spacedDivider = v2Divider(SeparatorSpacingSize.Large).toJSON();
+    const card = v2Card({
+        title: '皇家戰報',
+        images: [
+            'https://example.test/legacy.png',
+            {
+                url: 'https://example.test/detailed.png',
+                description: '玩家 Gigi 的 VALORANT 戰績圖',
+                spoiler: true,
+            },
+        ],
+    }).toJSON();
+    const gallery = card.components.find((component) => component.type === ComponentType.MediaGallery);
+
+    assert.equal(defaultDivider.divider, true);
+    assert.equal(spacedDivider.spacing, SeparatorSpacingSize.Large);
+    assert.equal(gallery.items[0].media.url, 'https://example.test/legacy.png');
+    assert.equal(gallery.items[0].description, '皇家戰報第 1 張圖片');
+    assert.equal(gallery.items[1].description, '玩家 Gigi 的 VALORANT 戰績圖');
+    assert.equal(gallery.items[1].spoiler, true);
 });
 
 test('announcement preview is ephemeral V2 with scroll image and buttons', async () => {

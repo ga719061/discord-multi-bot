@@ -1,7 +1,18 @@
 import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import { getUserLevel, addXp, getAiSettings, getRankTitle, getGuildSettings } from '../utils/database.js';
-import { buildAiSystemPrompt, getAiResponse, DEFAULT_AI_PROMPT } from '../utils/aiChat.js';
+import {
+    buildAiSystemPrompt,
+    getAiResponse,
+    DEFAULT_AI_PROMPT,
+    MAX_AI_IMAGE_COUNT,
+} from '../utils/aiChat.js';
 import { buildAiGuildContext } from '../utils/aiGuildContext.js';
+import {
+    getAiActionAuthorizationError,
+    parseMentionedAiActionTrigger,
+    prepareAiAction,
+    rememberAiActionLauncher,
+} from '../utils/aiActionTools.js';
 import { DEFAULT_AI_MODEL } from '../utils/aiConfig.js';
 import { buildAiMentionPolicy, sanitizeAiReplyMentions, buildAllowedMentions } from '../utils/aiMentions.js';
 import { logger } from '../utils/logger.js';
@@ -17,6 +28,17 @@ export const AI_REQUEST_LIMITS = Object.freeze({
     maxGuildInFlight: 2,
     maxGlobalInFlight: 6,
 });
+export const AI_HISTORY_LIMITS = Object.freeze({
+    maxMessageChars: 1_200,
+    maxTotalChars: 6_000,
+    ttlMs: 30 * 60_000,
+});
+export const AI_REPLY_LIMITS = Object.freeze({
+    maxChunkLength: 1_990,
+    maxChunks: 3,
+});
+const AI_TYPING_INTERVAL_MS = 9_000;
+const AI_REPLY_TRUNCATED_NOTICE = '\n\n_回覆過長，已截斷。_';
 
 class LimitedMap extends Map {
     constructor(limit = 10000) {
@@ -37,6 +59,7 @@ const xpCooldownCache = new LimitedMap(5000);
 let cleanupInterval = null;
 const xpMessageCache = new LimitedMap(10000); // 用於防重複發言的快取
 const aiUserCooldownCache = new LimitedMap(5000);
+const aiUsersInFlight = new Set();
 const aiGuildInFlight = new Map();
 let aiGlobalInFlight = 0;
 
@@ -66,6 +89,7 @@ export { stopMessageCreate as stop };
 
 export function resetAiRequestLimitsForTests() {
     aiUserCooldownCache.clear();
+    aiUsersInFlight.clear();
     aiGuildInFlight.clear();
     aiGlobalInFlight = 0;
 }
@@ -80,6 +104,9 @@ export function tryAcquireAiRequest({ guildId, userId, now = Date.now() }) {
     if (retryAfterMs > 0) {
         return { ok: false, reason: 'cooldown', retryAfterMs };
     }
+    if (aiUsersInFlight.has(key)) {
+        return { ok: false, reason: 'user_busy' };
+    }
     if (aiGlobalInFlight >= AI_REQUEST_LIMITS.maxGlobalInFlight) {
         return { ok: false, reason: 'global_busy' };
     }
@@ -90,6 +117,7 @@ export function tryAcquireAiRequest({ guildId, userId, now = Date.now() }) {
     }
 
     aiUserCooldownCache.set(key, now);
+    aiUsersInFlight.add(key);
     aiGuildInFlight.set(guildId, guildInFlight + 1);
     aiGlobalInFlight += 1;
 
@@ -99,6 +127,7 @@ export function tryAcquireAiRequest({ guildId, userId, now = Date.now() }) {
         release() {
             if (released) return;
             released = true;
+            aiUsersInFlight.delete(key);
             aiGlobalInFlight = Math.max(0, aiGlobalInFlight - 1);
             const remaining = Math.max(0, (aiGuildInFlight.get(guildId) || 1) - 1);
             if (remaining === 0) aiGuildInFlight.delete(guildId);
@@ -118,49 +147,208 @@ export function canReadAiHistory(message) {
     }
 }
 
-export function buildAiHistory(messages, botUserId) {
-    const validMessages = [...(messages?.values?.() ?? [])]
-        .filter((message) => {
+function sliceWithoutBrokenSurrogate(text, maxLength) {
+    if (text.length <= maxLength) return text;
+    let end = maxLength;
+    const lastCodeUnit = text.charCodeAt(end - 1);
+    if (lastCodeUnit >= 0xD800 && lastCodeUnit <= 0xDBFF) end -= 1;
+    return text.slice(0, end);
+}
+
+export function buildAiHistory(messages, botUserId, requesterId, {
+    now = Date.now(),
+    ttlMs = AI_HISTORY_LIMITS.ttlMs,
+} = {}) {
+    if (!requesterId) return [];
+
+    const sourceEntries = typeof messages?.entries === 'function'
+        ? [...messages.entries()]
+        : [...(messages?.values?.() ?? [])].map((message, index) => [index, message]);
+    const candidates = sourceEntries
+        .map(([collectionId, message], sourceIndex) => ({
+            message,
+            id: String(message?.id || collectionId),
+            sourceIndex,
+        }))
+        .filter(({ message }) => {
             const content = String(message?.content || '');
+            const createdTimestamp = Number(message?.createdTimestamp);
+            const isFresh = !Number.isFinite(createdTimestamp)
+                || createdTimestamp <= 0
+                || now - createdTimestamp <= ttlMs;
             return !message?.system
                 && !message?.webhookId
-                && (!message?.author?.bot || message.author.id === botUserId)
+                && (message?.author?.id === requesterId || message?.author?.id === botUserId)
+                && isFresh
                 && content.length > 0
                 && !content.startsWith('/')
                 && !content.startsWith('!');
-        })
-        .reverse();
+        });
 
-    const rawHistory = [];
-    for (const message of validMessages) {
-        const role = message.author.id === botUserId ? 'model' : 'user';
-        let textInfo = message.content.replace(/<@!?\d+>/g, '').trim();
-        if (!textInfo) continue;
-        if (role === 'user') {
-            const displayName = message.author.displayName
-                || message.member?.displayName
-                || message.author.username
-                || '使用者';
-            textInfo = `[${displayName}]: ${textInfo}`;
+    const requesterMessages = new Map(
+        candidates
+            .filter(({ message }) => message.author.id === requesterId)
+            .map(candidate => [candidate.id, candidate])
+    );
+    const pairedTurns = new Map();
+    for (const botCandidate of candidates) {
+        if (botCandidate.message.author.id !== botUserId) continue;
+        const requesterMessageId = String(botCandidate.message.reference?.messageId || '');
+        const requesterCandidate = requesterMessages.get(requesterMessageId);
+        if (!requesterCandidate) continue;
+
+        const existing = pairedTurns.get(requesterMessageId);
+        if (!existing || botCandidate.sourceIndex < existing.bot.sourceIndex) {
+            pairedTurns.set(requesterMessageId, {
+                user: requesterCandidate,
+                bot: botCandidate,
+                recency: Math.max(
+                    Number(requesterCandidate.message.createdTimestamp) || 0,
+                    Number(botCandidate.message.createdTimestamp) || 0
+                ) || (Number.MAX_SAFE_INTEGER - botCandidate.sourceIndex),
+            });
         }
-        rawHistory.push({ role, parts: [{ text: textInfo }] });
     }
 
-    const history = [];
-    for (const entry of rawHistory) {
-        if (history.length === 0) {
-            if (entry.role === 'user') history.push(entry);
-            continue;
-        }
-        const last = history[history.length - 1];
-        if (last.role === entry.role) {
-            last.parts[0].text += `\n${entry.parts[0].text}`;
-        } else {
-            history.push(entry);
+    const selectedTurns = [];
+    let totalChars = 0;
+    const newestFirst = [...pairedTurns.values()].sort((a, b) => b.recency - a.recency);
+    for (const turn of newestFirst) {
+        const userText = sliceWithoutBrokenSurrogate(
+            String(turn.user.message.content).replace(/<@!?\d+>/g, '').trim(),
+            AI_HISTORY_LIMITS.maxMessageChars
+        );
+        const botText = sliceWithoutBrokenSurrogate(
+            String(turn.bot.message.content).replace(/<@!?\d+>/g, '').trim(),
+            AI_HISTORY_LIMITS.maxMessageChars
+        );
+        if (!userText || !botText) continue;
+        const turnChars = userText.length + botText.length;
+        if (totalChars + turnChars > AI_HISTORY_LIMITS.maxTotalChars) break;
+        totalChars += turnChars;
+        selectedTurns.push({ userText, botText, recency: turn.recency });
+    }
+
+    return selectedTurns
+        .sort((a, b) => a.recency - b.recency)
+        .flatMap(turn => [
+            { role: 'user', parts: [{ text: turn.userText }] },
+            { role: 'model', parts: [{ text: turn.botText }] },
+        ]);
+}
+
+function updateCodeFenceState(text, initialLanguage) {
+    let language = initialLanguage;
+    const fencePattern = /```([^\r\n`]*)/g;
+    let match;
+    while ((match = fencePattern.exec(text)) !== null) {
+        language = language === null ? match[1].trim().slice(0, 30) : null;
+    }
+    return language;
+}
+
+function findAiReplyBoundary(text, maxLength) {
+    if (text.length <= maxLength) return text.length;
+    const candidate = sliceWithoutBrokenSurrogate(text, maxLength);
+    const minimumNaturalBreak = Math.floor(candidate.length * 0.55);
+    for (const separator of ['\n\n', '\n', ' ']) {
+        const index = candidate.lastIndexOf(separator);
+        if (index >= minimumNaturalBreak) {
+            return moveBoundaryOutsideCodeFence(text, index + separator.length, maxLength);
         }
     }
-    if (history.at(-1)?.role === 'user') history.pop();
-    return history;
+    return moveBoundaryOutsideCodeFence(text, candidate.length, maxLength);
+}
+
+function moveBoundaryOutsideCodeFence(text, boundary, maxLength) {
+    let runStart = boundary;
+    let runEnd = boundary;
+    while (runStart > 0 && text[runStart - 1] === '`') runStart -= 1;
+    while (runEnd < text.length && text[runEnd] === '`') runEnd += 1;
+    if (runEnd - runStart < 3 || boundary === runStart || boundary === runEnd) return boundary;
+    if (runStart > 0) return runStart;
+    return runEnd <= maxLength ? runEnd : boundary;
+}
+
+export function splitAiReply(reply, limits = AI_REPLY_LIMITS) {
+    let remaining = String(reply || '').trim();
+    if (!remaining) return [];
+
+    const chunks = [];
+    let openFenceLanguage = null;
+    for (let index = 0; index < limits.maxChunks && remaining; index++) {
+        const maxFenceLanguageLength = Math.max(0, limits.maxChunkLength - 8);
+        const fenceLanguage = openFenceLanguage?.slice(0, maxFenceLanguageLength) || '';
+        const prefix = openFenceLanguage === null ? '' : `\`\`\`${fenceLanguage}\n`;
+        const isLastChunk = index === limits.maxChunks - 1;
+        const reservedLength = 4 + (isLastChunk ? AI_REPLY_TRUNCATED_NOTICE.length : 0);
+        const contentLimit = Math.max(1, limits.maxChunkLength - prefix.length - reservedLength);
+        const boundary = findAiReplyBoundary(remaining, contentLimit);
+        const sourceChunk = remaining.slice(0, boundary).trimEnd();
+        remaining = remaining.slice(boundary).trimStart();
+
+        openFenceLanguage = updateCodeFenceState(sourceChunk, openFenceLanguage);
+        const closeFence = openFenceLanguage === null ? '' : '\n```';
+        const truncatedNotice = isLastChunk && remaining ? AI_REPLY_TRUNCATED_NOTICE : '';
+        chunks.push(`${prefix}${sourceChunk}${closeFence}${truncatedNotice}`);
+    }
+    return chunks;
+}
+
+export function normalizeAiResult(result) {
+    if (!result || typeof result !== 'object') {
+        return {
+            text: String(result || ''),
+            usageMetadata: {},
+            queryCount: 0,
+            finishReason: 'unknown',
+            attemptCount: 0,
+            retryCount: 0,
+        };
+    }
+    const usageMetadata = {};
+    for (const key of [
+        'promptTokenCount',
+        'candidatesTokenCount',
+        'thoughtsTokenCount',
+        'cachedContentTokenCount',
+        'totalTokenCount',
+    ]) {
+        const value = Number(result.usageMetadata?.[key]);
+        if (Number.isFinite(value) && value >= 0) usageMetadata[key] = value;
+    }
+    const queryCount = Number(result.groundingMetadata?.queryCount);
+    const attemptCount = Number(result.attemptCount);
+    const retryCount = Number(result.retryCount);
+    return {
+        text: String(result.text || ''),
+        usageMetadata,
+        queryCount: Number.isInteger(queryCount) && queryCount >= 0 ? queryCount : 0,
+        finishReason: String(result.finishReason || 'unknown')
+            .replace(/[^A-Za-z0-9_-]/g, '')
+            .slice(0, 40) || 'unknown',
+        attemptCount: Number.isInteger(attemptCount) && attemptCount >= 1 ? attemptCount : 0,
+        retryCount: Number.isInteger(retryCount) && retryCount >= 0 ? retryCount : 0,
+    };
+}
+
+export function startAiTyping(channel, {
+    intervalMs = AI_TYPING_INTERVAL_MS,
+    setIntervalFn = setInterval,
+    clearIntervalFn = clearInterval,
+} = {}) {
+    const sendTyping = () => Promise.resolve(channel?.sendTyping?.()).catch(() => {});
+    void sendTyping();
+    const timer = setIntervalFn(sendTyping, intervalMs);
+    timer?.unref?.();
+
+    let stopped = false;
+    return () => {
+        if (stopped) return false;
+        stopped = true;
+        clearIntervalFn(timer);
+        return true;
+    };
 }
 
 // ========== 吉吉國王互動系統 ==========
@@ -383,22 +571,31 @@ export function register(client) {
         if (message.author.bot || !message.guild) return;
 
         const isMention = message.mentions.has(client.user);
-        const settings = getAiSettings(message.guild.id);
+        const settings = isMention ? getAiSettings(message.guild.id) : null;
+        const mentionedText = isMention
+            ? message.content.replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '').trim()
+            : '';
+        const actionTrigger = isMention
+            ? parseMentionedAiActionTrigger(message.content, client.user.id)
+            : null;
+
+        if (settings && actionTrigger) {
+            await handleAiActionMessage(message, client, settings, actionTrigger);
+            return;
+        }
 
         // ===== AI 啟用狀態判定 (FUNC-05) =====
         // ===== AI 攔截 =====
-        if (shouldTriggerAi({
+        if (settings && shouldTriggerAi({
             settings,
             isMention,
             userId: message.author.id,
             channelId: message.channel.id,
         })) {
-            const userText = message.content
-                .replace(new RegExp(`<@!?${client.user.id}>`, 'g'), '')
-                .trim();
+            const userText = mentionedText;
             const imageAttachments = [...message.attachments.values()]
                 .filter(att => att.contentType?.startsWith('image/'))
-                .slice(0, 3);
+                .slice(0, MAX_AI_IMAGE_COUNT);
 
             if (userText.length > 0 || imageAttachments.length > 0) {
                 const requestSlot = tryAcquireAiRequest({
@@ -406,7 +603,7 @@ export function register(client) {
                     userId: message.author.id,
                 });
                 if (!requestSlot.ok) {
-                    const content = requestSlot.reason === 'cooldown'
+                    const content = ['cooldown', 'user_busy'].includes(requestSlot.reason)
                         ? '🐕⏳ 本王還在整理你的上一個問題，請幾秒後再試。'
                         : '🐕🧠 皇家智慧核心正忙，請稍後再試。';
                     await message.reply({
@@ -416,7 +613,9 @@ export function register(client) {
                     return;
                 }
 
+                let stopTyping = () => false;
                 try {
+                    stopTyping = startAiTyping(message.channel);
                     const isAdmin = Boolean(
                         message.member?.permissions?.has?.(PermissionFlagsBits.Administrator)
                     );
@@ -427,8 +626,7 @@ export function register(client) {
                         allowRoleMentions: isAdmin,
                     });
                     const allowedMentions = buildAllowedMentions(mentionPolicy);
-                    const displayText = userText || '（請看圖片）';
-                    await message.channel.sendTyping();
+                    const displayText = userText;
 
                     // 建立最小化的公開伺服器上下文，不注入管理設定或敏感資訊。
                     const now = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
@@ -450,46 +648,80 @@ export function register(client) {
                     if (useContext && canReadAiHistory(message)) {
                         try {
                             const messages = await message.channel.messages.fetch({ limit: 12, before: message.id });
-                            history = buildAiHistory(messages, client.user.id);
+                            history = buildAiHistory(messages, client.user.id, message.author.id);
                         } catch (err) {
-                            logger.warn(`[AI] 讀取對話歷史失敗 guild=${message.guild.id}: ${err.message}`);
+                            const code = String(err?.code || err?.name || 'UNKNOWN')
+                                .replace(/[^A-Za-z0-9_-]/g, '')
+                                .slice(0, 40);
+                            logger.warn(`[AI] 讀取對話歷史失敗 guild=${message.guild.id} code=${code}`);
                         }
                     }
 
+                    const requestStartedAt = Date.now();
+                    const aiResult = await getAiResponse(
+                        `${displayText}\n\n${guildContext}`,
+                        fullPrompt,
+                        modelName,
+                        useSearch,
+                        history,
+                        imageAttachments,
+                        2,
+                        {
+                            returnMetadata: true,
+                            includeCitations: settings.citations_enabled,
+                            requireValidImage: !displayText,
+                        }
+                    );
+                    const normalizedResult = normalizeAiResult(aiResult);
                     const aiReply = sanitizeAiReplyMentions(
-                        await getAiResponse(
-                            `${displayText}\n\n${guildContext}`,
-                            fullPrompt,
-                            modelName,
-                            useSearch,
-                            history,
-                            imageAttachments
-                        ),
+                        normalizedResult.text,
                         mentionPolicy
                     );
-                    // 若回應超過 2000 字，自動分段發送
-                    const MAX_LEN = 1990;
-                    if (aiReply.length <= MAX_LEN) {
-                        await message.reply({ content: aiReply, allowedMentions });
-                    } else {
-                        const chunks = [];
-                        for (let i = 0; i < aiReply.length; i += MAX_LEN) {
-                            chunks.push(aiReply.slice(i, i + MAX_LEN));
-                        }
-                        await message.reply({ content: chunks[0], allowedMentions });
-                        for (let i = 1; i < chunks.length; i++) {
-                            await message.channel.send({ content: chunks[i], allowedMentions });
-                        }
+                    const usage = normalizedResult.usageMetadata;
+                    const safeModelName = String(modelName).replace(/[^A-Za-z0-9._-]/g, '').slice(0, 60);
+                    logger.info(
+                        `[AI] response guild=${message.guild.id} model=${safeModelName}`
+                        + ` latencyMs=${Date.now() - requestStartedAt}`
+                        + ` attempts=${normalizedResult.attemptCount}`
+                        + ` retries=${normalizedResult.retryCount}`
+                        + ` promptTokens=${usage.promptTokenCount ?? 'unknown'}`
+                        + ` outputTokens=${usage.candidatesTokenCount ?? 'unknown'}`
+                        + ` thoughtTokens=${usage.thoughtsTokenCount ?? 'unknown'}`
+                        + ` cachedTokens=${usage.cachedContentTokenCount ?? 'unknown'}`
+                        + ` totalTokens=${usage.totalTokenCount ?? 'unknown'}`
+                        + ` searchQueries=${normalizedResult.queryCount}`
+                        + ` finishReason=${normalizedResult.finishReason}`
+                    );
+                    const chunks = splitAiReply(aiReply);
+                    if (chunks.length === 0) {
+                        await message.reply({
+                            content: '🐕💭 本王這次沒有產生可用的回覆，請換個方式再問一次。',
+                            allowedMentions: { parse: [], repliedUser: false },
+                        });
+                        return;
+                    }
+                    await message.reply({ content: chunks[0], allowedMentions });
+                    for (let i = 1; i < chunks.length; i++) {
+                        await message.channel.send({ content: chunks[i], allowedMentions });
                     }
                     return; // AI 處理完，不走後面的邏輯
                 } catch (err) {
-                    logger.error(`[AI] 回應失敗 guild=${message.guild.id}:`, err);
+                    const errorCode = String(err?.code || err?.name || 'UNKNOWN')
+                        .replace(/[^A-Za-z0-9_-]/g, '')
+                        .slice(0, 40);
+                    logger.error(`[AI] 回應失敗 guild=${message.guild.id} code=${errorCode}`);
                     const failureMessage = err?.code === 'AI_TIMEOUT'
                         ? '🐕⏳ 本王思考太久了，這次先停止處理；請稍後再試。'
-                        : '🐕💥 汪！AI 突然腦子當機了... 等一下再試試？';
-                    await message.reply(failureMessage).catch(() => { });
+                        : err?.code === 'AI_NO_VALID_INPUT'
+                            ? '🐕🖼️ 本王無法讀取這張圖片，請改用支援的圖片格式或補上文字說明。'
+                            : '🐕💥 汪！AI 突然腦子當機了... 等一下再試試？';
+                    await message.reply({
+                        content: failureMessage,
+                        allowedMentions: { parse: [], repliedUser: false },
+                    }).catch(() => { });
                     return;
                 } finally {
+                    stopTyping();
                     requestSlot.release();
                 }
             }
@@ -567,6 +799,78 @@ export function register(client) {
             }
         }
     });
+}
+
+async function handleAiActionMessage(message, client, settings, trigger) {
+    const now = Date.now();
+    const deniedMessage = getAiActionAuthorizationError({
+        tool: trigger.tool,
+        settings,
+        userId: message.author.id,
+        isAdministrator: Boolean(
+            message.member?.permissions?.has?.(PermissionFlagsBits.Administrator)
+        ),
+        hasAttachments: message.attachments.size > 0,
+        now,
+    });
+
+    if (deniedMessage) {
+        await message.reply(v2Notice(
+            '🐕👑 AI 操作未執行',
+            deniedMessage,
+            UI_COLORS.WARNING,
+            { ephemeral: false, allowedMentions: { parse: [], repliedUser: false } }
+        )).catch(() => {});
+        return;
+    }
+
+    const requestSlot = tryAcquireAiRequest({
+        guildId: message.guild.id,
+        userId: message.author.id,
+    });
+    if (!requestSlot.ok) {
+        const content = ['cooldown', 'user_busy'].includes(requestSlot.reason)
+            ? '本王還在整理你的上一個要求，請幾秒後再試。'
+            : '皇家智慧核心正忙，請稍後再試。';
+        await message.reply(v2Notice(
+            '🐕⏳ AI 操作暫緩',
+            content,
+            UI_COLORS.WARNING,
+            { ephemeral: false, allowedMentions: { parse: [], repliedUser: false } }
+        )).catch(() => {});
+        return;
+    }
+
+    let stopTyping = () => false;
+    try {
+        if (trigger.instruction) stopTyping = startAiTyping(message.channel);
+        const prepared = await prepareAiAction({
+            ...trigger,
+            guildId: message.guild.id,
+            channelId: message.channel.id,
+            userId: message.author.id,
+            sourceMessageId: message.id,
+            settings,
+        });
+        const launcher = await message.reply(prepared.payload);
+        rememberAiActionLauncher(prepared.sessionId, launcher, client);
+    } catch (error) {
+        const code = String(error?.code || error?.name || 'AI_ACTION_PREPARE_FAILED')
+            .replace(/[^A-Za-z0-9_-]/g, '')
+            .slice(0, 40);
+        logger.error(`[AI Action] prepare failed tool=${trigger.tool} guild=${message.guild.id} code=${code}`);
+        await message.reply(v2Notice(
+            '🐕💥 AI 操作草稿失敗',
+            error?.code === 'AI_TIMEOUT'
+                ? '本王整理操作資料太久了，請稍後再試。'
+                : '本王無法建立這份操作草稿，請改用更明確的內容重試。',
+            UI_COLORS.WARNING,
+            { ephemeral: false, allowedMentions: { parse: [], repliedUser: false } }
+        )).catch(() => {});
+    } finally {
+        stopTyping();
+        requestSlot.release();
+    }
 }
 
 export { xpMessageCache };

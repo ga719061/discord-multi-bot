@@ -27,7 +27,7 @@ import {
   v2Panel,
   v2Text,
 } from '../../utils/componentsV2.js';
-import { UI_COLORS } from '../../utils/style.js';
+import { ansiRows, UI_COLORS } from '../../utils/style.js';
 import { logger } from '../../utils/logger.js';
 import { WUWA_POOL_TYPES } from './lib/constants.js';
 import { mergeWuwaHistories, normalizeHistory } from './lib/history.js';
@@ -95,28 +95,36 @@ export async function refreshWuwaHome(interaction, userId, isSessionActive = () 
 }
 
 export function buildHomePayload(userId, account, expired = false) {
+  const totalRecords = account
+    ? Object.values(account.history?.pools ?? {}).reduce((sum, records) => sum + records.length, 0)
+    : 0;
   const panel = v2Panel(UI_COLORS.WUWA)
     .addTextDisplayComponents(v2Text([
       '# 🌊 皇家鳴潮喚取卷宗',
       account
-        ? `已綁定漂泊者 UID：**${maskWuwaUid(account.playerUid)}**`
-        : '尚未綁定鳴潮帳號。首次使用請提供遊戲內喚取紀錄 URL 或匯出 JSON。',
-      account ? `最後更新：<t:${Math.floor(account.updatedAt / 1000)}:R>` : null,
+        ? `資料更新於 <t:${Math.floor(account.updatedAt / 1000)}:R>`
+        : '首次使用請依下方步驟取得喚取紀錄 URL，再綁定帳號。',
       '-# 每個 Discord 使用者限綁一個 UID；臨時授權完成查詢後立即丟棄。',
     ].filter(Boolean).join('\n')))
     .addSeparatorComponents(v2Divider())
+    .addTextDisplayComponents(v2Text(ansiRows([
+      { label: '帳號', value: account ? '已綁定' : '尚未綁定', tone: account ? 'success' : 'warning' },
+      { label: 'UID', value: account ? maskWuwaUid(account.playerUid) : '尚無資料', tone: account ? 'royal' : 'neutral' },
+      { label: '紀錄', value: account ? `${totalRecords} 筆` : '尚無資料', tone: account ? 'info' : 'neutral' },
+    ])))
+    .addSeparatorComponents(v2Divider())
     .addTextDisplayComponents(v2Text([
-      '## 1　首先，啟動遊戲並打開你的遊戲內喚取歷史紀錄',
-      '之後，打開 Windows PowerShell 並貼上以下指令。',
+      '## 匯入喚取紀錄',
+      '**1.** 啟動遊戲並打開遊戲內喚取歷史紀錄。',
+      '**2.** 打開 Windows PowerShell，貼上以下固定版本指令：',
       '',
       '```powershell',
       WUWA_IMPORT_COMMAND,
       '```',
       `注意：此指令會從 WuWa Tracker 官方 GitHub 下載並執行固定版本腳本，只用來從遊戲日誌提取喚取歷史 URL。你可以先[查看腳本](${WUWA_IMPORT_SCRIPT_URL})。`,
       '',
-      '## 2　貼上取得的 URL',
-      '腳本完成後會把 URL 複製到剪貼簿。按下方「綁定帳號」或「更新紀錄」，貼入 URL 欄位。',
-      '-# URL 含臨時授權資訊，請勿張貼到公開頻道。',
+      '**3.** 腳本完成後，按「綁定帳號」或「更新紀錄」，貼上剪貼簿中的 URL。',
+      '> ⚠️ URL 含臨時授權資訊，請勿張貼到公開頻道；可先檢視腳本再決定是否執行。',
     ].join('\n')))
     .addSeparatorComponents(v2Divider())
     .addActionRowComponents(
@@ -198,7 +206,14 @@ export function buildPoolSelectionPayload(sessionId, expired = false) {
       description: `五星硬保底 ${pool.hardPity} 抽`,
     })));
   const panel = v2Panel(UI_COLORS.WUWA)
-    .addTextDisplayComponents(v2Text('# 🌊 選擇喚取卡池\n選定後會生成 1600×900 的私人詳細卷宗。'))
+    .addTextDisplayComponents(v2Text('# 🌊 選擇喚取卡池\n選定後會生成私人詳細卷宗。'))
+    .addSeparatorComponents(v2Divider())
+    .addTextDisplayComponents(v2Text(ansiRows([
+      { label: '卡池', value: `共 ${WUWA_POOL_TYPES.length} 類`, tone: 'info' },
+      { label: '輸出', value: '1600×900 私人卷宗', tone: 'royal' },
+      { label: '狀態', value: expired ? '選擇已逾時' : '等待選擇', tone: expired ? 'warning' : 'success' },
+    ])))
+    .addSeparatorComponents(v2Divider())
     .addActionRowComponents(new ActionRowBuilder().addComponents(select));
   if (expired) panel.addTextDisplayComponents(v2Text('## ⌛ 卡池選擇已逾時'));
   return ephemeralV2Payload([panel]);
@@ -308,7 +323,7 @@ async function openPoolSelector(component, sessionId) {
   const poolId = select.values[0];
   const rendered = await renderWuwaCard(account, poolId);
   let published = false;
-  await select.editReply(v2EditPayload(buildWuwaCardPayload(rendered, {
+  await select.editReply(v2EditPayload(buildWuwaCardPayload(rendered, account, poolId, {
     ephemeral: true,
     publishCustomId: `wuwa_publish:${sessionId}:${poolId}`,
   })));
@@ -324,9 +339,9 @@ async function openPoolSelector(component, sessionId) {
         return publish.reply(v2Notice('無法公開發布', '目前位置不支援張貼公開圖片。', UI_COLORS.WARNING));
       }
       await publish.deferUpdate();
-      await component.channel.send(buildWuwaCardPayload(rendered));
+      await component.channel.send(buildWuwaCardPayload(rendered, account, poolId));
       published = true;
-      const payload = buildWuwaCardPayload(rendered, {
+      const payload = buildWuwaCardPayload(rendered, account, poolId, {
         ephemeral: true,
         publishCustomId: `wuwa_publish:${sessionId}:${poolId}`,
         published: true,
@@ -343,7 +358,7 @@ async function openPoolSelector(component, sessionId) {
   });
   collector.on('end', () => {
     if (published) return;
-    const payload = buildWuwaCardPayload(rendered, {
+    const payload = buildWuwaCardPayload(rendered, account, poolId, {
       ephemeral: true,
       publishCustomId: `wuwa_publish:${sessionId}:${poolId}`,
       expired: true,

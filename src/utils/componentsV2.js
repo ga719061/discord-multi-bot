@@ -7,7 +7,7 @@ import {
     TextDisplayBuilder,
     ThumbnailBuilder,
 } from 'discord.js';
-import { UI_COLORS } from './style.js';
+import { ansiRows, UI_COLORS } from './style.js';
 
 export function v2Panel(accentColor = UI_COLORS.ROYAL) {
     return new ContainerBuilder().setAccentColor(accentColor);
@@ -22,8 +22,9 @@ export function truncateV2Text(content, maxLength = 4000) {
     return text.length <= maxLength ? text : `${text.slice(0, maxLength - 1)}…`;
 }
 
-export function v2Divider() {
-    return new SeparatorBuilder().setDivider(true);
+export function v2Divider(spacing) {
+    const divider = new SeparatorBuilder().setDivider(true);
+    return spacing === undefined ? divider : divider.setSpacing(spacing);
 }
 
 export function v2Payload(components, options = {}) {
@@ -64,6 +65,7 @@ export function v2Card({
     title,
     description,
     accentColor = UI_COLORS.ROYAL,
+    statusRows = [],
     fields = [],
     thumbnail,
     images = [],
@@ -85,6 +87,11 @@ export function v2Card({
         panel.addTextDisplayComponents(v2Text(heading));
     }
 
+    if (statusRows.length > 0) {
+        if (heading) panel.addSeparatorComponents(v2Divider());
+        panel.addTextDisplayComponents(v2Text(ansiRows(statusRows)));
+    }
+
     for (const field of fields) {
         panel.addSeparatorComponents(v2Divider());
         panel.addTextDisplayComponents(v2Text([
@@ -97,10 +104,14 @@ export function v2Card({
         panel.addSeparatorComponents(v2Divider());
         panel.addMediaGalleryComponents(
             new MediaGalleryBuilder().addItems(
-                ...images.map((url, index) => ({
-                    media: { url },
-                    description: `${title || '圖片'} ${index + 1}`,
-                }))
+                ...images.map((image, index) => {
+                    const item = typeof image === 'string' ? { url: image } : image;
+                    return {
+                        media: { url: item.url },
+                        description: item.description || `${title || '圖片'}第 ${index + 1} 張圖片`,
+                        spoiler: item.spoiler === true,
+                    };
+                })
             )
         );
     }

@@ -39,6 +39,15 @@ export function initDatabase(options = {}) {
       steam_free_last_post_date TEXT DEFAULT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS steam_free_boards (
+      guild_id TEXT PRIMARY KEY,
+      channel_id TEXT,
+      message_id TEXT,
+      snapshot_json TEXT NOT NULL DEFAULT '[]',
+      last_refresh_date TEXT,
+      last_checked_at INTEGER
+    );
+
     CREATE TABLE IF NOT EXISTS user_levels (
       guild_id TEXT,
       user_id TEXT,
@@ -97,6 +106,8 @@ export function initDatabase(options = {}) {
       model TEXT DEFAULT '${DEFAULT_AI_MODEL}',
       admin_ids TEXT DEFAULT '[]',
       search_enabled INTEGER DEFAULT 0,
+      citations_enabled INTEGER DEFAULT 0,
+      action_tools_enabled INTEGER DEFAULT 0,
       context_enabled INTEGER DEFAULT 1,
       party_channel_id TEXT DEFAULT NULL,
       party_expires_at INTEGER DEFAULT NULL
@@ -176,6 +187,12 @@ export function initDatabase(options = {}) {
   }
   if (!aiColumns.includes('search_enabled')) {
     db.prepare("ALTER TABLE ai_settings ADD COLUMN search_enabled INTEGER DEFAULT 0").run();
+  }
+  if (!aiColumns.includes('citations_enabled')) {
+    db.prepare("ALTER TABLE ai_settings ADD COLUMN citations_enabled INTEGER DEFAULT 0").run();
+  }
+  if (!aiColumns.includes('action_tools_enabled')) {
+    db.prepare("ALTER TABLE ai_settings ADD COLUMN action_tools_enabled INTEGER DEFAULT 0").run();
   }
   if (!aiColumns.includes('context_enabled')) {
     db.prepare("ALTER TABLE ai_settings ADD COLUMN context_enabled INTEGER DEFAULT 1").run();
@@ -455,11 +472,13 @@ export function getAiSettings(guildId) {
     whitelist: parseJsonArray(row.whitelist, []),
     admin_ids: parseJsonArray(row.admin_ids, []),
     search_enabled: !!row.search_enabled,
+    citations_enabled: !!row.citations_enabled,
+    action_tools_enabled: !!row.action_tools_enabled,
     context_enabled: row.context_enabled !== 0,
   };
 }
 
-const ALLOWED_AI_KEYS = ['enabled', 'expires_at', 'system_prompt', 'whitelist', 'model', 'admin_ids', 'search_enabled', 'context_enabled', 'party_channel_id', 'party_expires_at'];
+const ALLOWED_AI_KEYS = ['enabled', 'expires_at', 'system_prompt', 'whitelist', 'model', 'admin_ids', 'search_enabled', 'citations_enabled', 'action_tools_enabled', 'context_enabled', 'party_channel_id', 'party_expires_at'];
 
 export function updateAiSetting(guildId, key, value) {
   if (!ALLOWED_AI_KEYS.includes(key)) throw new Error(`不允許的欄位名稱: ${key}`);

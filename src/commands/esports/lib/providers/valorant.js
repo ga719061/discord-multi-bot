@@ -102,7 +102,7 @@ async function resolveOpggActions(html, sourceUrl, fetchImpl) {
     .map((match) => match[1])
     .map((src) => new URL(src, sourceUrl).href)
     .filter(isAllowedOpggUrl);
-  const routeScript = scriptUrls.find((src) => /valorant\/profile/i.test(decodeURIComponent(src)));
+  const routeScript = scriptUrls.find((src) => /\/valorant\/profile\/[^/]+\/page-[^/]+\.js$/i.test(new URL(src).pathname));
   if (!routeScript) return null;
 
   const route = await fetchPublicText(routeScript, {}, fetchImpl);

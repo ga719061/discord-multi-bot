@@ -78,41 +78,22 @@ export async function openPollComposer(interaction) {
         const options = Array.from({ length: count }, (_, index) =>
             optionsSubmit.fields.getTextInputValue(`option_${index + 1}`).trim()
         );
-        const votes = Object.fromEntries(options.map((_, index) => [index, []]));
 
         publicationState = 'publishing';
         await optionsSubmit.deferReply({ flags: MessageFlags.Ephemeral });
-        let message;
-        let dbInserted = false;
         try {
-            message = await optionsSubmit.channel.send(buildPollPayload({
-                question,
-                options,
-                votes,
+            await publishPollDraft({
+                guildId: optionsSubmit.guildId,
+                channel: optionsSubmit.channel,
                 creatorId: interaction.user.id,
-            }));
-            getDb().prepare(
-                'INSERT INTO polls (guild_id, channel_id, message_id, creator_id, question, options, votes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-            ).run(
-                optionsSubmit.guildId,
-                optionsSubmit.channelId,
-                message.id,
-                interaction.user.id,
-                question,
-                JSON.stringify(options),
-                JSON.stringify(votes),
-                Date.now()
-            );
+                draft: { question, options },
+            });
 
-            dbInserted = true;
             publicationState = 'published';
             collector.stop('published');
         } catch (error) {
             publicationState = 'draft';
             logger.warn(`[Poll] 發布失敗 guild=${optionsSubmit.guildId}: ${error.message}`);
-            if (message && !dbInserted) {
-                await message.delete().catch(() => {});
-            }
             await optionsSubmit.editReply(v2EditPayload(v2Notice(
                 '📊 國是會議頒布失敗',
                 '本王暫時無法將投票張貼到目前頻道，請稍後重新嘗試。',
@@ -136,6 +117,67 @@ export async function openPollComposer(interaction) {
         if (reason === 'published') return;
         questionSubmit.editReply(v2EditPayload(buildPollOptionCountPayload(sessionId, question, true))).catch(() => {});
     });
+}
+
+export function normalizePollDraft({ question, options }) {
+    const normalizedQuestion = String(question ?? '').trim();
+    if (normalizedQuestion.length < 1 || normalizedQuestion.length > 150) {
+        throw new RangeError('投票問題長度必須介於 1 到 150 字。');
+    }
+    if (!Array.isArray(options) || options.length < 2 || options.length > 5) {
+        throw new RangeError('投票選項數量必須介於 2 到 5 個。');
+    }
+
+    const normalizedOptions = options.map((option) => String(option ?? '').trim());
+    if (normalizedOptions.some(option => option.length < 1 || option.length > 80)) {
+        throw new RangeError('投票選項長度必須介於 1 到 80 字。');
+    }
+    const optionKeys = normalizedOptions.map(option => option.normalize('NFKC').toLocaleLowerCase('zh-TW'));
+    if (new Set(optionKeys).size !== optionKeys.length) {
+        throw new RangeError('投票選項不可重複。');
+    }
+    return { question: normalizedQuestion, options: normalizedOptions };
+}
+
+export async function publishPollDraft({ guildId, channel, creatorId, draft }, {
+    db = null,
+    now = Date.now(),
+} = {}) {
+    const source = {
+        guildId: String(guildId ?? '').trim(),
+        channelId: String(channel?.id ?? '').trim(),
+        creatorId: String(creatorId ?? '').trim(),
+    };
+    if (!source.guildId || !source.channelId || !source.creatorId || typeof channel?.send !== 'function') {
+        throw new TypeError('投票發布來源不完整。');
+    }
+    const normalizedDraft = normalizePollDraft(draft || {});
+    const votes = Object.fromEntries(normalizedDraft.options.map((_, index) => [index, []]));
+    let message;
+    try {
+        message = await channel.send(buildPollPayload({
+            ...normalizedDraft,
+            votes,
+            creatorId: source.creatorId,
+        }));
+        const database = db || getDb();
+        database.prepare(
+            'INSERT INTO polls (guild_id, channel_id, message_id, creator_id, question, options, votes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(
+            source.guildId,
+            source.channelId,
+            message.id,
+            source.creatorId,
+            normalizedDraft.question,
+            JSON.stringify(normalizedDraft.options),
+            JSON.stringify(votes),
+            now
+        );
+        return { message, draft: normalizedDraft, votes };
+    } catch (error) {
+        if (message) await message.delete().catch(() => {});
+        throw error;
+    }
 }
 
 export function buildPollQuestionModal(sessionId) {

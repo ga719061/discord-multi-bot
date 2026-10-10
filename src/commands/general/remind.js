@@ -37,7 +37,10 @@ export async function openReminderComposer(interaction) {
     const timeText = submit.fields.getTextInputValue('time').trim();
     const content = submit.fields.getTextInputValue('content').trim();
     const targetTime = parseReminderTime(timeText);
-    if (!targetTime || targetTime <= Date.now()) {
+    let reminderDraft;
+    try {
+        reminderDraft = validateReminderDraft({ content, targetTime });
+    } catch {
         await submit.reply(buildReminderErrorPayload(sessionId));
         await attachReminderControls(submit, interaction.user.id, sessionId, (disabled = false) => buildReminderErrorPayload(sessionId, disabled), {
             allowDelete: false,
@@ -45,10 +48,58 @@ export async function openReminderComposer(interaction) {
         return;
     }
 
-    addReminder(submit.guildId, submit.channelId, interaction.user.id, content, targetTime);
-    await submit.reply(buildReminderSuccessPayload(sessionId, content, targetTime));
+    createReminderFromDraft({
+        guildId: submit.guildId,
+        channelId: submit.channelId,
+        userId: interaction.user.id,
+        ...reminderDraft,
+    });
+    await submit.reply(buildReminderSuccessPayload(
+        sessionId,
+        reminderDraft.content,
+        reminderDraft.targetTime
+    ));
     await attachReminderControls(submit, interaction.user.id, sessionId, (disabled = false) =>
-        buildReminderSuccessPayload(sessionId, content, targetTime, disabled), { allowDelete: false });
+        buildReminderSuccessPayload(
+            sessionId,
+            reminderDraft.content,
+            reminderDraft.targetTime,
+            disabled
+        ), { allowDelete: false });
+}
+
+export function validateReminderDraft({ content, targetTime }, { now = Date.now() } = {}) {
+    const normalizedContent = String(content ?? '').trim();
+    const normalizedTargetTime = Number(targetTime);
+    if (normalizedContent.length < 1 || normalizedContent.length > 500) {
+        throw new RangeError('提醒內容長度必須介於 1 到 500 字。');
+    }
+    if (!Number.isSafeInteger(normalizedTargetTime) || normalizedTargetTime <= now) {
+        throw new RangeError('提醒時間必須是有效的未來時間。');
+    }
+    return { content: normalizedContent, targetTime: normalizedTargetTime };
+}
+
+export function createReminderFromDraft({ guildId, channelId, userId, content, targetTime }, {
+    now = Date.now(),
+    insertReminder = addReminder,
+} = {}) {
+    const source = {
+        guildId: String(guildId ?? '').trim(),
+        channelId: String(channelId ?? '').trim(),
+        userId: String(userId ?? '').trim(),
+    };
+    if (!source.guildId || !source.channelId || !source.userId) {
+        throw new TypeError('提醒來源身份不完整。');
+    }
+    const draft = validateReminderDraft({ content, targetTime }, { now });
+    return insertReminder(
+        source.guildId,
+        source.channelId,
+        source.userId,
+        draft.content,
+        draft.targetTime
+    );
 }
 
 export async function openReminderManager(interaction) {

@@ -52,7 +52,12 @@ export async function imageUrlToDataUri(url, fetchImpl = fetch, options = {}) {
     })
     .catch(() => null);
 
-  if (cache) cache.set(cacheKey, promise);
+  if (cache) {
+    cache.set(cacheKey, promise);
+    promise.then((value) => {
+      if (value === null && cache.get(cacheKey) === promise) cache.delete(cacheKey);
+    });
+  }
   return promise;
 }
 
@@ -67,19 +72,34 @@ export async function fetchWithTimeout(url, fetchImpl = fetch, timeoutMs = 3500)
 }
 
 export async function fetchWithLimit(url, fetchImpl = fetch, options = {}) {
+  const { response, buffer } = await fetchBufferWithLimit(url, fetchImpl, options);
+  if (!response.ok || !buffer) return response;
+
+  return new Response(buffer, {
+    status: response.status,
+    statusText: response.statusText,
+    headers: response.headers,
+  });
+}
+
+export async function fetchBufferWithLimit(url, fetchImpl = fetch, options = {}) {
   const timeoutMs = options.timeoutMs ?? 3500;
   const maxBytes = options.maxBytes;
+  let bytesRead = 0;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => {
     controller.abort();
   }, timeoutMs);
 
+  let removeExternalAbortListener = null;
   if (options.signal) {
     if (options.signal.aborted) {
       controller.abort();
     } else {
-      options.signal.addEventListener('abort', () => controller.abort());
+      const abort = () => controller.abort();
+      options.signal.addEventListener('abort', abort, { once: true });
+      removeExternalAbortListener = () => options.signal.removeEventListener('abort', abort);
     }
   }
 
@@ -101,7 +121,7 @@ export async function fetchWithLimit(url, fetchImpl = fetch, options = {}) {
       throw new Error('No response returned');
     }
     if (!response.ok) {
-      return response;
+      return { response, buffer: null };
     }
 
     if (maxBytes !== undefined && maxBytes !== null) {
@@ -109,7 +129,12 @@ export async function fetchWithLimit(url, fetchImpl = fetch, options = {}) {
       if (contentLengthStr) {
         const contentLength = parseInt(contentLengthStr, 10);
         if (!isNaN(contentLength) && contentLength > maxBytes) {
-          throw new Error(`File size limit exceeded (Content-Length: ${contentLength} bytes, max: ${maxBytes} bytes)`);
+          await response.body?.cancel?.();
+          throw createDownloadError(
+            `File size limit exceeded (Content-Length: ${contentLength} bytes, max: ${maxBytes} bytes)`,
+            'DOWNLOAD_SIZE_LIMIT',
+            bytesRead
+          );
         }
       }
     }
@@ -119,16 +144,19 @@ export async function fetchWithLimit(url, fetchImpl = fetch, options = {}) {
 
     if (reader) {
       const chunks = [];
-      let totalBytes = 0;
       try {
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
           if (value) {
-            totalBytes += value.length;
-            if (maxBytes !== undefined && maxBytes !== null && totalBytes > maxBytes) {
+            bytesRead += value.byteLength;
+            if (maxBytes !== undefined && maxBytes !== null && bytesRead > maxBytes) {
               controller.abort();
-              throw new Error(`File size limit exceeded during stream download (max: ${maxBytes} bytes)`);
+              throw createDownloadError(
+                `File size limit exceeded during stream download (max: ${maxBytes} bytes)`,
+                'DOWNLOAD_SIZE_LIMIT',
+                bytesRead
+              );
             }
             chunks.push(value);
           }
@@ -139,28 +167,39 @@ export async function fetchWithLimit(url, fetchImpl = fetch, options = {}) {
       finalBuffer = Buffer.concat(chunks);
     } else {
       const arrayBuffer = await response.arrayBuffer();
+      bytesRead = arrayBuffer.byteLength;
       if (maxBytes !== undefined && maxBytes !== null && arrayBuffer.byteLength > maxBytes) {
-        throw new Error(`File size limit exceeded after arrayBuffer download (max: ${maxBytes} bytes)`);
+        throw createDownloadError(
+          `File size limit exceeded after arrayBuffer download (max: ${maxBytes} bytes)`,
+          'DOWNLOAD_SIZE_LIMIT',
+          bytesRead
+        );
       }
       finalBuffer = Buffer.from(arrayBuffer);
     }
 
-    const newResponse = new Response(finalBuffer, {
-      status: response.status,
-      statusText: response.statusText,
-      headers: response.headers,
-    });
-
-    return newResponse;
+    return { response, buffer: finalBuffer };
 
   } catch (error) {
     if (error.name === 'AbortError') {
-      throw new Error(`Download timed out or aborted (timeout: ${timeoutMs}ms)`);
+      throw createDownloadError(
+        `Download timed out or aborted (timeout: ${timeoutMs}ms)`,
+        'DOWNLOAD_ABORTED',
+        bytesRead
+      );
     }
     throw error;
   } finally {
     clearTimeout(timeout);
+    removeExternalAbortListener?.();
   }
+}
+
+function createDownloadError(message, code, bytesRead) {
+  const error = new Error(message);
+  error.code = code;
+  error.bytesRead = Math.max(0, Number(bytesRead) || 0);
+  return error;
 }
 
 export function cacheKeyFor(fetchImpl, value) {

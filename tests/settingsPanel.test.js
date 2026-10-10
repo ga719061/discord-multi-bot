@@ -1,6 +1,6 @@
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { ButtonStyle, ComponentType, MessageFlags, PermissionFlagsBits } from 'discord.js';
+import { ButtonStyle, ChannelType, Collection, ComponentType, MessageFlags, PermissionFlagsBits } from 'discord.js';
 import { data, settingsViewTesting } from '../src/commands/admin/settings.js';
 import { countV2Components, ephemeralV2Payload } from '../src/utils/componentsV2.js';
 import { getAiSettings, getDb, getGuildSettings, updateAiSetting, updateGuildSetting } from '../src/utils/database.js';
@@ -11,6 +11,19 @@ import { cleanupTestDatabase, initTestDatabase } from './helpers/database.js';
 afterEach(() => {
   cleanupTestDatabase();
 });
+
+function collectComponentText(component) {
+  const texts = component.content ? [component.content] : [];
+  for (const child of component.components || []) texts.push(...collectComponentText(child));
+  if (component.accessory) texts.push(...collectComponentText(component.accessory));
+  return texts;
+}
+
+function stripAnsi(text) {
+  return String(text)
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/```ansi\n?|```/g, '');
+}
 
 test('/設定 is restricted to Administrator by command metadata', () => {
   const command = data.toJSON();
@@ -312,6 +325,86 @@ test('enabling the AI core clears an expired global deadline', () => {
   assert.equal(getAiSettings(guildId).enabled, 0);
 });
 
+test('AI reference sources are hidden by default and can be enabled independently', () => {
+  initTestDatabase();
+  const guildId = `settings-ai-citations-${process.pid}`;
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
+  const context = {
+    userId: 'admin',
+    guild: { id: guildId },
+    view: 'ai',
+    pending: {},
+    notice: null,
+  };
+
+  assert.equal(getAiSettings(guildId).citations_enabled, false);
+  const hiddenView = settingsViewTesting.renderAi(context);
+  const hiddenPanel = hiddenView.components[0].toJSON();
+  const hiddenText = JSON.stringify(hiddenPanel);
+  const hiddenButtons = hiddenPanel.components
+    .filter((component) => component.type === ComponentType.ActionRow)
+    .flatMap((row) => row.components);
+  assert.match(hiddenText, /顯示參考來源.+關閉/);
+  assert.equal(hiddenButtons.some((button) =>
+    button.custom_id === 'settings:admin:ai_toggle:citations_enabled'
+      && button.label === '顯示來源'
+  ), true);
+
+  assert.equal(settingsViewTesting.toggleAiSetting(guildId, 'citations_enabled'), 1);
+  assert.equal(getAiSettings(guildId).citations_enabled, true);
+  const visibleView = settingsViewTesting.renderAi(context);
+  const visiblePanel = visibleView.components[0].toJSON();
+  const visibleButtons = visiblePanel.components
+    .filter((component) => component.type === ComponentType.ActionRow)
+    .flatMap((row) => row.components);
+  assert.equal(visibleButtons.some((button) =>
+    button.custom_id === 'settings:admin:ai_toggle:citations_enabled'
+      && button.label === '隱藏來源'
+  ), true);
+  assert.equal(countV2Components(visibleView.components) <= 40, true);
+});
+
+test('AI action tools are disabled by default and have an independent bounded toggle', () => {
+  initTestDatabase();
+  const guildId = `settings-ai-action-tools-${process.pid}`;
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
+  const context = {
+    userId: 'admin',
+    guild: { id: guildId },
+    view: 'ai',
+    pending: {},
+    notice: null,
+  };
+
+  assert.equal(getAiSettings(guildId).action_tools_enabled, false);
+  const disabledView = settingsViewTesting.renderAi(context);
+  const disabledPanel = disabledView.components[0].toJSON();
+  const disabledRows = disabledPanel.components
+    .filter((component) => component.type === ComponentType.ActionRow);
+  const disabledButton = disabledRows
+    .flatMap((row) => row.components)
+    .find((button) => button.custom_id === 'settings:admin:ai_toggle:action_tools_enabled');
+
+  assert.match(JSON.stringify(disabledPanel), /AI 操作工具.+停用/);
+  assert.equal(disabledButton?.label, '啟用 AI 操作');
+  assert.equal(disabledRows.every((row) => row.components.length <= 5), true);
+  assert.equal(countV2Components(disabledView.components) <= 40, true);
+
+  assert.equal(settingsViewTesting.toggleAiSetting(guildId, 'action_tools_enabled'), 1);
+  assert.equal(getAiSettings(guildId).action_tools_enabled, true);
+  const enabledView = settingsViewTesting.renderAi(context);
+  const enabledPanel = enabledView.components[0].toJSON();
+  const enabledRows = enabledPanel.components
+    .filter((component) => component.type === ComponentType.ActionRow);
+  const enabledButton = enabledRows
+    .flatMap((row) => row.components)
+    .find((button) => button.custom_id === 'settings:admin:ai_toggle:action_tools_enabled');
+
+  assert.equal(enabledButton?.label, '停用 AI 操作');
+  assert.equal(enabledRows.every((row) => row.components.length <= 5), true);
+  assert.equal(countV2Components(enabledView.components) <= 40, true);
+});
+
 test('AI party activation restores previous settings when its public notice fails', async () => {
   initTestDatabase();
   const guildId = `settings-ai-party-compensation-${process.pid}`;
@@ -382,8 +475,35 @@ test('welcome modal uses AI private draft as a prefilled setting draft', () => {
   };
 
   const modal = settingsViewTesting.buildModal(context, 'welcome_message').toJSON();
+  const field = modal.components[0];
 
   assert.match(JSON.stringify(modal), /歡迎 \{user\} 來到伺服器/);
+  assert.equal(field.type, ComponentType.Label);
+  assert.equal(field.label, '迎賓內容');
+  assert.match(field.description, /留空會恢復預設/);
+  assert.equal(field.component.type, ComponentType.TextInput);
+  assert.equal(field.component.custom_id, 'value');
+});
+
+test('all settings text modals use descriptive label components', () => {
+  initTestDatabase();
+  const context = {
+    userId: 'admin',
+    guild: { id: `settings-modal-labels-${process.pid}` },
+    pending: {},
+  };
+  const modalTypes = [
+    'welcome_message', 'steam_time', 'steam_free_time', 'self_description',
+    'reaction_create', 'reaction_pair_add', 'reaction_title', 'ai_unlock',
+    'ai_prompt', 'ai_draft', 'ai_party',
+  ];
+
+  for (const type of modalTypes) {
+    const modal = settingsViewTesting.buildModal(context, type).toJSON();
+    assert.equal(modal.components.every((field) => field.type === ComponentType.Label), true, type);
+    assert.equal(modal.components.every((field) => field.description?.length > 0), true, type);
+    assert.equal(modal.components.every((field) => field.component?.type === ComponentType.TextInput), true, type);
+  }
 });
 
 test('settings home health overview uses neutral admin wording', async () => {
@@ -401,16 +521,153 @@ test('settings home health overview uses neutral admin wording', async () => {
   };
 
   const view = await settingsViewTesting.renderHome(context);
-  const text = JSON.stringify(view.components[0].toJSON());
+  const panel = view.components[0].toJSON();
+  const text = JSON.stringify(panel);
+  const visibleText = collectComponentText(panel).join('\n');
+  const rows = panel.components.filter((component) => component.type === ComponentType.ActionRow);
+  const viewSelect = rows
+    .flatMap((row) => row.components)
+    .find((component) => component.custom_id === 'settings:admin:view_select');
 
   assert.match(text, /Test Server 管理控制台/);
   assert.match(text, /伺服器健康總覽/);
+  assert.match(visibleText, /```ansi/);
+  assert.equal(visibleText.includes('\u001b'), true);
+  assert.match(stripAnsi(visibleText), /\[健康\] .+/);
+  assert.match(stripAnsi(visibleText), /\[已設定\] \d+ 個模組運作正常/);
+  assert.match(stripAnsi(visibleText), /\[未啟用\] \d+ 個模組尚未設定/);
+  assert.match(stripAnsi(visibleText), /\[待處理\] \d+ 個模組設定異常/);
   assert.match(text, /修正建議/);
   assert.match(text, /功能設定/);
   assert.match(text, /管理工具/);
+  assert.equal(viewSelect.type, ComponentType.StringSelect);
+  assert.deepEqual(viewSelect.options.map((option) => option.value), [
+    'welcome', 'logging', 'leveling', 'steam', 'selfrole', 'reaction', 'ai',
+  ]);
+  assert.equal(rows.flatMap((row) => row.components).some((component) => component.custom_id === 'settings:admin:view:welcome'), false);
+  assert.equal(countV2Components(view.components) <= 40, true);
   assert.equal(text.includes('本王'), false);
   assert.equal(text.includes('領地健康總覽'), false);
   assert.equal(text.includes('御前修正建議'), false);
+});
+
+test('settings function selector routes to the selected existing view', async () => {
+  initTestDatabase();
+  const guildId = `settings-view-select-${process.pid}`;
+  let edited;
+  const context = {
+    userId: 'admin',
+    guild: { id: guildId },
+    view: 'home',
+    pending: { confirm: 'steam_publish' },
+    notice: 'old notice',
+    editResponse: async (payload) => { edited = payload; },
+  };
+  const component = {
+    values: ['welcome'],
+    deferred: false,
+    replied: false,
+    async deferUpdate() { this.deferred = true; },
+  };
+
+  await settingsViewTesting.handleStringSelect(component, context, 'view_select');
+
+  assert.equal(context.view, 'welcome');
+  assert.equal(context.pending.confirm, null);
+  assert.equal(context.notice, null);
+  assert.match(JSON.stringify(edited), /歡迎訊息/);
+});
+
+test('settings notices remain complete Markdown outside the compact ANSI summary', () => {
+  initTestDatabase();
+  const notice = 'AI 歡迎訊息草稿已帶入設定欄位，請檢查內容並確認後儲存。';
+  const view = settingsViewTesting.renderWelcome({
+    userId: 'admin',
+    guild: { id: `settings-notice-${process.pid}` },
+    pending: {},
+    notice,
+  });
+  const panel = view.components[0].toJSON();
+  const rawText = collectComponentText(panel).join('\n');
+
+  assert.equal((rawText.match(/```ansi/g) || []).length, 1);
+  assert.equal(stripAnsi(rawText).includes(`[已儲存] ${notice}`), false);
+  assert.match(rawText, new RegExp(`> \\*\\*已儲存\\*\\* — ${notice}`));
+});
+
+test('settings pages stay within component and button-style limits', async () => {
+  initTestDatabase();
+  const guildId = `settings-component-limits-${process.pid}`;
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
+  const guild = {
+    id: guildId,
+    name: 'Test Server',
+    channels: {
+      cache: new Collection([
+        ['text', { id: 'text', type: ChannelType.GuildText }],
+        ['voice', { id: 'voice', type: ChannelType.GuildVoice }],
+      ]),
+      fetch: async () => null,
+    },
+    roles: { cache: new Collection() },
+    emojis: { cache: new Collection() },
+    members: { fetch: async () => null },
+    fetchOwner: async () => null,
+    iconURL: () => null,
+    memberCount: 0,
+    createdTimestamp: Date.now(),
+    premiumTier: 0,
+    premiumSubscriptionCount: 0,
+    preferredLocale: 'zh-TW',
+    features: [],
+    verificationLevel: 0,
+    explicitContentFilter: 0,
+  };
+  const client = { ws: { ping: 25 }, guilds: { cache: new Collection([[guildId, guild]]) } };
+  const views = [
+    'home', 'welcome', 'logging', 'leveling', 'steam', 'selfrole', 'reaction',
+    'ai', 'serverinfo', 'botstatus', 'announcement', 'member', 'confirm',
+  ];
+  const summaryLabels = {
+    home: '健康',
+    welcome: '狀態',
+    logging: '頻道',
+    leveling: '晉升公告',
+    steam: '特價榜',
+    selfrole: '領取選項',
+    reaction: '公開站點',
+    ai: '智慧核心',
+    serverinfo: '健康',
+    botstatus: '系統',
+    announcement: '發布頻道',
+    member: '查詢狀態',
+  };
+
+  for (const viewName of views) {
+    const context = {
+      userId: 'admin', guild, client, view: viewName, pending: {}, notice: null,
+    };
+    if (viewName === 'confirm') context.pending.confirm = 'steam_publish';
+    const view = await settingsViewTesting.renderView(context);
+    const panel = view.components[0].toJSON();
+    const rows = panel.components.filter((component) => component.type === ComponentType.ActionRow);
+
+    assert.equal(countV2Components(view.components) <= 40, true, viewName);
+    if (viewName !== 'confirm') {
+      const rawText = collectComponentText(panel).join('\n');
+      const readableText = stripAnsi(rawText);
+      assert.equal((rawText.match(/```ansi/g) || []).length, 1, `${viewName} ANSI block count`);
+      assert.equal(rawText.includes('\u001b'), true, `${viewName} ANSI escape`);
+      assert.match(readableText, new RegExp(`\\[${summaryLabels[viewName]}\\] [^\\n]+`), viewName);
+    }
+    for (const row of rows) {
+      const buttons = row.components.filter((component) => component.type === ComponentType.Button);
+      assert.equal(buttons.filter((button) => button.style === ButtonStyle.Primary).length <= 1, true, viewName);
+      for (const button of buttons.filter((item) => item.style === ButtonStyle.Danger)) {
+        assert.equal(button.custom_id, 'settings:admin:confirm', viewName);
+      }
+    }
+  }
 });
 
 test('Steam panel exposes independent limited-free push controls', () => {
@@ -427,11 +684,59 @@ test('Steam panel exposes independent limited-free push controls', () => {
   const modal = settingsViewTesting.buildModal(context, 'steam_free_time').toJSON();
 
   assert.match(text, /Steam 限時免費/);
+  assert.match(text, /立即更新免費情報/);
   assert.equal(actionIds.some((id) => id.includes('steam_channel')), true);
   assert.equal(actionIds.some((id) => id.includes('steam_free_channel')), true);
   assert.equal(actionIds.some((id) => id.includes('steam_free_toggle:on')), true);
   assert.equal(actionIds.some((id) => id.includes('prepare_confirm:steam_free_publish')), true);
   assert.match(JSON.stringify(modal), /steam_free_time/);
+});
+
+test('disabling Steam free updates marks the managed board as paused', async () => {
+  initTestDatabase();
+  const guildId = `settings-steam-free-disable-${process.pid}`;
+  updateGuildSetting(guildId, 'steam_free_enabled', 1);
+  getDb().prepare(`
+    INSERT INTO steam_free_boards (
+      guild_id, channel_id, message_id, snapshot_json, last_refresh_date, last_checked_at
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    guildId,
+    'free-channel',
+    'board-message',
+    JSON.stringify([{ id: 42, name: 'Free Game', discount_percent: 100, original_price: 50000, final_price: 0 }]),
+    '2026-08-08',
+    Date.now()
+  );
+  let boardEdit;
+  let panelEdit;
+  const message = { edit: async (payload) => { boardEdit = payload; } };
+  const context = {
+    userId: 'admin',
+    guild: {
+      id: guildId,
+      channels: {
+        fetch: async (channelId) => channelId === 'free-channel'
+          ? { messages: { fetch: async () => message } }
+          : null,
+      },
+    },
+    view: 'steam',
+    pending: {},
+    notice: null,
+    editResponse: async (payload) => { panelEdit = payload; },
+  };
+  const component = {
+    deferred: false,
+    replied: false,
+    async deferUpdate() { this.deferred = true; },
+  };
+
+  await settingsViewTesting.handleButton(component, context, 'steam_free_toggle', 'off');
+
+  assert.equal(getGuildSettings(guildId).steam_free_enabled, 0);
+  assert.match(JSON.stringify(boardEdit), /自動更新已停用/);
+  assert.match(JSON.stringify(panelEdit), /自動更新已停用/);
 });
 
 test('confirmation page describes limited-free Steam publish action', () => {
@@ -440,6 +745,23 @@ test('confirmation page describes limited-free Steam publish action', () => {
   const text = JSON.stringify(view.components[0].toJSON());
 
   assert.match(text, /Steam 限時免費/);
+  assert.match(text, /有新遊戲時建立新版並刪除舊帖/);
+});
+
+test('Steam free board notice reports an empty board moved to a new channel', () => {
+  const notice = settingsViewTesting.steamFreeBoardNotice({ status: 'empty', action: 'moved' });
+
+  assert.match(notice, /搬遷到新頻道/);
+});
+
+test('Steam free board notice warns when an old post could not be deleted', () => {
+  const notice = settingsViewTesting.steamFreeBoardNotice({
+    status: 'published',
+    previousMessageDeleted: false,
+  });
+
+  assert.equal(notice.tone, 'warning');
+  assert.match(notice.text, /無法刪除舊帖/);
 });
 
 test('locked AI page provides control-center verification with a primary login action', () => {
@@ -498,25 +820,47 @@ test('AI unlock modal grants persistent access and renders state-aware button co
     assert.equal(getAiSettings(guildId).admin_ids.includes('admin'), true);
     assert.match(text, /身分驗證成功/);
     assert.match(text, /AI 設定/);
+    assert.match(text, /聯網檢索可能執行多次計費查詢/);
     assert.equal(buttons.find((button) => button.label === '開啟聯網').style, ButtonStyle.Success);
     assert.equal(buttons.find((button) => button.label === '關閉記憶').style, ButtonStyle.Secondary);
-    assert.equal(buttons.find((button) => button.label === '啟動派對').style, ButtonStyle.Danger);
+    assert.equal(buttons.find((button) => button.label === '啟動派對').style, ButtonStyle.Secondary);
   } finally {
     if (previousPassword === undefined) delete process.env.AI_ADMIN_PASSWORD;
     else process.env.AI_ADMIN_PASSWORD = previousPassword;
   }
 });
 
-test('AI model selector uses approved models and migrates previous preview choices', () => {
+test('AI model selector uses the two approved models and migrates legacy choices by tier', () => {
   initTestDatabase();
   const guildId = `settings-ai-models-${process.pid}`;
   updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
 
-  getDb().prepare('UPDATE ai_settings SET model = ? WHERE guild_id = ?').run('gemini-3-flash-preview', guildId);
-  assert.equal(getAiSettings(guildId).model, DEFAULT_AI_MODEL);
+  assert.equal(DEFAULT_AI_MODEL, 'gemini-3.8-flash');
+  assert.deepEqual(AI_MODELS, ['gemini-3.8-flash', 'gemini-3.5-flash-lite']);
 
-  getDb().prepare('UPDATE ai_settings SET model = ? WHERE guild_id = ?').run('gemini-3.1-flash-lite-preview', guildId);
-  assert.equal(getAiSettings(guildId).model, 'gemini-3.1-flash-lite');
+  const migrations = [
+    ['gemini-3.7-flash', 'gemini-3.8-flash'],
+    ['gemini-3.6-flash', 'gemini-3.8-flash'],
+    ['gemini-3.5-flash', 'gemini-3.8-flash'],
+    ['gemini-3.1-pro-preview', 'gemini-3.8-flash'],
+    ['gemini-2.5-flash', 'gemini-3.8-flash'],
+    ['gemini-3-flash-preview', 'gemini-3.8-flash'],
+    ['gemini-3.1-flash-lite', 'gemini-3.5-flash-lite'],
+    ['gemini-2.5-flash-lite', 'gemini-3.5-flash-lite'],
+    ['gemini-3.1-flash-lite-preview', 'gemini-3.5-flash-lite'],
+    [null, DEFAULT_AI_MODEL],
+    ['gemini-unknown', DEFAULT_AI_MODEL],
+  ];
+
+  for (const [storedModel, expectedModel] of migrations) {
+    getDb().prepare('UPDATE ai_settings SET model = ? WHERE guild_id = ?').run(storedModel, guildId);
+    assert.equal(getAiSettings(guildId).model, expectedModel, String(storedModel));
+    assert.equal(
+      getDb().prepare('SELECT model FROM ai_settings WHERE guild_id = ?').get(guildId).model,
+      expectedModel,
+      `${storedModel} should be persisted`
+    );
+  }
 
   const context = { userId: 'admin', guild: { id: guildId }, view: 'ai', pending: {}, notice: null };
   const panelText = JSON.stringify(settingsViewTesting.renderAi(context).components[0].toJSON());
@@ -524,8 +868,9 @@ test('AI model selector uses approved models and migrates previous preview choic
   for (const model of AI_MODELS) {
     assert.equal(panelText.includes(`"value":"${model}"`), true);
   }
-  assert.equal(panelText.includes('"value":"gemini-3-flash-preview"'), false);
-  assert.equal(panelText.includes('"value":"gemini-3.1-flash-lite-preview"'), false);
+  for (const [legacyModel] of migrations.filter(([model]) => model)) {
+    assert.equal(panelText.includes(`"value":"${legacyModel}"`), false);
+  }
 });
 
 test('AI panel displays whitelist members beside its whitelist controls', () => {

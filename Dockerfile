@@ -1,7 +1,7 @@
 FROM node:24-slim AS dependencies
 
 # better-sqlite3 原生模組建置工具
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     python3 \
     && rm -rf /var/lib/apt/lists/*
@@ -11,20 +11,33 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev
 
+FROM node:24-slim AS youtube-tool
+
+# Official standalone includes EJS; use the existing Node runtime for challenges.
+COPY scripts/install-ytdlp.mjs /tmp/install-ytdlp.mjs
+RUN node /tmp/install-ytdlp.mjs
+
 FROM node:24-slim
 
 # CJK 與 Emoji 字型（圖片渲染用）
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-noto-cjk \
     fonts-noto-color-emoji \
     fontconfig \
+    ffmpeg \
     gosu \
+    && ffmpeg -hide_banner -loglevel error -f lavfi -i sine=frequency=440:duration=0.1 \
+        -af volume=0.5 -ar 48000 -ac 2 -c:a libopus -b:a 128k -vbr on \
+        -compression_level 10 -application audio -frame_duration 20 \
+        -f ogg -page_duration 20000 -flush_packets 1 -y /dev/null \
     && fc-cache -fv \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
+COPY --from=youtube-tool /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp
+RUN test "$(yt-dlp --version)" = "2026.08.19"
 COPY --chown=node:node . .
 
 # SQLite 與日誌目錄必須可由非 root 使用者寫入

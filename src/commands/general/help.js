@@ -3,21 +3,22 @@ import {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    ComponentType,
     ContainerBuilder,
     PermissionFlagsBits,
     SectionBuilder,
+    StringSelectMenuBuilder,
 } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
-import { ansiBlock, COLORS, UI_COLORS } from '../../utils/style.js';
+import { ansiRows, UI_COLORS } from '../../utils/style.js';
 import { ephemeralV2Payload, v2Divider, v2EditPayload, v2Panel, v2Text } from '../../utils/componentsV2.js';
 import { parseScopedCustomId, scopedCustomId } from '../../utils/customIds.js';
 import { openSettingsPanelFromHelp } from '../admin/settings.js';
 import { execute as openSteamSearch } from '../steam/steam.js';
 import { execute as openStatsSearch } from '../esports/stats.js';
 import { execute as openWuwaSearch } from '../gacha/wuwa.js';
+import { execute as openMusicPlayer } from '../music/music.js';
 import { openPollComposer } from '../fun/poll.js';
 import { openGiveawayComposer } from '../fun/giveaway.js';
 import { openReminderComposer, openReminderManager } from './remind.js';
@@ -35,6 +36,7 @@ const DIRECT_QUERY_ACTIONS = {
     特價查詢: { action: 'steam', label: '開啟皇家採購查詢', style: ButtonStyle.Primary },
     戰績: { action: 'stats', label: '開啟皇家戰報查詢', style: ButtonStyle.Primary },
     鳴潮抽卡: { action: 'wuwa', label: '開啟鳴潮喚取卷宗', style: ButtonStyle.Primary },
+    音樂: { action: 'music', label: '開啟音樂播放器', style: ButtonStyle.Primary },
     投票: { action: 'poll', label: '建立皇家投票', style: ButtonStyle.Primary },
     抽獎: { action: 'giveaway', label: '建立皇家抽獎', style: ButtonStyle.Primary },
     提醒: { action: 'reminder_create', label: '新增皇家提醒', style: ButtonStyle.Primary },
@@ -42,10 +44,7 @@ const DIRECT_QUERY_ACTIONS = {
 const EXTRA_DIRECT_ACTIONS = {
     提醒: [{ action: 'reminder_manage', label: '管理我的提醒', style: ButtonStyle.Secondary }],
 };
-const HOME_DIRECT_CATEGORY_ACTIONS = {
-    steam: 'steam',
-};
-const TEXTLESS_HELP_COMMANDS = new Set(['特價查詢', '戰績', '鳴潮抽卡', '提醒']);
+const TEXTLESS_HELP_COMMANDS = new Set(['特價查詢', '戰績', '鳴潮抽卡', '提醒', '音樂']);
 
 const CATEGORY_META = {
     general: {
@@ -74,6 +73,13 @@ const CATEGORY_META = {
         emoji: '🎮',
         description: '開啟皇家採購簿，私下查詢 Steam 情報。',
         order: 40,
+        group: 'public'
+    },
+    music: {
+        label: '音樂',
+        emoji: '🎵',
+        description: '搜尋 NAS 曲庫或貼上 YouTube 連結，在語音頻道點播並控制共用佇列。',
+        order: 42,
         group: 'public'
     },
     esports: {
@@ -140,6 +146,7 @@ const COMMAND_META = {
     特價查詢: { label: '皇家採購查詢', examples: ['/特價查詢（輸入名稱後選取正確 Steam 遊戲）'] },
     戰績: { label: '皇家戰報查詢', examples: ['/戰績（彈窗內選擇遊戲並輸入 Riot ID）'] },
     鳴潮抽卡: { label: '皇家鳴潮喚取卷宗', examples: ['/鳴潮抽卡（綁定 UID、更新或查詢指定卡池）'] },
+    音樂: { label: '皇家音樂播放器', examples: ['/音樂（先加入語音頻道，搜尋 NAS 或貼上 YouTube 連結點播）'] },
     設定: { label: '皇家管理控制台', examples: ['/設定'] },
 };
 
@@ -201,57 +208,60 @@ async function openHelpPanel(interaction, replaceMessage) {
     }
 
     const response = replaceMessage ? interaction.message : await interaction.fetchReply();
-    const collector = response.createMessageComponentCollector({
-        componentType: ComponentType.Button,
-        time: COLLECTOR_TIME
-    });
+    const collector = response.createMessageComponentCollector({ time: COLLECTOR_TIME });
 
-    collector.on('collect', async (buttonInteraction) => {
-        if (buttonInteraction.user.id !== context.userId) {
-            await buttonInteraction.reply(renderNotice(
+    collector.on('collect', async (componentInteraction) => {
+        if (componentInteraction.user.id !== context.userId) {
+            await componentInteraction.reply(renderNotice(
                 '🛡️ 這份大典不屬於你',
                 '汪！請使用 `/幫助` 開啟屬於你自己的互動選單。'
             ));
             return;
         }
 
-        if (buttonInteraction.customId === makeCustomId(context, 'settings')) {
+        if (componentInteraction.customId === makeCustomId(context, 'settings')) {
             collector.stop('settings');
-            await openSettingsPanelFromHelp(buttonInteraction, openHelpHomeFromSettings);
+            await openSettingsPanelFromHelp(componentInteraction, openHelpHomeFromSettings);
             return;
         }
-        if (buttonInteraction.customId === makeCustomId(context, 'launch', 'steam')) {
-            await openSteamSearch(buttonInteraction);
+        if (componentInteraction.customId === makeCustomId(context, 'launch', 'steam')) {
+            await openSteamSearch(componentInteraction);
             return;
         }
-        if (buttonInteraction.customId === makeCustomId(context, 'launch', 'stats')) {
-            await openStatsSearch(buttonInteraction);
+        if (componentInteraction.customId === makeCustomId(context, 'launch', 'stats')) {
+            await openStatsSearch(componentInteraction);
             return;
         }
-        if (buttonInteraction.customId === makeCustomId(context, 'launch', 'wuwa')) {
-            await openWuwaSearch(buttonInteraction);
+        if (componentInteraction.customId === makeCustomId(context, 'launch', 'wuwa')) {
+            await openWuwaSearch(componentInteraction);
             return;
         }
-        if (buttonInteraction.customId === makeCustomId(context, 'launch', 'poll')) {
-            await openPollComposer(buttonInteraction);
+        if (componentInteraction.customId === makeCustomId(context, 'launch', 'music')) {
+            await openMusicPlayer(componentInteraction);
             return;
         }
-        if (buttonInteraction.customId === makeCustomId(context, 'launch', 'giveaway')) {
-            await openGiveawayComposer(buttonInteraction);
+        if (componentInteraction.customId === makeCustomId(context, 'launch', 'poll')) {
+            await openPollComposer(componentInteraction);
             return;
         }
-        if (buttonInteraction.customId === makeCustomId(context, 'launch', 'reminder_create')) {
-            await openReminderComposer(buttonInteraction);
+        if (componentInteraction.customId === makeCustomId(context, 'launch', 'giveaway')) {
+            await openGiveawayComposer(componentInteraction);
             return;
         }
-        if (buttonInteraction.customId === makeCustomId(context, 'launch', 'reminder_manage')) {
-            await openReminderManager(buttonInteraction);
+        if (componentInteraction.customId === makeCustomId(context, 'launch', 'reminder_create')) {
+            await openReminderComposer(componentInteraction);
+            return;
+        }
+        if (componentInteraction.customId === makeCustomId(context, 'launch', 'reminder_manage')) {
+            await openReminderManager(componentInteraction);
             return;
         }
 
-        const nextPayload = routeButton(buttonInteraction.customId, context);
+        const nextPayload = componentInteraction.isStringSelectMenu()
+            ? routeCategorySelection(componentInteraction.customId, componentInteraction.values[0], context)
+            : routeButton(componentInteraction.customId, context);
         if (!nextPayload) {
-            await buttonInteraction.reply(renderNotice(
+            await componentInteraction.reply(renderNotice(
                 '⌛ 按鈕已失效',
                 '請重新使用 `/幫助`，本王會替你翻開新的一本大典。'
             ));
@@ -259,7 +269,7 @@ async function openHelpPanel(interaction, replaceMessage) {
         }
 
         context.currentComponents = nextPayload.components;
-        await buttonInteraction.update({
+        await componentInteraction.update({
             components: nextPayload.components
         });
     });
@@ -416,79 +426,53 @@ function routeButton(customId, context) {
     return null;
 }
 
+function routeCategorySelection(customId, categoryId, context) {
+    if (customId !== makeCustomId(context, 'category')) return null;
+    const category = context.catalog.find((item) => item.id === categoryId);
+    return category ? renderCategory(context, category, 0) : renderHome(context);
+}
+
 function renderHome(context) {
-    const publicCategories = context.catalog.filter((category) => category.group !== 'admin');
-    const adminCategories = context.catalog.filter((category) => category.group === 'admin');
     const commandCount = context.catalog.reduce((total, category) => total + category.commands.filter((command) => !command.helpOnly).length, 0);
     const interactiveCount = context.catalog.reduce((total, category) => total + category.commands.filter((command) => command.helpOnly).length, 0);
-    const viewMode = context.canOpenSettings || adminCategories.length > 0 ? '管理模式' : '一般模式';
-    const firstCategory = context.catalog[0];
 
     const panel = v2Panel(UI_COLORS.ROYAL)
         .addTextDisplayComponents(v2Text([
             '# 🐕👑 吉吉國王的指令大典',
-            '汪！選一個分類，本王立刻翻到那一章給你看。',
+            '選擇分類查看詳情，或直接開啟常用功能。',
         ].join('\n')))
-        .addSeparatorComponents(v2Divider());
+        .addSeparatorComponents(v2Divider())
+        .addTextDisplayComponents(v2Text([
+            '## ✨ 御前速覽',
+            ansiRows([
+                { label: '分類', value: `${context.catalog.length} 個可瀏覽分類`, tone: 'royal' },
+                { label: '指令', value: `${commandCount} 個可使用指令`, tone: 'info' },
+                { label: '互動', value: `${interactiveCount} 個直接入口`, tone: interactiveCount > 0 ? 'special' : 'neutral' },
+            ]),
+        ].join('\n')));
 
-    const statusText = [
-        '## ✨ 今日御前狀態',
-        ansiBlock([
-            { color: context.canOpenSettings || adminCategories.length > 0 ? COLORS.GOLD : COLORS.CYAN, text: `[模式] ${viewMode}` },
-            { color: COLORS.WHITE, text: `[分類] ${context.catalog.length} 個可瀏覽分類` },
-            { color: COLORS.WHITE, text: `[指令] ${commandCount} 個可使用指令` },
-            { color: COLORS.WHITE, text: `[活動] ${interactiveCount} 個按鈕入口` },
-            { color: COLORS.GRAY, text: '[操作] 按分類按鈕可翻頁、查看詳情、返回首頁' }
-        ]),
-    ].join('\n');
-    if (firstCategory) {
-        const firstCategoryAction = getHomeCategoryAction(firstCategory);
-        panel.addSectionComponents(
-            new SectionBuilder()
-                .addTextDisplayComponents(v2Text(statusText))
-                .setButtonAccessory(
-                    new ButtonBuilder()
-                        .setCustomId(firstCategoryAction
-                            ? makeCustomId(context, 'launch', firstCategoryAction)
-                            : `${makeCustomId(context, 'cat', firstCategory.id, 0)}:featured`)
-                        .setLabel('開始瀏覽')
-                        .setEmoji('📖')
-                        .setStyle(ButtonStyle.Primary)
-                )
-        );
-    } else {
-        panel.addTextDisplayComponents(v2Text(statusText));
-    }
-
-    if (publicCategories.length > 0) {
+    const categoryRow = buildCategorySelectRow(context);
+    if (categoryRow) {
         panel
             .addSeparatorComponents(v2Divider())
-            .addTextDisplayComponents(v2Text(`## 📚 瀏覽全部功能\n${formatCategoryList(publicCategories)}`));
+            .addTextDisplayComponents(v2Text('## 📚 分類導覽\n從選單挑選一章，即可瀏覽指令與使用方式。'))
+            .addActionRowComponents(categoryRow);
     }
 
-    if (adminCategories.length > 0) {
+    const quickRows = buildHomeQuickRows(context);
+    if (quickRows.length > 0) {
         panel
             .addSeparatorComponents(v2Divider())
-            .addTextDisplayComponents(v2Text([
-                '## 🛡️ 管理工具',
-                formatCategoryList(adminCategories),
-                '',
-                '-# 只顯示你目前具備權限的管理分類與指令。',
-            ].join('\n')));
+            .addTextDisplayComponents(v2Text('## 🚪 常用入口'))
+            .addActionRowComponents(...quickRows);
     }
 
     if (context.canOpenSettings) {
         panel
             .addSeparatorComponents(v2Divider())
             .addTextDisplayComponents(v2Text([
-                '-# ADMINISTRATOR ACCESS  /  CONTROL CENTER',
-                '## 🐕👑 皇家管理控制台',
-                '集中巡視領地健康度、服務狀態與公開管理操作。',
-                '',
-                ansiBlock([
-                    { color: COLORS.GOLD, text: '[ ACCESS ] Administrator 專用' },
-                    { color: COLORS.CYAN, text: '[ SCOPE  ] 設定 / 狀態 / 公告 / 成員查詢' },
-                ]),
+                '## 🛡️ 皇家管理控制台',
+                '管理伺服器設定、健康狀態與公告工具。',
             ].join('\n')))
             .addActionRowComponents(
                 new ActionRowBuilder().addComponents(
@@ -499,8 +483,7 @@ function renderHome(context) {
 
     panel
         .addSeparatorComponents(v2Divider())
-        .addTextDisplayComponents(v2Text('-# 只有你能操作這份 `/幫助` 選單，5 分鐘後按鈕會自動停用。'))
-        .addActionRowComponents(...buildCategoryRows(context));
+        .addTextDisplayComponents(v2Text('-# 只有你能操作這份 `/幫助` 選單，5 分鐘後會自動停用。'));
 
     return {
         components: [panel]
@@ -522,13 +505,11 @@ function renderCategory(context, category, page) {
         .addSeparatorComponents(v2Divider())
         .addTextDisplayComponents(v2Text([
             '## 📄 皇家分類卷宗',
-            ansiBlock([
-                { color: COLORS.GOLD, text: `[分類] ${category.label}` },
-                { color: COLORS.CYAN, text: `[頁數] ${safePage + 1} / ${maxPage + 1}` },
-                { color: COLORS.WHITE, text: `[指令] ${commandCount} 個可使用指令` },
-                ...(interactiveCommands.length > 0
-                    ? [{ color: COLORS.WHITE, text: `[互動] ${interactiveCommands.length} 個按鈕入口` }]
-                    : [])
+            ansiRows([
+                { label: '分類', value: category.label, tone: 'royal' },
+                { label: '頁次', value: `${safePage + 1} / ${maxPage + 1}`, tone: 'info' },
+                { label: '指令', value: `${commandCount} 個`, tone: 'success' },
+                { label: '互動', value: `${interactiveCommands.length} 個入口`, tone: interactiveCommands.length > 0 ? 'special' : 'neutral' },
             ]),
         ].join('\n')));
 
@@ -596,11 +577,10 @@ function renderDetail(context, category, page, commandIndex) {
         .addSeparatorComponents(v2Divider())
         .addTextDisplayComponents(v2Text([
             command.helpOnly || hideCommandText ? '## 📌 御前互動資訊' : '## 📌 御前指令資訊',
-            ansiBlock([
-                { color: COLORS.GOLD, text: command.helpOnly || hideCommandText ? '[入口] 互動按鈕' : `[指令] ${command.name}` },
-                { color: COLORS.CYAN, text: `[分類] ${category.label}` },
-                { color: COLORS.WHITE, text: `[權限] ${formatPermission(command.permission)}` },
-                { color: COLORS.WHITE, text: command.helpOnly || hideCommandText ? '[用法] 點擊下方按鈕' : `[用法] ${command.usage}` }
+            ansiRows([
+                { label: '類型', value: command.helpOnly || hideCommandText ? '互動按鈕' : 'Slash 指令', tone: 'royal' },
+                { label: '分類', value: category.label, tone: 'info' },
+                { label: '權限', value: formatPermission(command.permission), tone: command.permission ? 'warning' : 'success' },
             ]),
         ].join('\n')))
         .addSeparatorComponents(v2Divider())
@@ -652,27 +632,38 @@ function renderDetail(context, category, page, commandIndex) {
     };
 }
 
-function formatCategoryList(categories) {
-    return categories
-        .map((category) => `${category.emoji} **${category.label}**：${category.description}`)
-        .join('\n');
+function buildCategorySelectRow(context) {
+    if (context.catalog.length === 0) return null;
+    const select = new StringSelectMenuBuilder()
+        .setCustomId(makeCustomId(context, 'category'))
+        .setPlaceholder('選擇功能分類')
+        .setMinValues(1)
+        .setMaxValues(1)
+        .addOptions(...context.catalog.slice(0, 25).map((category) => ({
+            label: category.label,
+            value: category.id,
+            description: category.description.slice(0, 100),
+            emoji: category.emoji,
+        })));
+    return new ActionRowBuilder().addComponents(select);
 }
 
-function buildCategoryRows(context) {
-    const buttons = context.catalog.slice(0, 20).map((category) => {
-        const directAction = getHomeCategoryAction(category);
-        return new ButtonBuilder()
-            .setCustomId(directAction
-                ? makeCustomId(context, 'launch', directAction)
-                : makeCustomId(context, 'cat', category.id, 0))
-            .setLabel(category.label)
-            .setEmoji(category.emoji)
-            .setStyle(category.group === 'admin' ? ButtonStyle.Secondary : ButtonStyle.Primary);
-    });
-
-    return chunk(buttons, 5).map((buttonChunk) =>
-        new ActionRowBuilder().addComponents(buttonChunk)
-    );
+function buildHomeQuickRows(context) {
+    const quickLabels = new Map([
+        ['特價查詢', 'Steam 特價'],
+        ['戰績', '戰績查詢'],
+        ['鳴潮抽卡', '鳴潮抽卡'],
+        ['音樂', '音樂播放器'],
+    ]);
+    const buttons = context.catalog
+        .flatMap((category) => category.commands)
+        .filter((command) => quickLabels.has(command.name))
+        .slice(0, 4)
+        .map((command) => new ButtonBuilder()
+            .setCustomId(makeCustomId(context, 'launch', DIRECT_QUERY_ACTIONS[command.name].action))
+            .setLabel(quickLabels.get(command.name))
+            .setStyle(ButtonStyle.Secondary));
+    return buttons.length > 0 ? [new ActionRowBuilder().addComponents(buttons)] : [];
 }
 
 function buildCategoryNavigationRows(context, category, page, pageCommands) {
@@ -749,15 +740,16 @@ function buildDetailRows(context, category, page, pageCommands, activeIndex, com
 }
 
 function buildDirectQueryRows(context, commands) {
-    const buttons = commands
-        .flatMap((command) => getDirectActions(command.name))
-        .map((action) => new ButtonBuilder()
+    const actions = commands.flatMap((command) => getDirectActions(command.name));
+    return chunk(actions, 5).map((actionChunk) => {
+        const hasPeerPrimaryActions = actionChunk.filter((action) => action.style === ButtonStyle.Primary).length > 1;
+        return new ActionRowBuilder().addComponents(...actionChunk.map((action) => new ButtonBuilder()
             .setCustomId(makeCustomId(context, 'launch', action.action))
             .setLabel(action.label)
-            .setStyle(action.style));
-    return chunk(buttons, 5).map((buttonChunk) =>
-        new ActionRowBuilder().addComponents(buttonChunk)
-    );
+            .setStyle(hasPeerPrimaryActions && action.style === ButtonStyle.Primary
+                ? ButtonStyle.Secondary
+                : action.style)));
+    });
 }
 
 function getDirectActions(commandName) {
@@ -769,6 +761,9 @@ function getDirectActions(commandName) {
 }
 
 function getCategoryUsageText(command) {
+    if (command.name === '音樂') {
+        return '操作：先加入一般語音頻道，再點擊「開啟音樂播放器」搜尋 NAS 曲庫或按「YouTube 點播」貼上單曲連結；YouTube 不需 NAS 登入。';
+    }
     if (command.name === '提醒') {
         return '操作：使用下方按鈕新增提醒，或管理尚未送出的皇家傳喚。';
     }
@@ -779,16 +774,15 @@ function getCategoryUsageText(command) {
 }
 
 function getDetailLaunchText(command) {
+    if (command.name === '音樂') {
+        return '先加入一般語音頻道，再按下方按鈕開啟音樂介面；NAS 需各自登入，YouTube 可直接貼上影片或單曲連結（最多 2 小時）。';
+    }
     if (command.name === '提醒') {
         return '按下方按鈕新增提醒或管理待發送項目。';
     }
     return DIRECT_QUERY_ACTIONS[command.name]
         ? '按下方按鈕即可開啟互動介面，不必再輸入指令。'
         : command.mention;
-}
-
-function getHomeCategoryAction(category) {
-    return HOME_DIRECT_CATEGORY_ACTIONS[category?.id];
 }
 
 function getCategoryCommandHeading(command) {
@@ -834,6 +828,7 @@ function renderNotice(title, message) {
 function makeCustomId(context, view, category = 'home', page = 0, commandIndex = 0) {
     if (view === 'home') return scopedCustomId('help', context.userId, 'home');
     if (view === 'settings') return scopedCustomId('help', context.userId, 'settings');
+    if (view === 'category') return scopedCustomId('help', context.userId, 'category');
     if (view === 'launch') return scopedCustomId('help', context.userId, 'launch', category);
     if (view === 'detail') return scopedCustomId('help', context.userId, 'detail', category, page, commandIndex);
     return scopedCustomId('help', context.userId, 'cat', category, page);
@@ -926,6 +921,8 @@ export const helpViewTesting = {
     renderHome,
     renderCategory,
     renderDetail,
+    routeButton,
+    routeCategorySelection,
     mergeGameQueryCategories,
     makeCustomId,
     parseHelpCustomId,

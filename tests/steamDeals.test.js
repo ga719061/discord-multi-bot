@@ -10,9 +10,17 @@ import {
   fetchSteamAppDetails,
   fetchSteamJson,
   fetchSteamLimitedFreeGames,
+  fetchSteamLimitedFreeGamesSnapshot,
   getSteamFailureMessage,
   isValidSteamDealTime,
 } from '../src/utils/steamDeals.js';
+
+function steamSearchResult(id) {
+  return `<a data-ds-appid="${id}" data-price-final="0" data-discount="100">` +
+    `<img src="https://cdn.example.test/free-${id}.jpg">` +
+    `<span class="title">Search Game ${id}</span>` +
+    '<div class="discount_original_price">NT$ 500</div></a>';
+}
 
 test('isValidSteamDealTime accepts Taiwan daily push time format only', () => {
   assert.equal(isValidSteamDealTime('20:00'), true);
@@ -147,6 +155,202 @@ test('fetchSteamLimitedFreeGames keeps only temporary 100 percent free discounts
   assert.equal(games[0].original_price, 50000);
 });
 
+test('fetchSteamLimitedFreeGamesSnapshot paginates all candidates and verifies them in batches of 50', async () => {
+  const candidateIds = Array.from({ length: 52 }, (_, index) => index + 1001);
+  const searchStarts = [];
+  const browseBatchSizes = [];
+
+  const games = await fetchSteamLimitedFreeGamesSnapshot(async (url) => {
+    const requestUrl = new URL(url);
+    if (requestUrl.hostname === 'store.steampowered.com') {
+      const start = Number(requestUrl.searchParams.get('start'));
+      searchStarts.push(start);
+      const ids = start === 0 ? candidateIds.slice(0, 50) : candidateIds.slice(50);
+      return {
+        ok: true,
+        json: async () => ({
+          total_count: candidateIds.length,
+          results_html: ids.map(steamSearchResult).join(''),
+        }),
+      };
+    }
+
+    const input = JSON.parse(requestUrl.searchParams.get('input_json'));
+    browseBatchSizes.push(input.ids.length);
+    assert.deepEqual(input.context, { language: 'tchinese', country_code: 'TW' });
+    assert.equal(input.data_request.include_all_purchase_options, true);
+    return {
+      ok: true,
+      json: async () => ({
+        response: {
+          store_items: input.ids.map(({ appid }) => ({
+            appid,
+            name: `Official Game ${appid}`,
+            is_free_temporarily: true,
+            best_purchase_option: {
+              is_free_to_keep: true,
+              original_price_in_cents: 50000,
+              final_price_in_cents: 0,
+              free_to_keep_ends: 2_000_000_000,
+            },
+          })),
+        },
+      }),
+    };
+  }, { now: 1_000_000_000 });
+
+  assert.deepEqual(searchStarts, [0, 50]);
+  assert.deepEqual(browseBatchSizes, [50, 2]);
+  assert.equal(games.length, 52);
+  assert.deepEqual(games[0], {
+    id: 1001,
+    name: 'Official Game 1001',
+    discount_percent: 100,
+    final_price: 0,
+    original_price: 50000,
+    header_image: 'https://cdn.example.test/free-1001.jpg',
+    large_capsule_image: 'https://cdn.example.test/free-1001.jpg',
+    free_until: 2_000_000_000,
+  });
+});
+
+test('fetchSteamLimitedFreeGamesSnapshot excludes expired and non-free-to-keep items but keeps unknown deadlines', async () => {
+  const statuses = new Map([
+    [201, { is_free_temporarily: true, is_free_to_keep: true, free_to_keep_ends: 2_000 }],
+    [202, { is_free_temporarily: true, is_free_to_keep: true, free_to_keep_ends: 999 }],
+    [203, { is_free_temporarily: false, is_free_to_keep: true, free_to_keep_ends: 2_000 }],
+    [204, { is_free_temporarily: true, is_free_to_keep: false, free_to_keep_ends: 2_000 }],
+    [205, { is_free_temporarily: true, is_free_to_keep: true }],
+  ]);
+
+  const games = await fetchSteamLimitedFreeGamesSnapshot(async (url) => {
+    const requestUrl = new URL(url);
+    if (requestUrl.hostname === 'store.steampowered.com') {
+      return {
+        ok: true,
+        json: async () => ({
+          total_count: statuses.size,
+          results_html: [...statuses.keys()].map(steamSearchResult).join(''),
+        }),
+      };
+    }
+
+    return {
+      ok: true,
+      json: async () => ({
+        response: {
+          store_items: [...statuses].map(([appid, status]) => ({
+            appid,
+            is_free_temporarily: status.is_free_temporarily,
+            best_purchase_option: {
+              is_free_to_keep: status.is_free_to_keep,
+              original_price_in_cents: null,
+              free_to_keep_ends: status.free_to_keep_ends,
+            },
+          })),
+        },
+      }),
+    };
+  }, { now: 1_000 });
+
+  assert.deepEqual(games.map((game) => game.id), [201, 205]);
+  assert.equal(games[0].original_price, 50000);
+  assert.equal(games[0].free_until, 2_000);
+  assert.equal(games[1].free_until, null);
+});
+
+test('fetchSteamLimitedFreeGamesSnapshot keeps search candidates when Steam browse is unavailable', async () => {
+  const games = await fetchSteamLimitedFreeGamesSnapshot(async (url) => {
+    const requestUrl = new URL(url);
+    if (requestUrl.hostname === 'store.steampowered.com') {
+      return {
+        ok: true,
+        json: async () => ({ total_count: 1, results_html: steamSearchResult(301) }),
+      };
+    }
+    return { ok: false, status: 503 };
+  });
+
+  assert.deepEqual(games.map((game) => game.id), [301]);
+  assert.equal(games[0].free_until, null);
+  assert.equal(games[0].browse_verified, false);
+});
+
+test('fetchSteamLimitedFreeGamesSnapshot keeps candidates omitted from a partial browse response', async () => {
+  const warnings = [];
+  const games = await fetchSteamLimitedFreeGamesSnapshot(async (url) => {
+    const requestUrl = new URL(url);
+    if (requestUrl.hostname === 'store.steampowered.com') {
+      return {
+        ok: true,
+        json: async () => ({
+          total_count: 2,
+          results_html: steamSearchResult(401) + steamSearchResult(402),
+        }),
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({
+        response: {
+          store_items: [{
+            appid: 401,
+            name: 'Verified Game 401',
+            is_free_temporarily: true,
+            best_purchase_option: {
+              is_free_to_keep: true,
+              free_to_keep_ends: 2_000_000_000,
+            },
+          }],
+        },
+      }),
+    };
+  }, {
+    now: 1_000_000_000,
+    logger: { warn: (...args) => warnings.push(args) },
+  });
+
+  assert.deepEqual(games.map((game) => game.id), [401, 402]);
+  assert.equal(games[0].free_until, 2_000_000_000);
+  assert.equal(games[1].free_until, null);
+  assert.equal(games[1].browse_verified, false);
+  assert.equal(warnings.length, 1);
+});
+
+test('fetchSteamLimitedFreeGamesSnapshot keeps and warns about incomplete browse verification', async () => {
+  const warnings = [];
+  const games = await fetchSteamLimitedFreeGamesSnapshot(async (url) => {
+    const requestUrl = new URL(url);
+    if (requestUrl.hostname === 'store.steampowered.com') {
+      return {
+        ok: true,
+        json: async () => ({ total_count: 1, results_html: steamSearchResult(501) }),
+      };
+    }
+    return {
+      ok: true,
+      json: async () => ({ response: { store_items: [{ appid: 501 }] } }),
+    };
+  }, { logger: { warn: (...args) => warnings.push(args) } });
+
+  assert.deepEqual(games.map((game) => game.id), [501]);
+  assert.equal(games[0].browse_verified, false);
+  assert.equal(warnings.length, 1);
+});
+
+test('fetchSteamLimitedFreeGamesSnapshot rejects non-empty search results that cannot be parsed', async () => {
+  await assert.rejects(
+    fetchSteamLimitedFreeGamesSnapshot(async () => ({
+      ok: true,
+      json: async () => ({
+        total_count: 1,
+        results_html: '<a class="search_result_row"><span>changed markup</span></a>',
+      }),
+    })),
+    (error) => error.name === 'SteamServiceError' && error.code === 'invalid_data'
+  );
+});
+
 test('buildSteamFreeGamesPayload displays up to ten ranked free-game rows with capsule images and detail selector', () => {
   const games = Array.from({ length: 12 }, (_, index) => ({
     id: index + 1,
@@ -175,4 +379,71 @@ test('buildSteamFreeGamesPayload displays up to ten ranked free-game rows with c
   assert.equal(selector.custom_id, 'steam_deal_detail');
   assert.equal(selector.options.length, 10);
   assert.equal(countV2Components(payload.components) <= 40, true);
+});
+
+test('buildSteamFreeGamesPayload sorts deadlines and displays Taiwan and Discord relative times', () => {
+  const later = Math.floor(Date.parse('2026-08-11T04:00:00Z') / 1000);
+  const sooner = Math.floor(Date.parse('2026-08-10T04:00:00Z') / 1000);
+  const games = [
+    { id: 1, name: 'Later', discount_percent: 100, original_price: 50000, final_price: 0, free_until: later },
+    { id: 2, name: 'Unknown', discount_percent: 100, original_price: 50000, final_price: 0, free_until: null },
+    { id: 3, name: 'Sooner', discount_percent: 100, original_price: 50000, final_price: 0, free_until: sooner },
+  ];
+
+  const payload = buildSteamFreeGamesPayload(games, {
+    checkedAt: new Date('2026-08-09T04:00:00Z'),
+  });
+  const children = payload.components[0].toJSON().components;
+  const selector = children.find((component) => component.type === ComponentType.ActionRow).components[0];
+  const text = JSON.stringify(children);
+
+  assert.deepEqual(selector.options.map((option) => option.value), ['3', '1', '2']);
+  assert.match(text, new RegExp(`免費截止：2026/08/10 12:00（台灣時間，<t:${sooner}:R>）`));
+  assert.match(text, /免費截止：Steam 未提供截止時間/);
+  assert.match(text, /最後檢查 2026-08-09 12:00/);
+});
+
+test('buildSteamFreeGamesPayload keeps old content while showing a disabled notice', () => {
+  const payload = buildSteamFreeGamesPayload([{
+    id: 42,
+    name: 'Still Visible',
+    discount_percent: 100,
+    original_price: 50000,
+    final_price: 0,
+  }], {
+    disabled: true,
+  });
+  const text = JSON.stringify(payload.components.map((panel) => panel.toJSON()));
+
+  assert.match(text, /Still Visible/);
+  assert.match(text, /自動更新已停用/);
+  assert.equal(countV2Components(payload.components) <= 40, true);
+});
+
+test('buildSteamFreeGamesPayload produces an empty state without an empty select menu', () => {
+  const payload = buildSteamFreeGamesPayload([], {
+    checkedAt: new Date('2026-08-09T04:00:00Z'),
+  });
+  const children = payload.components[0].toJSON().components;
+  const text = JSON.stringify(children);
+
+  assert.match(text, /目前沒有 Steam 限時免費活動/);
+  assert.equal(children.some((component) => component.type === ComponentType.ActionRow), false);
+  assert.equal(countV2Components(payload.components) <= 40, true);
+});
+
+test('buildSteamFreeGamesPayload labels browse fallback candidates as awaiting verification', () => {
+  const payload = buildSteamFreeGamesPayload([{
+    id: 77,
+    name: 'Fallback Game',
+    discount_percent: 100,
+    original_price: 50000,
+    final_price: 0,
+    free_until: null,
+    browse_verified: false,
+  }]);
+  const text = JSON.stringify(payload.components.map((panel) => panel.toJSON()));
+
+  assert.match(text, /永久入庫狀態與截止時間暫時無法由 Steam 複核/);
+  assert.match(text, /永久入庫狀態待 Steam 複核/);
 });

@@ -20,15 +20,21 @@ function serialize(payload) {
   return JSON.stringify(payload.components.map((component) => component.toJSON()));
 }
 
+function stripAnsi(text) {
+  return text
+    .replace(/\\u001b\[[0-9;]*m/g, '')
+    .replace(/\u001b\[[0-9;]*m/g, '');
+}
+
 test('/特價查詢 opens a direct royal search modal without legacy slash parameters', () => {
   const command = data.toJSON();
   const modalJson = buildSteamSearchModal('session').toJSON();
   const modal = JSON.stringify(modalJson);
   const textDisplay = modalJson.components.find((component) => component.type === ComponentType.TextDisplay);
   const textInputs = modalJson.components
-    .filter((component) => component.type === ComponentType.ActionRow)
-    .flatMap((row) => row.components)
-    .filter((component) => component.type === ComponentType.TextInput);
+    .filter((component) => component.type === ComponentType.Label)
+    .map((label) => label.component)
+    .filter((component) => component?.type === ComponentType.TextInput);
 
   assert.equal(command.options?.length ?? 0, 0);
   assert.match(command.description, /皇家採購/);
@@ -41,6 +47,7 @@ test('/特價查詢 opens a direct royal search modal without legacy slash param
   assert.equal(textDisplay.content.includes('功能說明'), true);
   assert.equal(textInputs.length, 1);
   assert.equal(textInputs[0].custom_id, 'game_name');
+  assert.match(modal, /可輸入中文或英文名稱/);
 });
 
 test('Steam keyword search offers a private candidate game selector before showing details', () => {
@@ -54,6 +61,9 @@ test('Steam keyword search offers a private candidate game selector before showi
   assert.match(text, /皇家採購搜尋結果/);
   assert.match(text, /Royal Game/);
   assert.match(text, /Royal Game Deluxe/);
+  assert.match(text, /```ansi/);
+  assert.match(stripAnsi(text), /\[搜尋\] Royal/);
+  assert.match(stripAnsi(text), /\[候選\] 2 款遊戲/);
   assert.match(text, /steam_search:session:select/);
 });
 
@@ -92,6 +102,16 @@ test('Steam result is private until the owner publishes it once', () => {
   assert.match(serialize(privatePayload), /頒布至目前頻道/);
   assert.match(serialize(privatePayload), /返回候選清單/);
   assert.match(serialize(privatePayload), /重新搜尋/);
+  const privateCard = serialize(privatePayload);
+  const readableCard = stripAnsi(privateCard);
+  assert.match(privateCard, /```ansi/);
+  assert.match(readableCard, /\[範圍\] 私人情報/);
+  assert.match(readableCard, /\[價格\] NT\$ 200/);
+  assert.match(readableCard, /\[折扣\] -60%/);
+  assert.match(readableCard, /\[評分\] 88/);
+  assert.match(readableCard, /\[發售\] 2026 年 5 月 27 日/);
+  assert.match(privateCard, /Royal Game 的 Steam 商店封面/);
+  assert.equal('embeds' in privatePayload, false);
   assert.ok(countV2Components(privatePayload.components) <= 40);
   assert.match(serialize(publishedPayload), /聖旨已頒布/);
   assert.equal(serialize(publicPayload).includes('頒布至目前頻道'), false);

@@ -4,6 +4,7 @@ import {
   ButtonStyle,
   ChannelSelectMenuBuilder,
   ChannelType,
+  LabelBuilder,
   MessageFlags,
   ModalBuilder,
   PermissionFlagsBits,
@@ -40,13 +41,12 @@ import { parseJsonObject } from '../../utils/jsonUtils.js';
 import { normalizeSelfRoleSettings, validateAssignableRole } from '../../utils/roleSettings.js';
 import {
   buildSteamDealsPayload,
-  buildSteamFreeGamesPayload,
-  fetchSteamLimitedFreeGames,
   fetchSteamSpecialDeals,
   getSteamFailureMessage,
   isValidSteamDealTime,
 } from '../../utils/steamDeals.js';
-import { ansiBlock, COLORS, UI_COLORS } from '../../utils/style.js';
+import { refreshSteamFreeBoardNow } from '../../utils/steamFreeBoard.js';
+import { ansiRows, UI_COLORS } from '../../utils/style.js';
 import { ephemeralV2Payload, v2Divider, v2EditPayload, v2Notice, v2Panel, v2Payload, v2Text } from '../../utils/componentsV2.js';
 import { parseScopedCustomId, scopedCustomId } from '../../utils/customIds.js';
 
@@ -74,6 +74,15 @@ const LOG_TYPES = [
   { value: 'server', label: '伺服器改動' },
   { value: 'voice', label: '語音狀態' },
   { value: 'thread', label: '討論串監控' },
+];
+const SETTINGS_VIEW_OPTIONS = [
+  { label: '歡迎訊息', value: 'welcome', description: '設定迎賓頻道與歡迎內容' },
+  { label: '紀錄設定', value: 'logging', description: '設定日誌頻道與事件類別' },
+  { label: '等級系統', value: 'leveling', description: '管理爵位晉升公告' },
+  { label: 'Steam 推播', value: 'steam', description: '管理特價與限時免費推播' },
+  { label: '自助身分組', value: 'selfrole', description: '管理成員自助領取選項' },
+  { label: '按鈕身分組', value: 'reaction', description: '建立與管理按鈕身分站' },
+  { label: 'AI 設定', value: 'ai', description: '驗證並管理 AI 功能' },
 ];
 const MODULE_STYLE = {
   '歡迎訊息': { section: 'CONFIGURATION / WELCOME', color: UI_COLORS.ROYAL },
@@ -262,6 +271,12 @@ async function handleChannelSelect(component, context, action) {
 }
 
 async function handleStringSelect(component, context, action) {
+  if (action === 'view_select') {
+    context.view = component.values[0];
+    context.pending.confirm = null;
+    context.notice = null;
+    return updateView(component, context);
+  }
   if (action.startsWith('ai_') && !requireAiUnlock(component, context)) return;
   if (action === 'log_types') {
     const toggles = Object.fromEntries(LOG_TYPES.map((type) => [type.value, component.values.includes(type.value) ? 1 : 0]));
@@ -368,8 +383,17 @@ async function handleButton(component, context, action, value) {
     context.notice = '皇家採購推播狀態已更新。';
   }
   if (action === 'steam_free_toggle') {
-    updateGuildSetting(context.guild.id, 'steam_free_enabled', value === 'on' ? 1 : 0);
-    context.notice = 'Steam 限時免費推播狀態已更新。';
+    const enabled = value === 'on';
+    updateGuildSetting(context.guild.id, 'steam_free_enabled', enabled ? 1 : 0);
+    if (!enabled) {
+      await component.deferUpdate();
+      const result = await refreshSteamFreeBoardNow(context.guild, { disabled: true });
+      context.notice = result.status === 'failed'
+        ? { label: '部分完成', tone: 'warning', text: '自動更新已停用，但無法在目前看板標示停用狀態。' }
+        : 'Steam 限時免費自動更新已停用。';
+    } else {
+      context.notice = 'Steam 限時免費自動更新已啟用。';
+    }
   }
   if (action === 'self_add') {
     if (!context.pending.selfTarget) {
@@ -527,15 +551,15 @@ async function openModal(component, context, type) {
     const configuredPassword = process.env.AI_ADMIN_PASSWORD;
     const suppliedPassword = submit.fields.getTextInputValue('password');
     if (!configuredPassword) {
-      context.notice = { label: 'SETUP', color: COLORS.GOLD, text: '尚未配置御前 AI 管理密碼，請先設定環境變數。' };
+      context.notice = { label: '待設定', tone: 'warning', text: '尚未配置御前 AI 管理密碼，請先設定環境變數。' };
     } else if (suppliedPassword !== configuredPassword) {
-      context.notice = { label: 'DENIED', color: COLORS.RED, text: '御前管理密碼錯誤，AI 設定仍處於鎖定狀態。' };
+      context.notice = { label: '拒絕存取', tone: 'danger', text: '御前管理密碼錯誤，AI 設定仍處於鎖定狀態。' };
     } else {
       const settings = getAiSettings(context.guild.id);
       const adminIds = new Set(settings.admin_ids);
       adminIds.add(context.userId);
       updateAiSetting(context.guild.id, 'admin_ids', JSON.stringify([...adminIds]));
-      context.notice = { label: 'ACCESS', color: COLORS.GREEN, text: '御前身分驗證成功，AI 管理權限已解鎖。' };
+      context.notice = { label: '授權成功', tone: 'success', text: '御前身分驗證成功，AI 管理權限已解鎖。' };
     }
   }
   if (type === 'welcome_message') {
@@ -599,51 +623,51 @@ function buildModal(context, type) {
   const modal = new ModalBuilder().setCustomId(id(context, `modal_submit_${type}`));
   if (type === 'welcome_message') {
     const current = context.pending.welcomeMessageDraft || getGuildSettings(context.guild.id).welcome_message || '';
-    return modal.setTitle('編輯皇家迎賓佈告').addComponents(textRow('value', '迎賓內容（可留空恢復預設）', current, TextInputStyle.Paragraph, false));
+    return modal.setTitle('編輯皇家迎賓佈告').addComponents(textRow('value', '迎賓內容', current, TextInputStyle.Paragraph, false, '可使用 {user}；留空會恢復預設內容。'));
   }
   if (type === 'steam_time') {
     const current = getGuildSettings(context.guild.id).steam_deal_time || '20:00';
-    return modal.setTitle('設定每日推播時間').addComponents(textRow('value', '台灣時間 HH:mm', current, TextInputStyle.Short));
+    return modal.setTitle('設定每日推播時間').addComponents(textRow('value', '每日推播時間', current, TextInputStyle.Short, true, '請使用台灣時間 24 小時制，例如 20:00。'));
   }
   if (type === 'steam_free_time') {
     const current = getGuildSettings(context.guild.id).steam_free_time || '21:00';
-    return modal.setTitle('設定限時免費推播時間').addComponents(textRow('value', '台灣時間 HH:mm', current, TextInputStyle.Short));
+    return modal.setTitle('設定限時免費推播時間').addComponents(textRow('value', '限時免費推播時間', current, TextInputStyle.Short, true, '請使用台灣時間 24 小時制，例如 21:00。'));
   }
   if (type === 'self_description') {
-    return modal.setTitle('皇家自助身分領取佈告').addComponents(textRow('value', '領取頁介紹', context.pending.selfDescription || '子民請從下方選單選擇想領取或取消的身分組。', TextInputStyle.Paragraph));
+    return modal.setTitle('皇家自助身分領取佈告').addComponents(textRow('value', '領取頁介紹', context.pending.selfDescription || '子民請從下方選單選擇想領取或取消的身分組。', TextInputStyle.Paragraph, true, '這段文字會顯示在公開的自助身分領取頁。'));
   }
   if (type === 'reaction_create') {
     return modal.setTitle('建立皇家按鈕身分站').addComponents(
-      textRow('pairs', '自訂按鈕:身分組（如 🎮遊戲玩家:身分組 或 📣:身分組 或 遊戲玩家），一行一組', '', TextInputStyle.Paragraph),
-      textRow('title', '標題（選填）', '', TextInputStyle.Short, false)
+      textRow('pairs', '按鈕與身分組配對', '', TextInputStyle.Paragraph, true, '每行一組，例如 🎮遊戲玩家:身分組、📣:身分組。'),
+      textRow('title', '站點標題', '', TextInputStyle.Short, false, '選填；留空會使用預設皇家標題。')
     );
   }
   if (type === 'reaction_pair_add') {
     return modal.setTitle('新增按鈕身分配對').addComponents(
-      textRow('emoji', 'Emoji、文字或兩者（如 🎮遊戲玩家）', '', TextInputStyle.Short)
+      textRow('emoji', '按鈕內容', '', TextInputStyle.Short, true, '輸入 Emoji、文字或兩者，例如 🎮遊戲玩家。')
     );
   }
   if (type === 'reaction_title') {
     return modal.setTitle('設定皇家按鈕身分站標題').addComponents(
-      textRow('title', '標題（選填）', context.pending.reactionTitle || '', TextInputStyle.Short, false)
+      textRow('title', '站點標題', context.pending.reactionTitle || '', TextInputStyle.Short, false, '選填；留空會使用預設皇家標題。')
     );
   }
   if (type === 'ai_unlock') {
-    return modal.setTitle('御前 AI 管理身分驗證').addComponents(textRow('password', '御前管理密碼', '', TextInputStyle.Short));
+    return modal.setTitle('御前 AI 管理身分驗證').addComponents(textRow('password', '御前管理密碼', '', TextInputStyle.Short, true, '輸入管理員提供的 AI 控制台密碼。'));
   }
   if (type === 'ai_prompt') {
-    return modal.setTitle('編輯國王智慧人格').addComponents(textRow('value', '提示詞（留空恢復預設）', '', TextInputStyle.Paragraph, false));
+    return modal.setTitle('編輯國王智慧人格').addComponents(textRow('value', '系統提示詞', '', TextInputStyle.Paragraph, false, '留空會恢復預設人格設定。'));
   }
   if (type === 'ai_draft') {
     const draftType = context.pending.aiDraftType || 'announcement';
     const typeLabel = AI_DRAFT_TYPES.find((entry) => entry.value === draftType)?.label || '公告';
     const tone = context.pending.aiDraftTone || 'clear';
     return modal.setTitle(`AI 草稿中心 | ${typeLabel}`).addComponents(
-      textRow('brief', '主題與重點', context.pending.aiDraft?.sourceBrief || '', TextInputStyle.Paragraph),
-      textRow('tone', '語氣', tone, TextInputStyle.Short, false)
+      textRow('brief', '主題與重點', context.pending.aiDraft?.sourceBrief || '', TextInputStyle.Paragraph, true, '說明草稿目的、必要資訊與限制。'),
+      textRow('tone', '語氣', tone, TextInputStyle.Short, false, '選填；可輸入清楚、正式或可愛等語氣。')
     );
   }
-  return modal.setTitle('啟動皇家 AI 宴會').addComponents(textRow('minutes', '持續分鐘', '30', TextInputStyle.Short));
+  return modal.setTitle('啟動皇家 AI 宴會').addComponents(textRow('minutes', '持續分鐘', '30', TextInputStyle.Short, true, '輸入至少 1 分鐘的整數。'));
 }
 
 async function generateAiDraftForContext(context, { type, brief, tone }) {
@@ -663,8 +687,8 @@ async function generateAiDraftForContext(context, { type, brief, tone }) {
   } catch (error) {
     context.pending.aiDraft = null;
     context.notice = {
-      label: 'AI DRAFT',
-      color: COLORS.RED,
+      label: 'AI 草稿',
+      tone: 'danger',
       text: `草稿產生失敗：${error.message || 'AI 回傳格式無法解析'}。請調整重點後重試。`,
     };
   }
@@ -727,12 +751,10 @@ async function executeConfirmation(component, context) {
   if (type === 'steam_free_publish') {
     await component.deferUpdate();
     try {
-      const count = await publishSteamFreeGames(context.guild);
-      if (count === 0) {
-        await component.followUp(v2Notice('Steam 限時免費目前沒有結果', '本王巡過 Steam 商店了，現在沒有符合 100% 折扣到免費的遊戲。', UI_COLORS.WARNING));
-      }
+      const result = await refreshSteamFreeBoardNow(context.guild);
+      context.notice = steamFreeBoardNotice(result);
     } catch (error) {
-      await component.followUp(v2Notice('Steam 限時免費投放失敗', getSteamFailureMessage(error), UI_COLORS.WARNING));
+      context.notice = { label: '更新失敗', tone: 'danger', text: getSteamFailureMessage(error) };
     }
     context.pending.confirm = null;
     context.view = 'steam';
@@ -807,13 +829,10 @@ async function renderHome(context) {
   const pendingCount = statusItems.filter((item) => item.status === '未設定').length;
   const alertCount = statusItems.filter((item) => item.status === '設定異常').length;
   const overallLabel = alertCount ? '有設定異常需要處理' : pendingCount ? '有項目尚未完成設定' : '所有必要設定正常';
-  const overview = ansiBlock([
-    { color: alertCount ? COLORS.RED : pendingCount ? COLORS.GOLD : COLORS.GREEN, text: `[ CONTROL ] ${overallLabel}` },
-    { color: COLORS.GREEN, text: `[ READY   ] ${readyCount} 個模組運作正常` },
-    { color: COLORS.GOLD, text: `[ SETUP   ] ${pendingCount} 個模組等待設定` },
-    { color: COLORS.RED, text: `[ ALERT   ] ${alertCount} 個模組需要修正` },
-    ...statusItems.map(formatDiagnosticLine),
-  ]);
+  const issueSummary = statusItems
+    .filter((item) => item.status !== '正常')
+    .map((item) => `- **${item.status === '未設定' ? '待設定' : '異常'}｜${item.label}**：${item.detail}`)
+    .join('\n');
   const fixes = diagnostics.filter((item) => item.fix).map((item) => `- **${item.label}**：${item.fix}`).join('\n');
   const panel = v2Panel(alertCount ? UI_COLORS.WARNING : UI_COLORS.ROYAL)
     .addTextDisplayComponents(v2Text(
@@ -821,13 +840,26 @@ async function renderHome(context) {
       '集中管理伺服器設定、公開發布與服務狀態。所有操作僅限 Administrator。'
     ))
     .addSeparatorComponents(v2Divider())
-    .addTextDisplayComponents(v2Text(`## 伺服器健康總覽\n${overview}${fixes ? `\n### 修正建議\n${fixes}` : '\n> 所有必要設定均已就緒。'}`))
+    .addTextDisplayComponents(v2Text(
+      `## 伺服器健康總覽\n${ansiRows([
+        { label: '健康', value: overallLabel, tone: alertCount ? 'danger' : pendingCount ? 'warning' : 'success' },
+        { label: '已設定', value: `${readyCount} 個模組運作正常`, tone: 'success' },
+        { label: '未啟用', value: `${pendingCount} 個模組尚未設定`, tone: 'warning' },
+        { label: '待處理', value: `${alertCount} 個模組設定異常`, tone: alertCount ? 'danger' : 'neutral' },
+      ])}` +
+      `${issueSummary ? `\n\n${issueSummary}` : '\n\n> 所有必要設定均已就緒。'}` +
+      `${fixes ? `\n\n### 修正建議\n${fixes}` : ''}`
+    ))
     .addSeparatorComponents(v2Divider())
     .addTextDisplayComponents(v2Text('## CONFIGURATION | 功能設定\n調整使用者體驗、自動化推播、身分領取與 AI 行為。'))
-    .addActionRowComponents(
-      buttonRow(context, [['welcome', '歡迎'], ['logging', '紀錄'], ['leveling', '等級'], ['steam', 'Steam']]),
-      buttonRow(context, [['selfrole', '自助身分組'], ['reaction', '按鈕身分組'], ['ai', aiUnlocked(context) ? 'AI 設定' : 'AI 驗證', aiUnlocked(context) ? ButtonStyle.Secondary : ButtonStyle.Primary]])
-    )
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId(id(context, 'view_select'))
+        .setPlaceholder('選擇要管理的功能')
+        .addOptions(SETTINGS_VIEW_OPTIONS.map((option) => option.value === 'ai' && !aiUnlocked(context)
+          ? { ...option, label: 'AI 驗證' }
+          : option))
+    ))
     .addSeparatorComponents(v2Divider())
     .addTextDisplayComponents(v2Text('## OPERATIONS | 管理工具\n查看伺服器與核心狀態，或執行會影響伺服器的公開管理工作。'))
     .addActionRowComponents(
@@ -841,7 +873,15 @@ async function renderHome(context) {
 
 function renderWelcome(context) {
   const settings = getGuildSettings(context.guild.id);
-  const panel = modulePanel(context, '歡迎訊息', `迎賓頻道：${settings.welcome_channel ? `<#${settings.welcome_channel}>` : '尚未設定'}\n迎賓佈告：${settings.welcome_message || '使用皇家預設歡迎內容'}`)
+  const panel = modulePanel(
+    context,
+    '歡迎訊息',
+    `迎賓頻道：${settings.welcome_channel ? `<#${settings.welcome_channel}>` : '尚未設定'}\n迎賓佈告：${settings.welcome_message || '使用皇家預設歡迎內容'}`,
+    { statusRows: [
+      { label: '狀態', value: settings.welcome_channel ? '已啟用' : '尚未設定頻道', tone: settings.welcome_channel ? 'success' : 'warning' },
+      { label: '內容', value: settings.welcome_message ? '使用自訂迎賓內容' : '使用皇家預設內容', tone: settings.welcome_message ? 'info' : 'neutral' },
+    ] }
+  )
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder().setCustomId(id(context, 'welcome_channel')).setPlaceholder('選擇歡迎頻道').addChannelTypes(ChannelType.GuildText)
     ))
@@ -855,7 +895,16 @@ function renderWelcome(context) {
 function renderLogging(context) {
   const settings = getGuildSettings(context.guild.id);
   const toggles = parseJsonObject(settings.log_toggles, {});
-  const panel = modulePanel(context, '紀錄設定', `史官頻道：${settings.log_channel ? `<#${settings.log_channel}>` : '尚未設定'}\n選擇史官要記錄的事件類型。`)
+  const enabledLogTypes = LOG_TYPES.filter((type) => toggles[type.value] === 1).length;
+  const panel = modulePanel(
+    context,
+    '紀錄設定',
+    `史官頻道：${settings.log_channel ? `<#${settings.log_channel}>` : '尚未設定'}\n選擇史官要記錄的事件類型。`,
+    { statusRows: [
+      { label: '頻道', value: settings.log_channel ? '已設定' : '尚未設定', tone: settings.log_channel ? 'success' : 'warning' },
+      { label: '類別', value: `${enabledLogTypes} / ${LOG_TYPES.length} 個事件類別啟用`, tone: enabledLogTypes ? 'info' : 'warning' },
+    ] }
+  )
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder().setCustomId(id(context, 'log_channel')).setPlaceholder('選擇日誌頻道').addChannelTypes(ChannelType.GuildText)
     ))
@@ -868,7 +917,12 @@ function renderLogging(context) {
 
 function renderLeveling(context) {
   const enabled = getGuildSettings(context.guild.id).level_up_announcement_enabled !== 0;
-  const panel = modulePanel(context, '等級系統', `爵位晉升公告目前為：**${enabled ? '開啟' : '關閉'}**`)
+  const panel = modulePanel(
+    context,
+    '等級系統',
+    `爵位晉升公告目前為：**${enabled ? '開啟' : '關閉'}**`,
+    { statusRows: [{ label: '晉升公告', value: enabled ? '已開啟' : '已關閉', tone: enabled ? 'success' : 'neutral' }] }
+  )
     .addActionRowComponents(actionButtons(context, [
       ['level:on', '開啟公告', ButtonStyle.Success],
       ['level:off', '關閉公告', ButtonStyle.Secondary],
@@ -880,10 +934,20 @@ function renderSteam(context) {
   const settings = getGuildSettings(context.guild.id);
   const dealStatus = settings.steam_deal_enabled === 1 ? '開啟' : '關閉';
   const freeStatus = settings.steam_free_enabled === 1 ? '開啟' : '關閉';
-  const panel = modulePanel(context, 'Steam 推播', [
-    `特價榜：**${dealStatus}** | 頻道：${settings.steam_deal_channel ? `<#${settings.steam_deal_channel}>` : '尚未設定'} | 時間：${settings.steam_deal_time || '尚未設定'} (Asia/Taipei)`,
-    `限時免費：**${freeStatus}** | 頻道：${settings.steam_free_channel ? `<#${settings.steam_free_channel}>` : '尚未設定'} | 時間：${settings.steam_free_time || '尚未設定'} (Asia/Taipei)`,
-  ].join('\n'))
+  const configuredChannels = Number(Boolean(settings.steam_deal_channel)) + Number(Boolean(settings.steam_free_channel));
+  const panel = modulePanel(
+    context,
+    'Steam 推播',
+    [
+      `特價榜：**${dealStatus}** | 頻道：${settings.steam_deal_channel ? `<#${settings.steam_deal_channel}>` : '尚未設定'} | 時間：${settings.steam_deal_time || '尚未設定'} (Asia/Taipei)`,
+      `限時免費：**${freeStatus}** | 頻道：${settings.steam_free_channel ? `<#${settings.steam_free_channel}>` : '尚未設定'} | 時間：${settings.steam_free_time || '尚未設定'} (Asia/Taipei)`,
+    ].join('\n'),
+    { statusRows: [
+      { label: '特價榜', value: dealStatus, tone: settings.steam_deal_enabled === 1 ? 'success' : 'neutral' },
+      { label: '限時免費', value: freeStatus, tone: settings.steam_free_enabled === 1 ? 'success' : 'neutral' },
+      { label: '排程', value: `${configuredChannels} / 2 個頻道已設定`, tone: configuredChannels === 2 ? 'success' : 'warning' },
+    ] }
+  )
     .addTextDisplayComponents(v2Text('## Steam 特價榜'))
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder().setCustomId(id(context, 'steam_channel')).setPlaceholder('選擇特價榜推播頻道').addChannelTypes(ChannelType.GuildText)
@@ -892,7 +956,7 @@ function renderSteam(context) {
       ['modal:steam_time', '特價時間', ButtonStyle.Primary],
       ['steam_toggle:on', '啟用特價', ButtonStyle.Success],
       ['steam_toggle:off', '停用特價', ButtonStyle.Secondary],
-      ['prepare_confirm:steam_publish', '立即投放特價', ButtonStyle.Danger],
+      ['prepare_confirm:steam_publish', '立即投放特價', ButtonStyle.Secondary],
     ]))
     .addSeparatorComponents(v2Divider())
     .addTextDisplayComponents(v2Text('## Steam 限時免費'))
@@ -903,7 +967,7 @@ function renderSteam(context) {
       ['modal:steam_free_time', '免費時間', ButtonStyle.Primary],
       ['steam_free_toggle:on', '啟用免費', ButtonStyle.Success],
       ['steam_free_toggle:off', '停用免費', ButtonStyle.Secondary],
-      ['prepare_confirm:steam_free_publish', '立即投放免費', ButtonStyle.Danger],
+      ['prepare_confirm:steam_free_publish', '立即更新免費情報', ButtonStyle.Secondary],
     ]));
   return { components: [finishPanel(panel, context)] };
 }
@@ -918,7 +982,15 @@ function renderSelfRole(context) {
   const pending = context.pending.selfTarget
     ? `\n待新增：<@&${context.pending.selfTarget}>${context.pending.selfRequirement ? `，需 <@&${context.pending.selfRequirement}>` : '，無門檻'}`
     : '';
-  const panel = modulePanel(context, '自助身分組', `管理子民可自行領取或取消的身分名冊。\n${listing}${pending}`)
+  const panel = modulePanel(
+    context,
+    '自助身分組',
+    `管理子民可自行領取或取消的身分名冊。\n${listing}${pending}`,
+    { statusRows: [
+      { label: '領取選項', value: `${entries.length} / 25 個`, tone: entries.length ? 'success' : 'warning' },
+      { label: '待新增', value: context.pending.selfTarget ? '已選擇身分組' : '尚未選擇', tone: context.pending.selfTarget ? 'info' : 'neutral' },
+    ] }
+  )
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new RoleSelectMenuBuilder().setCustomId(id(context, 'self_target')).setPlaceholder('挑選要開放領取的身分組')
     ))
@@ -936,7 +1008,7 @@ function renderSelfRole(context) {
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder().setCustomId(id(context, 'self_publish_channel')).setPlaceholder('選擇張貼領取佈告的頻道').addChannelTypes(ChannelType.GuildText)
     ))
-    .addActionRowComponents(actionButtons(context, [['prepare_confirm:self_publish', '張貼領取佈告', ButtonStyle.Danger]]));
+    .addActionRowComponents(actionButtons(context, [['prepare_confirm:self_publish', '張貼領取佈告', ButtonStyle.Secondary]]));
   return { components: [finishPanel(panel, context)] };
 }
 
@@ -961,7 +1033,16 @@ function renderReaction(context) {
     `站點標題：${context.pending.reactionTitle || '預設標題'}`,
     `暫存配對：\n${pendingText}`,
   ].join('\n');
-  const panel = modulePanel(context, '按鈕身分組', setupText)
+  const panel = modulePanel(
+    context,
+    '按鈕身分組',
+    setupText,
+    { statusRows: [
+      { label: '公開站點', value: `${stationIds.length} 個`, tone: stationIds.length ? 'success' : 'neutral' },
+      { label: '既有配對', value: `${roles.length} 組`, tone: roles.length ? 'info' : 'neutral' },
+      { label: '暫存配對', value: `${pendingPairs.length} 組`, tone: pendingPairs.length ? 'royal' : 'warning' },
+    ] }
+  )
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder().setCustomId(id(context, 'reaction_channel')).setPlaceholder('選擇新站點頻道').addChannelTypes(ChannelType.GuildText)
     ))
@@ -978,14 +1059,14 @@ function renderReaction(context) {
       ['modal:reaction_pair_add', '手動輸入按鈕內容', ButtonStyle.Secondary],
       ['modal:reaction_title', '設定標題', ButtonStyle.Secondary],
       ['reaction_clear_pairs', '清除配對', ButtonStyle.Secondary],
-      ['prepare_confirm:reaction_create', '發布新站點', ButtonStyle.Danger],
+      ['prepare_confirm:reaction_create', '發布新站點', ButtonStyle.Secondary],
     ]));
   if (stationIds.length) {
     panel.addActionRowComponents(new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder().setCustomId(id(context, 'reaction_delete_target')).setPlaceholder('選取要刪除的站點')
         .addOptions(stationIds.slice(0, 25).map((messageId) => ({ label: `訊息 ${messageId}`, value: messageId })))
     ));
-    panel.addActionRowComponents(actionButtons(context, [['prepare_confirm:reaction_delete', '刪除選取站點', ButtonStyle.Danger]]));
+    panel.addActionRowComponents(actionButtons(context, [['prepare_confirm:reaction_delete', '刪除選取站點', ButtonStyle.Secondary]]));
   }
   return { components: [finishPanel(panel, context)] };
 }
@@ -993,31 +1074,44 @@ function renderReaction(context) {
 function renderAi(context) {
   if (!aiUnlocked(context)) {
     const passwordStatus = process.env.AI_ADMIN_PASSWORD
-      ? { color: COLORS.GOLD, text: '[ LOCKED ] 尚未驗證管理身分' }
-      : { color: COLORS.RED, text: '[ SETUP  ] 尚未配置 AI_ADMIN_PASSWORD' };
-    const panel = modulePanel(context, 'AI 存取驗證', '國王智慧核心目前封存於御前鎖櫃。驗證成功後，此帳號將持續保有本伺服器的 AI 管理權限。')
-      .addTextDisplayComponents(v2Text([
-        '## ACCESS STATUS | 御前授權狀態',
-        ansiBlock([
-          passwordStatus,
-          { color: COLORS.CYAN, text: '[ SCOPE  ] 模型 / 聯網 / 記憶 / 白名單 / 派對模式' },
-        ]),
-        '密碼僅用於本次驗證，不會顯示於面板或寫入資料庫。',
-      ].join('\n')))
+      ? { label: '授權', value: '尚未驗證管理身分', tone: 'warning' }
+      : { label: '授權', value: '尚未配置 AI_ADMIN_PASSWORD', tone: 'danger' };
+    const panel = modulePanel(
+      context,
+      'AI 存取驗證',
+      '國王智慧核心目前封存於御前鎖櫃。驗證成功後，此帳號將持續保有本伺服器的 AI 管理權限。\n密碼僅用於本次驗證，不會顯示於面板或寫入資料庫。',
+      { statusRows: [
+        passwordStatus,
+        { label: '管理範圍', value: '模型 / 聯網 / 記憶 / 白名單 / 派對模式', tone: 'info' },
+      ] }
+    )
       .addActionRowComponents(actionButtons(context, [['modal:ai_unlock', '輸入管理密碼', ButtonStyle.Primary]]));
     return { components: [finishPanel(panel, context)] };
   }
   const settings = getAiSettings(context.guild.id);
   const whitelistCount = new Set(settings.whitelist.filter(Boolean).map(String)).size;
   const aiEnabled = settings.enabled === 1 && (settings.expires_at === null || Date.now() <= settings.expires_at);
-  const panel = modulePanel(context, 'AI 設定', `智慧核心：**${aiEnabled ? '啟用' : '停用'}** | 國王大腦：\`${settings.model || DEFAULT_AI_MODEL}\`\n天文地理聯網：**${settings.search_enabled ? '開啟' : '關閉'}** | 御前對話記憶：**${settings.context_enabled ? '開啟' : '關閉'}**\n御准白名單：${whitelistCount} 人`)
+  const panel = modulePanel(
+    context,
+    'AI 設定',
+    `智慧核心：**${aiEnabled ? '啟用' : '停用'}** | 國王大腦：\`${settings.model || DEFAULT_AI_MODEL}\`\n天文地理聯網：**${settings.search_enabled ? '開啟' : '關閉'}** | 顯示參考來源：**${settings.citations_enabled ? '開啟' : '關閉'}**\nAI 操作工具：**${settings.action_tools_enabled ? '啟用' : '停用'}**（預設停用） | 御前對話記憶：**${settings.context_enabled ? '開啟' : '關閉'}**\n御准白名單：${whitelistCount} 人\n> 聯網檢索可能執行多次計費查詢；是否在回答附上來源可獨立設定。`,
+    { statusRows: [
+      { label: '智慧核心', value: aiEnabled ? '啟用' : '停用', tone: aiEnabled ? 'success' : 'warning' },
+      { label: '聯網檢索', value: settings.search_enabled ? '開啟' : '關閉', tone: settings.search_enabled ? 'info' : 'neutral' },
+      { label: '參考來源', value: settings.citations_enabled ? '顯示' : '隱藏', tone: settings.citations_enabled ? 'info' : 'neutral' },
+      { label: '操作工具', value: settings.action_tools_enabled ? '啟用' : '停用', tone: settings.action_tools_enabled ? 'info' : 'neutral' },
+      { label: '對話記憶', value: settings.context_enabled ? '開啟' : '關閉', tone: settings.context_enabled ? 'special' : 'neutral' },
+      { label: '白名單', value: `${whitelistCount} 人`, tone: whitelistCount ? 'royal' : 'neutral' },
+    ] }
+  )
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder().setCustomId(id(context, 'ai_model')).setPlaceholder('選擇 AI 模型')
         .addOptions(AI_MODELS.map((model) => ({ label: model, value: model, default: model === settings.model })))
     ))
     .addActionRowComponents(actionButtons(context, [
-      ['ai_toggle:enabled', aiEnabled ? '停用 AI 核心' : '啟用 AI 核心', aiEnabled ? ButtonStyle.Danger : ButtonStyle.Success],
+      ['ai_toggle:enabled', aiEnabled ? '停用 AI 核心' : '啟用 AI 核心', aiEnabled ? ButtonStyle.Secondary : ButtonStyle.Success],
       ['ai_toggle:search_enabled', settings.search_enabled ? '關閉聯網' : '開啟聯網', settings.search_enabled ? ButtonStyle.Secondary : ButtonStyle.Success],
+      ['ai_toggle:citations_enabled', settings.citations_enabled ? '隱藏來源' : '顯示來源', settings.citations_enabled ? ButtonStyle.Secondary : ButtonStyle.Success],
       ['ai_toggle:context_enabled', settings.context_enabled ? '關閉記憶' : '開啟記憶', settings.context_enabled ? ButtonStyle.Secondary : ButtonStyle.Success],
       ['modal:ai_prompt', '編輯提示詞', ButtonStyle.Secondary],
     ]));
@@ -1030,13 +1124,14 @@ function renderAi(context) {
     .addActionRowComponents(actionButtons(context, [
       ['ai_user_add', '加入白名單', ButtonStyle.Success],
       ['ai_user_remove', '移除白名單', ButtonStyle.Secondary],
+      ['ai_toggle:action_tools_enabled', settings.action_tools_enabled ? '停用 AI 操作' : '啟用 AI 操作', settings.action_tools_enabled ? ButtonStyle.Secondary : ButtonStyle.Success],
     ]))
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder().setCustomId(id(context, 'ai_party_channel')).setPlaceholder('選擇派對頻道').addChannelTypes(ChannelType.GuildText)
     ))
     .addActionRowComponents(actionButtons(context, [
       ['modal:ai_party', '設定派對時間', ButtonStyle.Secondary],
-      ['prepare_confirm:ai_party', '啟動派對', ButtonStyle.Danger],
+      ['prepare_confirm:ai_party', '啟動派對', ButtonStyle.Secondary],
     ]));
   return { components: [finishPanel(panel, context)] };
 }
@@ -1050,7 +1145,6 @@ function addAiDraftCenter(panel, context) {
     : '尚未產生草稿。草稿只存在這個私人設定面板，逾時後會消失。';
 
   panel
-    .addSeparatorComponents(v2Divider())
     .addTextDisplayComponents(v2Text([
       '## AI DRAFT CENTER | AI 草稿中心',
       summary,
@@ -1167,23 +1261,22 @@ async function renderServerInfo(context) {
   const panel = modulePanel(
     context,
     '伺服器資訊',
-    `本王巡視 **${guild.name}** 後呈上的領地摘要、安全狀態與設定覆蓋情形。`,
-    { thumbnail: guild.iconURL?.({ size: 256, extension: 'png' }) }
+    `本王巡視 **${guild.name}** 後呈上的領地摘要、安全狀態與設定覆蓋情形。\n\n## SERVER HEALTH | 領地健康度`,
+    {
+      thumbnail: guild.iconURL?.({ size: 256, extension: 'png' }),
+      statusRows: [
+        { label: '健康', value: alertCount ? '需要處理異常' : pendingCount ? '尚有功能待設定' : '所有設定正常', tone: alertCount ? 'danger' : pendingCount ? 'warning' : 'success' },
+        { label: '正常', value: `${readyCount} 個模組`, tone: 'success' },
+        { label: '待設定', value: `${pendingCount} 個模組`, tone: 'warning' },
+        { label: '異常', value: `${alertCount} 個模組`, tone: alertCount ? 'danger' : 'neutral' },
+        { label: '成員', value: `${guild.memberCount} 位`, tone: 'royal' },
+        { label: '頻道', value: `${textChannels} 文字 / ${voiceChannels} 語音 / ${categories} 分類`, tone: 'info' },
+        { label: '資源', value: `${guild.roles.cache.size} 身分組 / ${guild.emojis.cache.size} 表情`, tone: 'neutral' },
+      ],
+    }
   )
     .addTextDisplayComponents(v2Text([
-      '## SERVER HEALTH | 領地健康度',
-      ansiBlock([
-        { color: alertCount ? COLORS.RED : pendingCount ? COLORS.GOLD : COLORS.GREEN, text: `[ STATUS ] ${alertCount ? '需要處理異常' : pendingCount ? '尚有功能待設定' : '所有設定正常'}` },
-        { color: COLORS.GREEN, text: `[ READY  ] ${readyCount} 個模組正常` },
-        { color: COLORS.GOLD, text: `[ SETUP  ] ${pendingCount} 個模組待設定` },
-        { color: COLORS.RED, text: `[ ALERT  ] ${alertCount} 個模組異常` },
-      ]),
       '## SERVER PROFILE | 領地基本資料',
-      ansiBlock([
-        { color: COLORS.GOLD, text: `[ MEMBERS  ] ${guild.memberCount} 位成員` },
-        { color: COLORS.CYAN, text: `[ CHANNELS ] ${textChannels} 文字 / ${voiceChannels} 語音 / ${categories} 分類` },
-        { color: COLORS.WHITE, text: `[ ASSETS   ] ${guild.roles.cache.size} 身分組 / ${guild.emojis.cache.size} 表情` },
-      ]),
       `伺服器 ID：\`${guild.id}\``,
       `領主：${owner ? `**${owner.user.tag}**` : '未知'} | 建立日期：<t:${Math.floor(guild.createdTimestamp / 1000)}:d>`,
       `加成等級：**Lv.${guild.premiumTier}** (${guild.premiumSubscriptionCount || 0} 次加成)`,
@@ -1193,7 +1286,7 @@ async function renderServerInfo(context) {
     .addTextDisplayComponents(v2Text([
       '## SECURITY & AI | 城防與國王智慧',
       `驗證層級：**${verificationLevels[guild.verificationLevel] || '未知'}** | 內容過濾：**${filters[guild.explicitContentFilter] || '未知'}**`,
-      `AI 模型：\`${aiSettings.model || DEFAULT_AI_MODEL}\` | 聯網檢索：**${aiSettings.search_enabled ? '開啟' : '關閉'}**`,
+      `AI 模型：\`${aiSettings.model || DEFAULT_AI_MODEL}\` | 聯網檢索：**${aiSettings.search_enabled ? '開啟' : '關閉'}** | 參考來源：**${aiSettings.citations_enabled ? '顯示' : '隱藏'}**`,
       `派對模式：**${aiSettings.party_channel_id && aiSettings.party_expires_at > Date.now() ? '進行中' : '未啟用'}**`,
     ].join('\n')))
     .addSeparatorComponents(v2Divider())
@@ -1213,23 +1306,21 @@ function renderBotStatus(context) {
   const load = os.loadavg().map((amount) => amount.toFixed(2)).join(', ');
   const guildCount = context.client?.guilds?.cache?.size ?? 0;
   const memberCount = context.client?.guilds?.cache?.reduce?.((total, guild) => total + guild.memberCount, 0) ?? 0;
-  const panel = modulePanel(context, '機器人狀態', '本王的大內健康報告：檢視目前程序、主機與連線狀況。')
-    .addTextDisplayComponents(v2Text([
-      '## SERVICE CORE | 國王核心服務',
-      ansiBlock([
-        { color: COLORS.CYAN, text: `[系統] Node ${process.version} | discord.js v${discordJsVersion}` },
-        { color: COLORS.WHITE, text: `[運行] ${days}d ${hours}h ${minutes}m` },
-        { color: Number.isFinite(ping) && ping < 150 ? COLORS.GREEN : COLORS.GOLD, text: `[延遲] ${Number.isFinite(ping) ? `${ping} ms` : '讀取中'}` },
-      ]),
-    ].join('\n')))
-    .addSeparatorComponents(v2Divider())
+  const panel = modulePanel(
+    context,
+    '機器人狀態',
+    '本王的大內健康報告：檢視目前程序、主機與連線狀況。\n\n## SERVICE CORE | 國王核心服務',
+    { statusRows: [
+      { label: '系統', value: `Node ${process.version} | discord.js v${discordJsVersion}`, tone: 'info' },
+      { label: '運行', value: `${days}d ${hours}h ${minutes}m`, tone: 'neutral' },
+      { label: '延遲', value: Number.isFinite(ping) ? `${ping} ms` : '讀取中', tone: Number.isFinite(ping) && ping < 150 ? 'success' : 'warning' },
+      { label: '記憶體', value: `${heapUsed} / ${heapTotal} MB`, tone: 'success' },
+      { label: '負載', value: load, tone: 'info' },
+      { label: '服務範圍', value: `${guildCount} 個伺服器 / ${memberCount} 位成員`, tone: 'royal' },
+    ] }
+  )
     .addTextDisplayComponents(v2Text([
       '## HOST LOAD | 大內主機負載',
-      ansiBlock([
-        { color: COLORS.GREEN, text: `[ MEMORY ] ${heapUsed} / ${heapTotal} MB` },
-        { color: COLORS.CYAN, text: `[ LOAD   ] ${load}` },
-        { color: COLORS.GOLD, text: `[ SCOPE  ] ${guildCount} 個伺服器 / ${memberCount} 位成員` },
-      ]),
       `處理器：\`${os.cpus()[0]?.model?.trim() || '未知'}\``,
       `執行環境：\`${os.type()} ${os.release()} (${os.arch()})\``,
     ].join('\n')));
@@ -1244,15 +1335,21 @@ function renderAnnouncement(context) {
     everyone: '提及 @everyone',
     role: context.pending.announceRole ? `提及 <@&${context.pending.announceRole}>` : '提及指定身分組 (尚未選擇)',
   }[mode];
-  const panel = modulePanel(context, '發布公告', [
-    '聖旨在御前預覽確認前不會公開頒布；附件僅接受圖片，最多 3 張。',
-    ansiBlock([
-      { color: context.pending.announceChannel ? COLORS.GREEN : COLORS.GOLD, text: `[ CHANNEL ] ${context.pending.announceChannel ? `#${context.pending.announceChannel}` : '尚未選擇目標頻道'}` },
-      { color: mode === 'everyone' ? COLORS.RED : mode === 'none' ? COLORS.CYAN : COLORS.GOLD, text: `[ MENTION ] ${modeText}` },
-      { color: COLORS.WHITE, text: '[ STATUS  ] 等待撰寫與預覽確認' },
-    ]),
-    `目前目標：${context.pending.announceChannel ? `<#${context.pending.announceChannel}>` : '**尚未選擇**'}`,
-  ].join('\n'))
+  const mentionSummary = mode === 'role' ? '指定身分組' : modeText;
+  const panel = modulePanel(
+    context,
+    '發布公告',
+    [
+      '聖旨在御前預覽確認前不會公開頒布；附件僅接受圖片，最多 3 張。',
+      `目前目標：${context.pending.announceChannel ? `<#${context.pending.announceChannel}>` : '**尚未選擇**'}`,
+      `提及目標：${mode === 'role' && context.pending.announceRole ? `<@&${context.pending.announceRole}>` : modeText}`,
+    ].join('\n'),
+    { statusRows: [
+      { label: '發布頻道', value: context.pending.announceChannel ? '已選擇' : '尚未選擇', tone: context.pending.announceChannel ? 'success' : 'warning' },
+      { label: '提及模式', value: mentionSummary, tone: mode === 'everyone' ? 'danger' : mode === 'none' ? 'info' : 'warning' },
+      { label: '草稿狀態', value: '等待撰寫與預覽確認', tone: 'neutral' },
+    ] }
+  )
     .addTextDisplayComponents(v2Text('## COMPOSER | 頒旨目標\n先選擇頻道與互斥的召見模式，再開啟聖旨編輯器。'))
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder().setCustomId(id(context, 'announce_channel')).setPlaceholder('選擇公告發布頻道').addChannelTypes(ChannelType.GuildText)
@@ -1281,23 +1378,16 @@ async function renderMemberLookup(context) {
     : null;
   const avatar = member?.displayAvatarURL?.({ size: 256, extension: 'png' })
     || user?.displayAvatarURL?.({ size: 256, extension: 'png' });
-  const panel = modulePanel(
-    context,
-    '成員查詢',
-    member
-      ? `已從皇家名冊調閱 **${member.displayName}** 的私人管理檔案。`
-      : '選擇子民後查看帳號、活動、權限與爵位紀錄。查詢內容僅顯示於此私人面板。',
-    { thumbnail: avatar }
-  )
-    .addActionRowComponents(new ActionRowBuilder().addComponents(
-      new UserSelectMenuBuilder().setCustomId(id(context, 'member_user')).setPlaceholder('選擇要查詢的成員')
-    ));
   if (!context.pending.memberUser) {
-    panel.addTextDisplayComponents(v2Text(ansiBlock([{ color: COLORS.GRAY, text: '[ WAITING ] 尚未選擇成員' }])));
+    const panel = memberLookupPanel(context, null, avatar, [
+      { label: '查詢狀態', value: '尚未選擇成員', tone: 'neutral' },
+    ]);
     return { components: [finishPanel(panel, context)] };
   }
   if (!member) {
-    panel.addTextDisplayComponents(v2Text('找不到選取的成員，請重新選擇。'));
+    const panel = memberLookupPanel(context, null, avatar, [
+      { label: '查詢狀態', value: '找不到選取的成員', tone: 'danger' },
+    ]).addTextDisplayComponents(v2Text('請重新選擇要查詢的成員。'));
     return { components: [finishPanel(panel, context)] };
   }
   const level = getUserLevel(context.guild.id, member.id);
@@ -1325,15 +1415,15 @@ async function renderMemberLookup(context) {
   const timeout = member.communicationDisabledUntilTimestamp > Date.now()
     ? `<t:${Math.floor(member.communicationDisabledUntilTimestamp / 1000)}:R> 結束`
     : '無';
+  const panel = memberLookupPanel(context, member, avatar, [
+    { label: '爵位', value: `Lv.${level.level} / ${getRankTitle(level.level)}`, tone: 'royal' },
+    { label: '經驗值', value: `${level.xp} / ${xpNeeded} (${progress}%)`, tone: 'info' },
+    { label: '活躍度', value: `${level.total_messages} 則訊息 / ${level.total_voice_mins || 0} 分鐘語音`, tone: 'success' },
+  ]);
   panel
     .addSeparatorComponents(v2Divider())
     .addTextDisplayComponents(v2Text([
       `## MEMBER PROFILE | ${member.displayName}`,
-      ansiBlock([
-        { color: COLORS.GOLD, text: `[ LEVEL  ] Lv.${level.level} / ${getRankTitle(level.level)}` },
-        { color: COLORS.CYAN, text: `[ XP     ] ${level.xp} / ${xpNeeded} (${progress}%)` },
-        { color: COLORS.GREEN, text: `[ ACTIVE ] ${level.total_messages} 則訊息 / ${level.total_voice_mins || 0} 分鐘語音` },
-      ]),
       `帳號：**${user.tag}** | ID：\`${member.id}\` | 類型：**${user.bot ? '機器人' : '使用者'}**`,
       `暱稱：**${member.nickname || '未設定'}** | 狀態：**${presence}** | 活動：**${activities}**`,
       `建立帳號：<t:${Math.floor(user.createdTimestamp / 1000)}:F> (<t:${Math.floor(user.createdTimestamp / 1000)}:R>)`,
@@ -1351,13 +1441,26 @@ async function renderMemberLookup(context) {
   return { components: [finishPanel(panel, context)] };
 }
 
+function memberLookupPanel(context, member, avatar, statusRows) {
+  return modulePanel(
+    context,
+    '成員查詢',
+    member
+      ? `已從皇家名冊調閱 **${member.displayName}** 的私人管理檔案。`
+      : '選擇子民後查看帳號、活動、權限與爵位紀錄。查詢內容僅顯示於此私人面板。',
+    { thumbnail: avatar, statusRows }
+  ).addActionRowComponents(new ActionRowBuilder().addComponents(
+    new UserSelectMenuBuilder().setCustomId(id(context, 'member_user')).setPlaceholder('選擇要查詢的成員')
+  ));
+}
+
 function renderConfirm(context) {
   const labels = {
     self_publish: `將在 ${context.pending.selfPublishChannel ? `<#${context.pending.selfPublishChannel}>` : '選取的頻道'} 張貼新的皇家自助身分領取佈告。`,
     reaction_create: `將在 ${context.pending.reactionChannel ? `<#${context.pending.reactionChannel}>` : '選取的頻道'} 建立新的皇家按鈕身分站。`,
     reaction_delete: `將撤除皇家按鈕身分站公開訊息 \`${context.pending.reactionDeleteMessage || '尚未選取'}\` 與其設定。`,
     steam_publish: '將立即在已設定的推播頻道頒布 Steam 皇家特價榜聖旨。',
-    steam_free_publish: '將立即在已設定的限時免費頻道頒布 Steam 限時免費御賜聖旨。',
+    steam_free_publish: '將立即檢查 Steam 限時免費；有新遊戲時建立新版並刪除舊帖，否則更新目前情報。',
     ai_party: `將在 ${context.pending.aiPartyChannel ? `<#${context.pending.aiPartyChannel}>` : '選取頻道'} 啟動 AI 派對模式並公開發送通知。`,
   };
   const message = labels[context.pending.confirm] || '此操作會產生公開變更。';
@@ -1374,15 +1477,13 @@ function renderConfirm(context) {
   return { components: [panel] };
 }
 
-function modulePanel(context, title, description, { thumbnail = null } = {}) {
+function modulePanel(context, title, description, { thumbnail = null, statusRows = [] } = {}) {
   const meta = MODULE_STYLE[title] || { section: 'CONTROL PANEL', color: UI_COLORS.ROYAL };
   const notice = typeof context.notice === 'string'
-    ? { label: 'SAVED', color: COLORS.GREEN, text: context.notice }
+    ? { label: '已儲存', tone: 'success', text: context.notice }
     : context.notice;
-  const feedback = context.notice
-    ? `\n\n${ansiBlock([{ color: notice.color, text: `[ ${notice.label} ] ${notice.text}` }])}`
-    : '';
-  const heading = `-# ROYAL ADMINISTRATOR CONTROL CENTER  /  ${meta.section}\n# ${MODULE_TITLES[title] || title}\n${description}${feedback}`;
+  const summary = statusRows.length ? `\n\n${ansiRows(statusRows)}` : '';
+  const heading = `-# ROYAL ADMINISTRATOR CONTROL CENTER  /  ${meta.section}\n# ${MODULE_TITLES[title] || title}\n${description}${summary}`;
   const panel = v2Panel(meta.color);
   if (thumbnail) {
     panel.addSectionComponents(
@@ -1392,6 +1493,9 @@ function modulePanel(context, title, description, { thumbnail = null } = {}) {
     );
   } else {
     panel.addTextDisplayComponents(v2Text(heading));
+  }
+  if (notice) {
+    panel.addTextDisplayComponents(v2Text(`> **${notice.label}** — ${notice.text}`));
   }
   return panel.addSeparatorComponents(v2Divider());
 }
@@ -1418,10 +1522,13 @@ function actionButtons(context, definitions) {
   ));
 }
 
-function textRow(customId, label, value, style, required = true) {
-  const input = new TextInputBuilder().setCustomId(customId).setLabel(label).setStyle(style).setRequired(required);
+function textRow(customId, label, value, style, required = true, description = '請填寫此欄位。') {
+  const input = new TextInputBuilder().setCustomId(customId).setStyle(style).setRequired(required);
   if (value) input.setValue(String(value).slice(0, style === TextInputStyle.Short ? 400 : 4000));
-  return new ActionRowBuilder().addComponents(input);
+  return new LabelBuilder()
+    .setLabel(label)
+    .setDescription(description)
+    .setTextInputComponent(input);
 }
 
 function id(context, action) {
@@ -1483,13 +1590,6 @@ function statusMarker(status) {
   if (status === '正常') return '[OK]';
   if (status === '未設定') return '[--]';
   return '[!!]';
-}
-
-function formatDiagnosticLine(item) {
-  return {
-    color: item.status === '正常' ? COLORS.GREEN : item.status === '未設定' ? COLORS.GOLD : COLORS.RED,
-    text: `${statusMarker(item.status)} ${item.label}: ${item.detail}`,
-  };
 }
 
 function getSelfRoles(guildId) {
@@ -1815,14 +1915,32 @@ async function publishSteamDeals(guild) {
   await channel.send(buildSteamDealsPayload(deals));
 }
 
-async function publishSteamFreeGames(guild) {
-  const settings = getGuildSettings(guild.id);
-  const channel = await guild.channels.fetch(settings.steam_free_channel).catch(() => null);
-  if (!channel?.isTextBased()) throw new Error('尚未設定可用的 Steam 限時免費推播頻道。');
-  const games = await fetchSteamLimitedFreeGames(10);
-  if (games.length === 0) return 0;
-  await channel.send(buildSteamFreeGamesPayload(games));
-  return games.length;
+function steamFreeBoardNotice(result) {
+  if (result.previousMessageDeleted === false) {
+    return {
+      label: '新版已發布',
+      tone: 'warning',
+      text: '新版限時免費情報已發布，但無法刪除舊帖；請確認機器人在舊頻道仍有存取權。',
+    };
+  }
+  if (result.action === 'moved' || result.status === 'moved') return '限時免費情報已搬遷到新頻道。';
+  if (result.status === 'published') {
+    return `發現 ${result.addedIds?.length || 0} 款新遊戲，已建立新版貼文並刪除舊版。`;
+  }
+  if (result.status === 'created') return '限時免費情報貼文已建立。';
+  if (result.status === 'updated') return '沒有新遊戲；已更新現有貼文的清單與截止時間。';
+  if (result.status === 'empty') {
+    return result.action === 'created'
+      ? '目前沒有限時免費遊戲，已建立空狀態情報。'
+      : '目前沒有限時免費遊戲，已將現有貼文更新為空狀態。';
+  }
+  if (result.status === 'not_configured') {
+    return { label: '尚未設定', tone: 'warning', text: '請先選擇 Steam 限時免費頻道。' };
+  }
+  if (result.status === 'not_found') {
+    return { label: '頻道不可用', tone: 'warning', text: '無法取得已設定的頻道或情報貼文。' };
+  }
+  return { label: '更新失敗', tone: 'danger', text: result.error?.message || 'Steam 或 Discord 暫時無法完成情報更新。' };
 }
 
 async function startAiParty(guild, channelId, minutes) {
@@ -1866,6 +1984,7 @@ function closePanel(components) {
 }
 
 export const settingsViewTesting = {
+  renderView,
   renderHome,
   renderWelcome,
   renderSteam,
@@ -1877,6 +1996,7 @@ export const settingsViewTesting = {
   renderAnnouncement,
   renderMemberLookup,
   renderConfirm,
+  steamFreeBoardNotice,
   id,
   parseSettingsCustomId,
   actionValue,
@@ -1889,6 +2009,7 @@ export const settingsViewTesting = {
   buildSelfRoleMenuPayload,
   extractEmojiAndLabel,
   handleButton,
+  handleStringSelect,
   startAiParty,
   toggleAiSetting,
 };

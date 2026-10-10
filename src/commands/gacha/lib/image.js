@@ -196,7 +196,8 @@ function timelinePanel(records, images, layout) {
 function timelineItem(record, index, images, position) {
   const cx = position.x;
   const cy = position.y;
-  const image = images.get(String(record.resourceId));
+  const imageKey = String(record.resourceId ?? '').trim() || String(record.name ?? '').trim();
+  const image = images.get(imageKey);
   const clipId = `timeline${index + 1}`;
   return `
     <g data-item="${index}">

@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { MessageFlags } from 'discord.js';
 import Database from 'better-sqlite3';
 import {
   bindWuwaAccount,
@@ -35,6 +36,7 @@ import {
   data,
   refreshWuwaHome,
 } from '../src/commands/gacha/wuwa.js';
+import { buildWuwaCardPayload } from '../src/commands/gacha/lib/reply.js';
 import { countV2Components } from '../src/utils/componentsV2.js';
 
 const fixtureUrl = new URL('./fixtures/wuwa-history.json', import.meta.url);
@@ -267,7 +269,7 @@ test('item thumbnails load from the fixed public catalog and remain optional', a
     const href = String(url);
     if (href.endsWith('/zh-Hant/character')) {
       return new Response(JSON.stringify({
-        roleList: [{ Id: 1107, RoleHeadIcon: 'https://assets.example/1107.png' }],
+        roleList: [{ Id: 1107, RoleHeadIcon: 'https://api.encore.moe/test-assets/1107.png' }],
       }), { status: 200, headers: { 'content-type': 'application/json' } });
     }
     if (href.endsWith('/zh-Hant/weapon')) {
@@ -276,7 +278,7 @@ test('item thumbnails load from the fixed public catalog and remain optional', a
         headers: { 'content-type': 'application/json' },
       });
     }
-    if (href === 'https://assets.example/1107.png') {
+    if (href === 'https://api.encore.moe/test-assets/1107.png') {
       return new Response(png, {
         status: 200,
         headers: { 'content-type': 'image/png', 'content-length': String(png.length) },
@@ -288,6 +290,166 @@ test('item thumbnails load from the fixed public catalog and remain optional', a
     record('五星角色甲', '2026-06-18 12:00:00', 5, '1107'),
   ], 'zh-Hant', fetchImpl);
   assert.match(images.get('1107'), /^data:image\/png;base64,/);
+});
+
+test('item thumbnails retry a transient image failure on the next render', async () => {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+  let imageCalls = 0;
+  const fetchImpl = async (url) => {
+    const href = String(url);
+    if (href.endsWith('/ja/character')) {
+      return new Response(JSON.stringify({
+        roleList: [{ Id: 1503, RoleHeadIcon: 'https://api.encore.moe/test-assets/verina.png' }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (href.endsWith('/ja/weapon')) {
+      return new Response(JSON.stringify({ weapons: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (href === 'https://api.encore.moe/test-assets/verina.png') {
+      imageCalls += 1;
+      return imageCalls === 1
+        ? new Response('', { status: 503 })
+        : new Response(png, {
+          status: 200,
+          headers: { 'content-type': 'image/png', 'content-length': String(png.length) },
+        });
+    }
+    return new Response('', { status: 404 });
+  };
+  const records = [record('維里奈', '2026-06-18 12:00:00', 5, '1503')];
+
+  const first = await resolveWuwaItemImages(records, 'ja', fetchImpl);
+  const second = await resolveWuwaItemImages(records, 'ja', fetchImpl);
+
+  assert.equal(first.has('1503'), false);
+  assert.match(second.get('1503'), /^data:image\/png;base64,/);
+  assert.equal(imageCalls, 2);
+});
+
+test('item catalog caches are isolated between fetch implementations', async () => {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+  const createFetch = (suffix) => async (url) => {
+    const href = String(url);
+    if (href.endsWith('/ko/character')) {
+      return new Response(JSON.stringify({
+        roleList: [{ Id: 1503, RoleHeadIcon: `https://api.encore.moe/test-assets/${suffix}.png` }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (href.endsWith('/ko/weapon')) {
+      return new Response(JSON.stringify({ weapons: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (href === `https://api.encore.moe/test-assets/${suffix}.png`) {
+      return new Response(png, { status: 200, headers: { 'content-type': 'image/png' } });
+    }
+    return new Response('', { status: 404 });
+  };
+  const records = [record('維里奈', '2026-06-18 12:00:00', 5, '1503')];
+
+  const first = await resolveWuwaItemImages(records, 'ko', createFetch('first'));
+  const second = await resolveWuwaItemImages(records, 'ko', createFetch('second'));
+
+  assert.match(first.get('1503'), /^data:image\/png;base64,/);
+  assert.match(second.get('1503'), /^data:image\/png;base64,/);
+});
+
+test('item thumbnails reject catalog image hosts outside the fixed allowlist', async () => {
+  let untrustedImageCalls = 0;
+  const fetchImpl = async (url) => {
+    const href = String(url);
+    if (href.endsWith('/th/character')) {
+      return new Response(JSON.stringify({
+        roleList: [{ Id: 1503, RoleHeadIcon: 'https://untrusted.invalid/verina.png' }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (href.endsWith('/th/weapon')) {
+      return new Response(JSON.stringify({ weapons: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (href === 'https://untrusted.invalid/verina.png') untrustedImageCalls += 1;
+    return new Response('', { status: 404 });
+  };
+
+  const images = await resolveWuwaItemImages([
+    record('維里奈', '2026-06-18 12:00:00', 5, '1503'),
+  ], 'th', fetchImpl);
+
+  assert.equal(images.size, 0);
+  assert.equal(untrustedImageCalls, 0);
+});
+
+test('item thumbnail downloads reject redirects from the approved host', async () => {
+  let imageRequestOptions;
+  const fetchImpl = async (url, options) => {
+    const href = String(url);
+    if (href.endsWith('/vi/character')) {
+      return new Response(JSON.stringify({
+        roleList: [{ Id: 1503, RoleHeadIcon: 'https://api.encore.moe/resource/verina.webp' }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (href.endsWith('/vi/weapon')) {
+      return new Response(JSON.stringify({ weapons: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (href === 'https://api.encore.moe/resource/verina.webp') {
+      imageRequestOptions = options;
+      return new Response('', { status: 302, headers: { location: 'https://untrusted.invalid/verina.webp' } });
+    }
+    return new Response('', { status: 404 });
+  };
+
+  await resolveWuwaItemImages([
+    record('維里奈', '2026-06-18 12:00:00', 5, '1503'),
+  ], 'vi', fetchImpl);
+
+  assert.equal(imageRequestOptions.redirect, 'error');
+});
+
+test('item thumbnails fall back across catalogs for localized weapon type names', async () => {
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+  const fetchImpl = async (url) => {
+    const href = String(url);
+    if (href.endsWith('/id/character')) {
+      return new Response(JSON.stringify({ roleList: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    if (href.endsWith('/id/weapon')) {
+      return new Response(JSON.stringify({
+        weapons: [{ Id: 21010015, Icon: 'https://api.encore.moe/test-assets/weapon.png' }],
+      }), { status: 200, headers: { 'content-type': 'application/json' } });
+    }
+    if (href === 'https://api.encore.moe/test-assets/weapon.png') {
+      return new Response(png, { status: 200, headers: { 'content-type': 'image/png' } });
+    }
+    return new Response('', { status: 404 });
+  };
+
+  const images = await resolveWuwaItemImages([{
+    ...record('五星武器', '2026-06-18 12:00:00', 5, '21010015'),
+    resourceType: '무기',
+  }], 'id', fetchImpl);
+
+  assert.match(images.get('21010015'), /^data:image\/png;base64,/);
 });
 
 test('Discord command exposes safe modal and component layouts', () => {
@@ -305,8 +467,53 @@ test('Discord command exposes safe modal and component layouts', () => {
   assert.match(homeJson, /iwr -UseBasicParsing/);
   assert.match(homeJson, /c46dbadc006ed0d2c3f3a20b06b448a45475d32b/);
   assert.match(homeJson, /查看 PowerShell 腳本/);
+  assert.match(homeJson, /```ansi/);
+  assert.match(stripAnsi(homeJson), /\[帳號\] 尚未綁定/);
+  assert.match(stripAnsi(homeJson), /\[UID\] 尚無資料/);
   assert.match(JSON.stringify(modal), /複製 PowerShell 指令/);
-  assert.match(JSON.stringify(selection.components.map((item) => item.toJSON())), /角色聯動喚取/);
+  const selectionJson = JSON.stringify(selection.components.map((item) => item.toJSON()));
+  assert.match(selectionJson, /角色聯動喚取/);
+  assert.match(selectionJson, /```ansi/);
+  assert.match(stripAnsi(selectionJson), /\[卡池\] 共 \d+ 類/);
+  assert.match(stripAnsi(selectionJson), /\[狀態\] 等待選擇/);
+});
+
+test('WuWa result card summarizes masked account and pool before the image', () => {
+  const history = emptyWuwaHistory();
+  history.pools['1'] = [record('五星角色甲', '2026-06-18 12:00:00', 5, '1107')];
+  const payload = buildWuwaCardPayload({
+    filename: 'wuwa-1-card.png',
+    attachment: Buffer.from('image'),
+  }, {
+    playerUid: '900123456',
+    history,
+    updatedAt: 2000,
+    recordId: 'record-secret',
+    serverId: 'server-secret',
+    cardPoolId: 'pool-secret',
+    credentialUrl: 'https://credential.example.test/?recordId=record-secret',
+  }, '1', {
+    ephemeral: true,
+    publishCustomId: 'wuwa_publish:session:1',
+  });
+  const json = JSON.stringify(payload.components.map((item) => item.toJSON()));
+
+  assert.match(json, /900\*{4}56/);
+  assert.match(json, /角色活動喚取/);
+  assert.match(json, /```ansi/);
+  assert.match(stripAnsi(json), /\[帳號\] 已綁定/);
+  assert.match(stripAnsi(json), /\[UID\] 900\*{4}56/);
+  assert.match(stripAnsi(json), /\[卡池\] 角色活動喚取/);
+  assert.match(stripAnsi(json), /\[紀錄\] 1 筆/);
+  assert.match(json, /attachment:\/\/wuwa-1-card\.png/);
+  assert.match(json, /喚取統計圖片，共 1 筆紀錄/);
+  assert.match(json, /發布至目前頻道/);
+  assert.equal(json.includes('record-secret'), false);
+  assert.equal(json.includes('server-secret'), false);
+  assert.equal(json.includes('pool-secret'), false);
+  assert.equal(json.includes('credential.example.test'), false);
+  assert.equal((payload.flags & MessageFlags.Ephemeral) !== 0, true);
+  assert.ok(countV2Components(payload.components) <= 40);
 });
 
 test('active WuWa session redraws the private home after bind, update and unbind', async () => {
@@ -373,6 +580,12 @@ function record(name, time, qualityLevel, resourceId) {
 
 function serializeComponents(payload) {
   return payload.components.map((component) => component.toJSON());
+}
+
+function stripAnsi(text) {
+  return text
+    .replace(/\\u001b\[[0-9;]*m/g, '')
+    .replace(/\u001b\[[0-9;]*m/g, '');
 }
 
 function findCustomId(value, customId) {
