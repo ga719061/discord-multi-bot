@@ -1,10 +1,54 @@
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { test } from 'node:test';
+import { posix } from 'node:path';
 
 const dockerfileUrl = new URL('../Dockerfile', import.meta.url);
 const composeUrl = new URL('../docker-compose.yml', import.meta.url);
 const entrypointUrl = new URL('../docker-entrypoint.sh', import.meta.url);
+
+// Evaluate this repository's root-relative patterns, directory ancestors and
+// ordered exclusions/re-inclusions without reading runtime files or Docker.
+function excludedFromContext(file, contents) {
+  const parts = file.split('/');
+  const ancestors = parts.map((_, index) => parts.slice(0, index + 1).join('/'));
+  let excluded = false;
+  for (const line of contents.split(/\r?\n/)) {
+    const rule = line.trim();
+    if (!rule || rule.startsWith('#')) continue;
+    const include = rule.startsWith('!');
+    const pattern = (include ? rule.slice(1) : rule).replace(/^\/+|\/+$/g, '');
+    assert.ok(pattern && !/[\\[\]{}]/.test(pattern) && !pattern.includes('**'), `Unsupported pattern: ${rule}`);
+    // Docker matches dotfiles with '*'; Node's glob matcher excludes them.
+    const dotfilePattern = new RegExp(`^${pattern.split('').map((character) => {
+      if (character === '*') return '[^/]*';
+      if (character === '?') return '[^/]';
+      return character.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }).join('')}$`);
+    if (ancestors.some((ancestor) => posix.matchesGlob(ancestor, pattern)
+      || (ancestor.split('/').some((part) => part.startsWith('.')) && dotfilePattern.test(ancestor)))) {
+      excluded = !include;
+    }
+  }
+  return excluded;
+}
+
+test('Docker context excludes runtime directories and credentials while retaining source and assets', async () => {
+  const contents = await readFile(new URL('../.dockerignore', import.meta.url), 'utf8');
+  for (const file of [
+    'data/bot.db', 'data/bot.db-wal', 'data/bot.db-shm',
+    'data/accounts/session.json', 'data/imports/history.json',
+    'logs/2026-01-01.log', 'logs/nested/diagnostic.json',
+    'tmp/preview.png', 'tmp/audio/sample.m4a',
+    '.env', '.env.production', 'BOT.env', 'node_modules/example/index.js',
+  ]) assert.equal(excludedFromContext(file, contents), true, file);
+  for (const file of ['src/bot.js', 'assets/wuwa/card-background-v3.png', 'package.json', 'docker-entrypoint.sh']) {
+    assert.equal(excludedFromContext(file, contents), false, file);
+  }
+  assert.equal(excludedFromContext('data/synthetic.json', 'data/*.db'), false);
+  assert.equal(excludedFromContext('data/synthetic.json', 'data\n!data/synthetic.json'), false);
+  assert.equal(excludedFromContext('data/synthetic.json', '!data/synthetic.json\ndata'), true);
+});
 
 test('Docker entrypoint repairs mounted data ownership before running as node', async () => {
   const [dockerfile, compose, entrypoint] = await Promise.all([

@@ -78,7 +78,7 @@ const CATEGORY_META = {
     music: {
         label: '音樂',
         emoji: '🎵',
-        description: '搜尋 NAS 曲庫或貼上 YouTube 連結，在語音頻道點播並控制共用佇列。',
+        description: '貼上 YouTube 單曲連結，在語音頻道點播並控制共用佇列。',
         order: 42,
         group: 'public'
     },
@@ -146,7 +146,7 @@ const COMMAND_META = {
     特價查詢: { label: '皇家採購查詢', examples: ['/特價查詢（輸入名稱後選取正確 Steam 遊戲）'] },
     戰績: { label: '皇家戰報查詢', examples: ['/戰績（彈窗內選擇遊戲並輸入 Riot ID）'] },
     鳴潮抽卡: { label: '皇家鳴潮喚取卷宗', examples: ['/鳴潮抽卡（綁定 UID、更新或查詢指定卡池）'] },
-    音樂: { label: '皇家音樂播放器', examples: ['/音樂（先加入語音頻道，搜尋 NAS 或貼上 YouTube 連結點播）'] },
+    音樂: { label: '皇家音樂播放器', examples: ['/音樂（先加入語音頻道，貼上 YouTube 單曲連結點播）'] },
     設定: { label: '皇家管理控制台', examples: ['/設定'] },
 };
 
@@ -762,7 +762,7 @@ function getDirectActions(commandName) {
 
 function getCategoryUsageText(command) {
     if (command.name === '音樂') {
-        return '操作：先加入一般語音頻道，再點擊「開啟音樂播放器」搜尋 NAS 曲庫或按「YouTube 點播」貼上單曲連結；YouTube 不需 NAS 登入。';
+        return '操作：先加入一般語音頻道，再點擊「開啟音樂播放器」，按「YouTube 點播」貼上單曲連結，無須登入。';
     }
     if (command.name === '提醒') {
         return '操作：使用下方按鈕新增提醒，或管理尚未送出的皇家傳喚。';
@@ -775,7 +775,7 @@ function getCategoryUsageText(command) {
 
 function getDetailLaunchText(command) {
     if (command.name === '音樂') {
-        return '先加入一般語音頻道，再按下方按鈕開啟音樂介面；NAS 需各自登入，YouTube 可直接貼上影片或單曲連結（最多 2 小時）。';
+        return '先加入一般語音頻道，再按下方按鈕開啟音樂介面，貼上 YouTube 影片或單曲連結（最多 2 小時），無須登入。';
     }
     if (command.name === '提醒') {
         return '按下方按鈕新增提醒或管理待發送項目。';

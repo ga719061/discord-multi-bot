@@ -1,0 +1,810 @@
+{
+  "modules": {
+    "ai": {
+      "document": "docs/modules/ai.md"
+    },
+    "music": {
+      "document": "docs/modules/music.md"
+    },
+    "settings-database": {
+      "document": "docs/modules/settings-database.md"
+    },
+    "steam": {
+      "document": "docs/modules/steam.md"
+    },
+    "games": {
+      "document": "docs/modules/games.md"
+    },
+    "community": {
+      "document": "docs/modules/community.md"
+    },
+    "ui": {
+      "document": "docs/modules/ui.md"
+    },
+    "runtime": {
+      "document": "docs/modules/runtime.md"
+    }
+  },
+  "files": {
+    "scripts/command-manifest.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "scripts/command-sync.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "scripts/deploy-commands.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "scripts/install-ytdlp.mjs": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "scripts/verify-docs.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "scripts/verify-import.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "scripts/verify-music-audio.js": {
+      "owner": "music",
+      "sharedWith": []
+    },
+    "src/bot.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "src/commands/admin/settings.js": {
+      "owner": "settings-database",
+      "sharedWith": [
+        "community",
+        "ui"
+      ]
+    },
+    "src/commands/esports/__tests__/embed.test.js": {
+      "owner": "games",
+      "sharedWith": []
+    },
+    "src/commands/esports/__tests__/fixtures/valorant-opgg-route.js": {
+      "owner": "games",
+      "sharedWith": []
+    },
+    "src/commands/esports/__tests__/providers.test.js": {
+      "owner": "games",
+      "sharedWith": []
+    },
+    "src/commands/esports/lib/cache.js": {
+      "owner": "games",
+      "sharedWith": [
+        "runtime",
+        "ui"
+      ]
+    },
+    "src/commands/esports/lib/embed.js": {
+      "owner": "games",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/esports/lib/providers/common.js": {
+      "owner": "games",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/esports/lib/providers/lol.js": {
+      "owner": "games",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/esports/lib/providers/valorant.js": {
+      "owner": "games",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/esports/lib/statsImage.js": {
+      "owner": "games",
+      "sharedWith": [
+        "runtime",
+        "ui"
+      ]
+    },
+    "src/commands/esports/stats.js": {
+      "owner": "games",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/fun/daily.js": {
+      "owner": "community",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/fun/feed.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "src/commands/fun/fortune.js": {
+      "owner": "community",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/fun/giveaway.js": {
+      "owner": "community",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/fun/hug.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "src/commands/fun/lib/funImage.js": {
+      "owner": "community",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/fun/pat.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "src/commands/fun/poll.js": {
+      "owner": "community",
+      "sharedWith": [
+        "ai",
+        "runtime",
+        "ui"
+      ]
+    },
+    "src/commands/fun/talk.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "src/commands/gacha/lib/constants.js": {
+      "owner": "games",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/gacha/lib/history.js": {
+      "owner": "games",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/gacha/lib/image.js": {
+      "owner": "games",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/gacha/lib/importer.js": {
+      "owner": "games",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/gacha/lib/itemAssets.js": {
+      "owner": "games",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/gacha/lib/provider.js": {
+      "owner": "games",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/gacha/lib/reply.js": {
+      "owner": "games",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/gacha/lib/statistics.js": {
+      "owner": "games",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/gacha/wuwa.js": {
+      "owner": "games",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/commands/general/help.js": {
+      "owner": "ui",
+      "sharedWith": []
+    },
+    "src/commands/general/ping.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "src/commands/general/remind.js": {
+      "owner": "community",
+      "sharedWith": [
+        "ai",
+        "runtime",
+        "ui"
+      ]
+    },
+    "src/commands/leveling/leaderboard.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "src/commands/leveling/rank.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "src/commands/music/lib/panel.js": {
+      "owner": "music",
+      "sharedWith": [
+        "community",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/commands/music/lib/ui.js": {
+      "owner": "music",
+      "sharedWith": [
+        "community",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/commands/music/music.js": {
+      "owner": "music",
+      "sharedWith": [
+        "community",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/commands/steam/steam.js": {
+      "owner": "steam",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/events/guildMemberAdd.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "src/events/guildMemberUpdate.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "src/events/logging/memberLog.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "src/events/logging/messageLog.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "src/events/logging/serverLog.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "src/events/logging/threadLog.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "src/events/logging/voiceLog.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "src/events/messageCreate.js": {
+      "owner": "ai",
+      "sharedWith": [
+        "community",
+        "runtime"
+      ]
+    },
+    "src/events/music.js": {
+      "owner": "music",
+      "sharedWith": []
+    },
+    "src/events/reactionRoleHandler.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "src/handlers/commandHandler.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "src/handlers/eventHandler.js": {
+      "owner": "runtime",
+      "sharedWith": [
+        "ai"
+      ]
+    },
+    "src/knowledge/persona.js": {
+      "owner": "ai",
+      "sharedWith": [
+        "community",
+        "runtime",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/utils/aiActionTools.js": {
+      "owner": "ai",
+      "sharedWith": [
+        "community",
+        "runtime"
+      ]
+    },
+    "src/utils/aiChat.js": {
+      "owner": "ai",
+      "sharedWith": [
+        "community",
+        "runtime",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/utils/aiConfig.js": {
+      "owner": "ai",
+      "sharedWith": [
+        "community",
+        "games",
+        "music",
+        "runtime",
+        "settings-database",
+        "steam",
+        "ui"
+      ]
+    },
+    "src/utils/aiDrafts.js": {
+      "owner": "ai",
+      "sharedWith": [
+        "community",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/utils/aiGuildContext.js": {
+      "owner": "ai",
+      "sharedWith": [
+        "community",
+        "runtime"
+      ]
+    },
+    "src/utils/aiMentions.js": {
+      "owner": "ai",
+      "sharedWith": [
+        "community",
+        "runtime"
+      ]
+    },
+    "src/utils/announcementImage.js": {
+      "owner": "ui",
+      "sharedWith": [
+        "ai",
+        "community",
+        "runtime",
+        "settings-database"
+      ]
+    },
+    "src/utils/announcementTools.js": {
+      "owner": "ui",
+      "sharedWith": [
+        "ai",
+        "community",
+        "runtime",
+        "settings-database"
+      ]
+    },
+    "src/utils/componentsV2.js": {
+      "owner": "ui",
+      "sharedWith": [
+        "ai",
+        "community",
+        "games",
+        "music",
+        "runtime",
+        "settings-database",
+        "steam"
+      ]
+    },
+    "src/utils/customIds.js": {
+      "owner": "ui",
+      "sharedWith": [
+        "community",
+        "settings-database"
+      ]
+    },
+    "src/utils/database.js": {
+      "owner": "settings-database",
+      "sharedWith": [
+        "ai",
+        "community",
+        "games",
+        "music",
+        "runtime",
+        "steam",
+        "ui"
+      ]
+    },
+    "src/utils/deterministicRandom.js": {
+      "owner": "community",
+      "sharedWith": [
+        "ui"
+      ]
+    },
+    "src/utils/giveawayManager.js": {
+      "owner": "community",
+      "sharedWith": [
+        "runtime"
+      ]
+    },
+    "src/utils/guildDiagnostics.js": {
+      "owner": "settings-database",
+      "sharedWith": [
+        "community",
+        "ui"
+      ]
+    },
+    "src/utils/healthServer.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "src/utils/imageRendering.js": {
+      "owner": "ui",
+      "sharedWith": [
+        "ai",
+        "community",
+        "games",
+        "music",
+        "runtime",
+        "settings-database"
+      ]
+    },
+    "src/utils/inviteCache.js": {
+      "owner": "community",
+      "sharedWith": [
+        "runtime"
+      ]
+    },
+    "src/utils/jobGuards.js": {
+      "owner": "runtime",
+      "sharedWith": [
+        "ai",
+        "community",
+        "steam",
+        "ui"
+      ]
+    },
+    "src/utils/jsonUtils.js": {
+      "owner": "runtime",
+      "sharedWith": [
+        "ai",
+        "community",
+        "games",
+        "music",
+        "settings-database",
+        "steam",
+        "ui"
+      ]
+    },
+    "src/utils/logUtils.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "src/utils/logger.js": {
+      "owner": "runtime",
+      "sharedWith": [
+        "ai",
+        "community",
+        "games",
+        "music",
+        "settings-database",
+        "steam",
+        "ui"
+      ]
+    },
+    "src/utils/musicAccess.js": {
+      "owner": "music",
+      "sharedWith": [
+        "community",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/utils/musicAccounts.js": {
+      "owner": "music",
+      "sharedWith": [
+        "community",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/utils/musicLibrary.js": {
+      "owner": "music",
+      "sharedWith": [
+        "community",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/utils/musicPlayback.js": {
+      "owner": "music",
+      "sharedWith": [
+        "community",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/utils/musicYoutube.js": {
+      "owner": "music",
+      "sharedWith": [
+        "community",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/utils/partyManager.js": {
+      "owner": "ai",
+      "sharedWith": [
+        "runtime"
+      ]
+    },
+    "src/utils/reminderManager.js": {
+      "owner": "community",
+      "sharedWith": [
+        "ai",
+        "runtime",
+        "ui"
+      ]
+    },
+    "src/utils/roleSettings.js": {
+      "owner": "community",
+      "sharedWith": [
+        "runtime",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/utils/scheduledJobs.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "src/utils/steamDealManager.js": {
+      "owner": "steam",
+      "sharedWith": [
+        "runtime"
+      ]
+    },
+    "src/utils/steamDeals.js": {
+      "owner": "steam",
+      "sharedWith": [
+        "community",
+        "runtime",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/utils/steamFreeBoard.js": {
+      "owner": "steam",
+      "sharedWith": [
+        "community",
+        "runtime",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/utils/style.js": {
+      "owner": "ui",
+      "sharedWith": [
+        "ai",
+        "community",
+        "games",
+        "music",
+        "runtime",
+        "settings-database",
+        "steam"
+      ]
+    },
+    "src/utils/voiceXpManager.js": {
+      "owner": "community",
+      "sharedWith": [
+        "runtime"
+      ]
+    },
+    "tests/aiActionDomains.test.js": {
+      "owner": "ai",
+      "sharedWith": []
+    },
+    "tests/aiActionTools.test.js": {
+      "owner": "ai",
+      "sharedWith": []
+    },
+    "tests/aiChat.test.js": {
+      "owner": "ai",
+      "sharedWith": []
+    },
+    "tests/aiGuildContext.test.js": {
+      "owner": "ai",
+      "sharedWith": []
+    },
+    "tests/aiMentions.test.js": {
+      "owner": "ai",
+      "sharedWith": []
+    },
+    "tests/aiPipelineOptimization.test.js": {
+      "owner": "ai",
+      "sharedWith": []
+    },
+    "tests/cacheOptimization.test.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "tests/commandManifest.test.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "tests/commandSync.test.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "tests/componentsV2Migration.test.js": {
+      "owner": "ui",
+      "sharedWith": []
+    },
+    "tests/customIds.test.js": {
+      "owner": "ui",
+      "sharedWith": []
+    },
+    "tests/dockerRuntime.test.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "tests/docsVerification.test.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "tests/funImage.test.js": {
+      "owner": "ui",
+      "sharedWith": []
+    },
+    "tests/giveawayOptimization.test.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "tests/guildDiagnostics.test.js": {
+      "owner": "settings-database",
+      "sharedWith": []
+    },
+    "tests/healthServer.test.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "tests/helpComponentsV2.test.js": {
+      "owner": "ui",
+      "sharedWith": []
+    },
+    "tests/helpers/database.js": {
+      "owner": "settings-database",
+      "sharedWith": [
+        "ai",
+        "community",
+        "games",
+        "music",
+        "steam",
+        "ui"
+      ]
+    },
+    "tests/imageRendering.test.js": {
+      "owner": "ui",
+      "sharedWith": []
+    },
+    "tests/interactiveCommands.test.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "tests/jsonUtils.test.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "tests/levelingUi.test.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "tests/musicAccess.test.js": {
+      "owner": "music",
+      "sharedWith": []
+    },
+    "tests/musicAccounts.test.js": {
+      "owner": "music",
+      "sharedWith": []
+    },
+    "tests/musicCommand.test.js": {
+      "owner": "music",
+      "sharedWith": []
+    },
+    "tests/musicLibrary.test.js": {
+      "owner": "music",
+      "sharedWith": []
+    },
+    "tests/musicPlayback.test.js": {
+      "owner": "music",
+      "sharedWith": []
+    },
+    "tests/musicUi.test.js": {
+      "owner": "music",
+      "sharedWith": []
+    },
+    "tests/musicYoutube.test.js": {
+      "owner": "music",
+      "sharedWith": []
+    },
+    "tests/musicYoutubePanel.test.js": {
+      "owner": "music",
+      "sharedWith": []
+    },
+    "tests/pollOptimization.test.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "tests/reactionRoleHandler.test.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "tests/reminderOptimization.test.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "tests/scheduledJobs.test.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "tests/settingsPanel.test.js": {
+      "owner": "settings-database",
+      "sharedWith": []
+    },
+    "tests/startupLoaders.test.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    },
+    "tests/steamDeals.test.js": {
+      "owner": "steam",
+      "sharedWith": []
+    },
+    "tests/steamFreeBoard.test.js": {
+      "owner": "steam",
+      "sharedWith": []
+    },
+    "tests/steamFreeBoardDatabase.test.js": {
+      "owner": "steam",
+      "sharedWith": []
+    },
+    "tests/steamSearch.test.js": {
+      "owner": "steam",
+      "sharedWith": []
+    },
+    "tests/wuwaGacha.test.js": {
+      "owner": "games",
+      "sharedWith": []
+    },
+    "tests/xpVoice.test.js": {
+      "owner": "community",
+      "sharedWith": []
+    },
+    "tests/ytdlpBuild.test.js": {
+      "owner": "runtime",
+      "sharedWith": []
+    }
+  }
+}

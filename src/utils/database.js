@@ -103,6 +103,7 @@ export function initDatabase(options = {}) {
       expires_at INTEGER DEFAULT NULL,
       system_prompt TEXT DEFAULT NULL,
       whitelist TEXT DEFAULT '[]',
+      nas_music_whitelist TEXT DEFAULT '[]',
       model TEXT DEFAULT '${DEFAULT_AI_MODEL}',
       admin_ids TEXT DEFAULT '[]',
       search_enabled INTEGER DEFAULT 0,
@@ -178,6 +179,10 @@ export function initDatabase(options = {}) {
 
   const aiSettingsInfo = db.pragma('table_info(ai_settings)');
   const aiColumns = aiSettingsInfo.map(c => c.name);
+
+  if (!aiColumns.includes('nas_music_whitelist')) {
+    db.prepare("ALTER TABLE ai_settings ADD COLUMN nas_music_whitelist TEXT DEFAULT '[]'").run();
+  }
 
   if (!aiColumns.includes('model')) {
     db.prepare(`ALTER TABLE ai_settings ADD COLUMN model TEXT DEFAULT '${DEFAULT_AI_MODEL}'`).run();
@@ -470,6 +475,7 @@ export function getAiSettings(guildId) {
     ...row,
     model,
     whitelist: parseJsonArray(row.whitelist, []),
+    nas_music_whitelist: parseJsonArray(row.nas_music_whitelist, []),
     admin_ids: parseJsonArray(row.admin_ids, []),
     search_enabled: !!row.search_enabled,
     citations_enabled: !!row.citations_enabled,
@@ -478,7 +484,7 @@ export function getAiSettings(guildId) {
   };
 }
 
-const ALLOWED_AI_KEYS = ['enabled', 'expires_at', 'system_prompt', 'whitelist', 'model', 'admin_ids', 'search_enabled', 'citations_enabled', 'action_tools_enabled', 'context_enabled', 'party_channel_id', 'party_expires_at'];
+const ALLOWED_AI_KEYS = ['enabled', 'expires_at', 'system_prompt', 'whitelist', 'nas_music_whitelist', 'model', 'admin_ids', 'search_enabled', 'citations_enabled', 'action_tools_enabled', 'context_enabled', 'party_channel_id', 'party_expires_at'];
 
 export function updateAiSetting(guildId, key, value) {
   if (!ALLOWED_AI_KEYS.includes(key)) throw new Error(`不允許的欄位名稱: ${key}`);

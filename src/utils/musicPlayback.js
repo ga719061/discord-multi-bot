@@ -63,7 +63,13 @@ export async function createMusicAudioResource(library, track, {
     throw new MusicError('MUSIC_PLAYBACK');
   }
   let childClosed = false;
-  const closed = new Promise(resolve => child.once('close', () => { childClosed = true; resolve(); }));
+  let resolveExit;
+  const exited = new Promise(resolve => { resolveExit = resolve; });
+  const closed = new Promise(resolve => child.once('close', (code, signal) => {
+    childClosed = true;
+    resolveExit({ code, signal });
+    resolve();
+  }));
   let cleanup;
   const dispose = () => {
     if (disposed) return cleanup;
@@ -93,8 +99,12 @@ export async function createMusicAudioResource(library, track, {
       child.stdout.destroy(failure);
     }
   };
-  child.on('error', () => fail(new MusicError('MUSIC_FFMPEG')));
+  child.on('error', () => {
+    resolveExit({ code: null, signal: null });
+    fail(new MusicError('MUSIC_FFMPEG'));
+  });
   child.on('exit', (code, signal) => {
+    resolveExit({ code, signal });
     if (signal || (code !== 0 && code !== null)) fail(new MusicError('MUSIC_FFMPEG'));
   });
   child.stderr.resume();
@@ -107,7 +117,17 @@ export async function createMusicAudioResource(library, track, {
   try {
     const resource = createAudioResource(child.stdout, { inputType: StreamType.OggOpus });
     if (seekable) child.stdin.end();
-    else pipeline(source, child.stdin).catch(error => { if (!disposed) fail(error); });
+    else pipeline(source, child.stdin).catch(async error => {
+      if (disposed) return;
+      // stdin may close before its finish event. Preserve buffered output only when
+      // the source reached EOF and FFmpeg confirms a successful exit, never on partial input.
+      if (!(error instanceof MusicError) && source.readableEnded
+        && ['EPIPE', 'ERR_STREAM_PREMATURE_CLOSE'].includes(error.code)) {
+        const result = await exited;
+        if (disposed || (result.code === 0 && !result.signal)) return;
+      }
+      if (!disposed) fail(error);
+    });
     return { resource, dispose, get failure() { return failure; } };
   } catch {
     await dispose();

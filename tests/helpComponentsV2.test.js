@@ -4,6 +4,8 @@ import { ButtonStyle, ComponentType, MessageFlags } from 'discord.js';
 import { execute as executeHelp, helpViewTesting } from '../src/commands/general/help.js';
 import { stopMusicPlayback } from '../src/commands/music/music.js';
 import { ephemeralV2Payload } from '../src/utils/componentsV2.js';
+import { cleanupTestDatabase, initTestDatabase } from './helpers/database.js';
+import { MusicYouTubeClient } from '../src/utils/musicYoutube.js';
 
 function createCommand(name, label = name) {
     return {
@@ -395,9 +397,12 @@ test('help music entry appears beside all existing shortcuts and opens from cate
 });
 
 test('help music button runs the real music entry without a registered slash command and rejects other viewers', async (t) => {
+    initTestDatabase('help-music-entry');
     const previousBaseUrl = process.env.MUSIC_API_BASE_URL;
     process.env.MUSIC_API_BASE_URL = 'http://music.example.test:8480';
     t.after(() => stopMusicPlayback());
+    t.after(cleanupTestDatabase);
+    t.mock.method(MusicYouTubeClient.prototype, 'available', async () => true);
     t.after(() => {
         if (previousBaseUrl === undefined) delete process.env.MUSIC_API_BASE_URL;
         else process.env.MUSIC_API_BASE_URL = previousBaseUrl;
@@ -437,6 +442,7 @@ test('help music button runs the real music entry without a registered slash com
     await listeners.get('collect')(button);
     assert.deepEqual(acknowledgements.map(ack => ack.kind), ['deferReply', 'editReply']);
     assert.ok(acknowledgements[0].payload.flags & MessageFlags.Ephemeral);
-    assert.match(JSON.stringify(acknowledgements[1].payload), /登入音樂庫/);
-    assert.match(JSON.stringify(acknowledgements[1].payload), /musicauth:[^:]+:login/);
+    assert.match(JSON.stringify(acknowledgements[1].payload), /YouTube 點播/);
+    assert.match(JSON.stringify(acknowledgements[1].payload), /musicauth:[^:]+:youtube/);
+    assert.doesNotMatch(JSON.stringify(acknowledgements[1].payload), /NAS|登入音樂庫|私人音樂庫/);
 });

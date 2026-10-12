@@ -5,7 +5,7 @@ import { access, mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { performance, monitorEventLoopDelay } from 'node:perf_hooks';
 import { join } from 'node:path';
-import { Readable } from 'node:stream';
+import { Readable, Writable } from 'node:stream';
 import { promisify } from 'node:util';
 import { AudioPlayerStatus, createAudioPlayer, entersState } from '@discordjs/voice';
 import { createMusicAudioResource } from '../src/utils/musicPlayback.js';
@@ -35,7 +35,7 @@ function syntheticWav(seconds) {
 
 const audio = syntheticWav(3);
 const ffmpegPath = process.env.MUSIC_FFMPEG_PATH || 'ffmpeg';
-async function verify(source, mime, minimumPackets, isCueTrack = false, youtube = false) {
+async function verify(source, mime, minimumPackets, isCueTrack = false, youtube = false, tailPipeCode = null) {
   const controller = new AbortController();
   const deadline = setTimeout(() => controller.abort(), 60_000);
   let transport;
@@ -66,6 +66,18 @@ async function verify(source, mime, minimumPackets, isCueTrack = false, youtube 
           const input = args[args.indexOf('-i') + 1];
           if (input !== 'pipe:0') preparedFile = input;
           const child = spawn(file, args, options);
+          if (tailPipeCode) {
+            // Exercise the real encoder with a deterministic stdin-close race after complete input.
+            const inputStream = child.stdin;
+            child.stdin = new Writable({
+              write(chunk, encoding, callback) { inputStream.write(chunk, encoding, callback); },
+              final(callback) {
+                inputStream.end(() => callback(Object.assign(new Error('Synthetic input pipe close'), { code: tailPipeCode })));
+              },
+              destroy(error, callback) { inputStream.destroy(); callback(error); },
+            });
+            inputStream.on('error', error => child.stdin.destroy(error));
+          }
           child.stderr.on('data', (chunk) => { ffmpegStderr += chunk.toString(); });
           child.on('close', (code, signal) => { childExit = { code, signal }; });
           return child;
@@ -87,6 +99,7 @@ async function verify(source, mime, minimumPackets, isCueTrack = false, youtube 
     }
     assert.ok(packets >= minimumPackets, 'Synthetic audio did not produce enough Opus packets');
     assert.ok(bytes > 0);
+    assert.equal(transport.failure, null, 'Successful encoding must not report a tail failure');
     return packets;
   } catch (error) {
     console.error(`[音訊診斷] ${mime}:`, error instanceof Error ? error.stack : String(error), ffmpegStderr, childExit);
@@ -195,6 +208,11 @@ async function verifyRealtime(blockMs) {
 let temporaryDirectory;
 try {
   const wavPackets = await verify(Readable.from([audio]), 'audio/wav', 40);
+  const tailPipePackets = {};
+  for (const code of ['EPIPE', 'ERR_STREAM_PREMATURE_CLOSE']) {
+    tailPipePackets[code] = await verify(Readable.from([audio]), 'audio/wav', wavPackets, false, false, code);
+    assert.equal(tailPipePackets[code], wavPackets, 'Tail pipe closure must preserve every encoded packet');
+  }
   temporaryDirectory = await mkdtemp(join(tmpdir(), 'gigi-music-test-'));
   const flacPath = join(temporaryDirectory, 'cue-track.flac');
   await promisify(execFile)(ffmpegPath, [
@@ -239,7 +257,7 @@ try {
   assert.ok(stalled.dispatchGapsOver60Ms >= 3, 'Injected event-loop stalls should be visible in packet timing');
   console.log(JSON.stringify({
     audioPipeline: {
-      wavPackets, cueFlacPackets: cuePackets, mp3Packets, tailIndexedM4aPackets: m4aPackets,
+      wavPackets, tailPipePackets, cueFlacPackets: cuePackets, mp3Packets, tailIndexedM4aPackets: m4aPackets,
       youtubeWebmPackets, youtubeTailIndexedM4aPackets: youtubeM4aPackets, youtubeCancellation: 'passed',
     },
     realtimeBaseline: realtime,

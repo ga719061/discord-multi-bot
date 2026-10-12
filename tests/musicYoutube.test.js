@@ -194,6 +194,25 @@ test('M4A fallback is surfaced to the existing seekable transport', async () => 
   await opened.dispose();
 });
 
+test('partial audio followed by exit 1, exit 141 or SIGPIPE is never treated as a complete track', async () => {
+  for (const [exitCode, signal] of [[1, null], [141, null], [null, 'SIGPIPE']]) {
+    let downloader;
+    const f = fixture([json(), child => {
+      downloader = child;
+      child.stdout.write(Buffer.from('partial synthetic audio'));
+    }]);
+    const opened = await f.client.openAudio({ id: ID });
+    try {
+      const failed = new Promise(resolve => opened.source.once('error', resolve));
+      downloader.stdout.end();
+      downloader.emit('close', exitCode, signal);
+      assert.equal((await failed).code, 'MUSIC_YOUTUBE_UNAVAILABLE');
+      assert.equal(opened.source.destroyed, true);
+      assert.equal(f.client.children.size, 0);
+    } finally { await opened.dispose(); await f.client.close(); }
+  }
+});
+
 test('first audio timeout, file limit, child failures and shutdown clean up every owned process', async () => {
   const timeout = fixture([json(), () => {}], { firstAudioTimeoutMs: 10 });
   await assert.rejects(timeout.client.openAudio({ id: ID }), code('MUSIC_YOUTUBE_TIMEOUT'));

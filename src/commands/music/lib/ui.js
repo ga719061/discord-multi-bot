@@ -9,11 +9,18 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from 'discord.js';
-import { ephemeralV2Payload, v2Divider, v2Panel, v2Payload, v2Text } from '../../../utils/componentsV2.js';
+import { ephemeralV2Payload, v2Divider, v2Panel, v2Payload, v2Text, v2Notice } from '../../../utils/componentsV2.js';
 import { ansiRows, UI_COLORS } from '../../../utils/style.js';
 
 const PAGE_SIZE = 10;
 const LIBRARY_LIMIT = 100;
+
+export function buildMusicPointNotice(track, position) {
+  return v2Notice(track.source === 'youtube' ? '✅ 已加入 YouTube 點播' : '✅ 已加入點播',
+    `**${displayText(track.title, 180, '未命名曲目')}**｜${position >= 0 ? `目前排在第 ${position + 1} 首。` : '已交給播放器。'}`,
+    UI_COLORS.SUCCESS);
+}
+
 const STATUS_LABELS = {
   connecting: '連線中',
   loading: '載入中',
@@ -65,6 +72,23 @@ export function buildMusicLoginPayload({ id, loggedIn = false, nasConfigured = t
     actions,
     new ActionRowBuilder().addComponents(button(`musicauth:${id}:youtube`, 'YouTube 點播', ButtonStyle.Secondary, !youtubeAvailable, '📺')),
   );
+  return ephemeralV2Payload([panel]);
+}
+
+export function buildMusicLauncherPayload({ id, nasAllowed = false, youtubeAvailable = true }) {
+  const panel = v2Panel(UI_COLORS.ROYAL)
+    .addTextDisplayComponents(v2Text('### 🎵 吉吉王國・音樂播放器\n-# 私人畫面'))
+    .addTextDisplayComponents(v2Text(musicSummary([
+      { label: 'YouTube', value: youtubeAvailable ? '可點播' : '暫時無法使用', tone: youtubeAvailable ? 'success' : 'warning' },
+    ])))
+    .addTextDisplayComponents(v2Text('先加入一般語音頻道，再貼上 YouTube 影片、Shorts 或 YouTube Music 單曲連結。\n每支最多 2 小時；歌曲會加入頻道共用佇列。'))
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      button(`musicauth:${id}:youtube`, 'YouTube 點播', ButtonStyle.Primary, !youtubeAvailable, '📺'),
+    ));
+  if (nasAllowed) panel.addActionRowComponents(new ActionRowBuilder().addComponents(
+    button(`musicauth:${id}:nas`, '私人音樂庫', ButtonStyle.Secondary, false, '🎼'),
+  ));
+  if (!youtubeAvailable) panel.addTextDisplayComponents(v2Text('YouTube 點播服務暫時無法使用，請聯絡管理員。'));
   return ephemeralV2Payload([panel]);
 }
 
@@ -124,14 +148,13 @@ export function buildMusicPlayerPayload(state, { thumbnail } = {}) {
       current.source === 'youtube'
         ? `${displayText(current.artist, 80, '未知頻道')} · YouTube`
         : `${displayText(current.artist, 80, '未知歌手')} · ${displayText(current.album, 80, '未知專輯')}`,
-      current.source === 'youtube' ? '' : '-# 來源：NAS',
       cueLabel(current) ? `-# ${cueLabel(current)}` : '',
     ].filter(Boolean).join('\n')
     : stopped ? '播放器已結束，請從 /幫助重新開啟音樂播放器。'
       : state.errorText ? '目前沒有播放中的歌曲。'
       : state.status === 'connecting' ? '正在加入語音頻道，請稍候。'
       : state.status === 'loading' ? '正在準備音訊，請稍候。'
-      : '目前沒有播放中的歌曲，按「點歌」開啟自己的曲庫，或按「YouTube 點播」貼上連結。\n播放器會持續待命；使用「停止並離開」或手動中斷 bot 語音連線結束。';
+      : '目前沒有播放中的歌曲，按「YouTube 點播」貼上連結。\n播放器會持續待命；使用「停止並離開」或手動中斷 bot 語音連線結束。';
   const accentColor = stopped ? UI_COLORS.MUTED
     : state.errorText ? UI_COLORS.DANGER
     : state.status === 'paused' ? UI_COLORS.ROYAL_SOFT
@@ -172,7 +195,7 @@ export function buildMusicPlayerPayload(state, { thumbnail } = {}) {
     .addTextDisplayComponents(v2Text([
       `### 接下來 · ${queue.length} 首待播`,
       queue.length ? queue.slice(0, 3).map((track, index) => trackLine(track, index + 1)).join('\n')
-        : stopped ? '佇列目前是空的。' : '佇列目前是空的，按「點歌」加入歌曲。',
+        : stopped ? '佇列目前是空的。' : '佇列目前是空的，按「YouTube 點播」加入歌曲。',
       queue.length > 3 ? `-# 尚有 ${queue.length - 3} 首，按「查看佇列」瀏覽全部歌曲。` : '',
       !stopped && state.errorText ? queue.length
         ? '⚠️ 播放失敗，待播歌曲已保留；按「下一首」繼續。'
@@ -190,8 +213,7 @@ export function buildMusicPlayerPayload(state, { thumbnail } = {}) {
         button(musicId(state.id, 'skip'), '下一首', ButtonStyle.Secondary, stopped || (!current && !queue.length), '⏭️'),
       ),
       new ActionRowBuilder().addComponents(
-        button(musicId(state.id, 'browse'), '點歌', ButtonStyle.Primary, stopped, '🎵'),
-        button(musicId(state.id, 'youtube'), 'YouTube 點播', ButtonStyle.Secondary, stopped || state.youtubeAvailable === false, '📺'),
+        button(musicId(state.id, 'youtube'), 'YouTube 點播', ButtonStyle.Primary, stopped || state.youtubeAvailable === false, '📺'),
         button(musicId(state.id, 'queue'), '查看佇列', ButtonStyle.Secondary, stopped, '📜'),
       ),
       new ActionRowBuilder().addComponents(
@@ -248,7 +270,7 @@ export function buildMusicLibraryPayload(browser) {
   panel
     .addTextDisplayComponents(v2Text([
       '-# 最多顯示最新 100 首；使用搜尋可找到其他曲目。只有你能操作此曲庫。',
-      disabled ? '⌛ 曲庫操作已結束，請從播放器重新開啟。' : '',
+      disabled ? '⌛ 曲庫操作已結束，請從 /音樂重新開啟私人音樂庫。' : '',
     ].filter(Boolean).join('\n')))
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       button(libraryId(browser.id, 'search'), '搜尋曲庫', ButtonStyle.Primary, disabled, '🔍'),
@@ -293,7 +315,7 @@ export function buildMusicQueuePayload(state, requestedPage = 0) {
     .addSeparatorComponents(v2Divider())
     .addTextDisplayComponents(v2Text(items.length
       ? items.map((track, index) => trackListItem(track, page * PAGE_SIZE + index + 1)).join('\n\n')
-      : '佇列目前是空的，請從播放器按「點歌」加入歌曲。'))
+      : '佇列目前是空的，請從播放器按「YouTube 點播」加入歌曲。'))
     .addTextDisplayComponents(v2Text('-# 此畫面只有你能看見；待播佇列由同一語音頻道的成員共用。'))
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       button(musicId(state.id, `qprev:${Math.max(0, page - 1)}`), '上一頁', ButtonStyle.Secondary, disabled || page === 0, '◀️'),
@@ -307,14 +329,14 @@ function musicSummary(rows) {
 }
 
 function trackLine(track, number) {
-  return `${number}. **${displayText(track.title, 80, '未命名歌曲')}** · ${displayText(track.artist, 40, '未知歌手')} · ${[track.source === 'youtube' ? 'YouTube' : 'NAS', cueLabel(track), trackDuration(track)].filter(Boolean).join(' · ')}`;
+  return `${number}. **${displayText(track.title, 80, '未命名歌曲')}** · ${displayText(track.artist, 40, '未知歌手')} · ${[track.source === 'youtube' ? 'YouTube' : '', cueLabel(track), trackDuration(track)].filter(Boolean).join(' · ')}`;
 }
 
 function trackListItem(track, number, includeAlbum = false) {
   const metadata = [
     displayText(track.artist, includeAlbum ? 32 : 40, track.source === 'youtube' ? '未知頻道' : '未知歌手'),
     includeAlbum && track.source !== 'youtube' ? displayText(track.album, 32, '未知專輯') : '',
-    track.source === 'youtube' ? 'YouTube' : 'NAS',
+    track.source === 'youtube' ? 'YouTube' : includeAlbum ? 'NAS' : '',
     trackDuration(track),
     cueLabel(track),
   ];

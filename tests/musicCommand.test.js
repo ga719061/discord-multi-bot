@@ -4,6 +4,8 @@ import { ChannelType, Client, Collection, ComponentType, Message, MessageFlags, 
 import {
   assertMusicAccess,
   execute,
+  openPrivateNasMusic,
+  revokeNasMusicAccess,
   handleMusicInteraction,
   handleMusicVoiceState,
   stopMusicPlayback,
@@ -12,11 +14,15 @@ import { logger } from '../src/utils/logger.js';
 import { MusicError } from '../src/utils/musicLibrary.js';
 import { MusicPlaybackManager } from '../src/utils/musicPlayback.js';
 import { MusicYouTubeClient } from '../src/utils/musicYoutube.js';
+import { MusicAccounts } from '../src/utils/musicAccounts.js';
 import { MusicPanelPresenter } from '../src/commands/music/lib/panel.js';
+import { cleanupTestDatabase, initTestDatabase } from './helpers/database.js';
+import { updateAiSetting } from '../src/utils/database.js';
 
-beforeEach(() => mock.method(logger, 'warn', () => {}));
+beforeEach(() => { initTestDatabase('music-command'); mock.method(logger, 'warn', () => {}); });
 afterEach(async () => {
   await stopMusicPlayback();
+  cleanupTestDatabase();
   mock.restoreAll();
 });
 
@@ -51,6 +57,7 @@ function makeFixture({ withSession = true, tracks = [track()], loggedIn = true }
   };
   const fixture = { calls, order, guild, member, voiceChannel, memberPermissions, botPermissions, musicSession, session: withSession ? musicSession : null, searchResult: tracks };
   fixture.services = {
+    canUseNas: () => true,
     config: {},
     library: {
       async login() { calls.login.push(true); order.push('login'); },
@@ -102,7 +109,12 @@ function makeFixture({ withSession = true, tracks = [track()], loggedIn = true }
       async reply(payload) { interaction.replied = true; interaction.ephemeral = Boolean(payload?.flags & MessageFlags.Ephemeral); acknowledgements.push({ kind: 'reply', payload }); },
       async editReply(payload) { acknowledgements.push({ kind: 'editReply', payload }); },
       async update(payload) { interaction.replied = true; acknowledgements.push({ kind: 'update', payload }); },
-      async followUp(payload) { acknowledgements.push({ kind: 'followUp', payload }); },
+      async followUp(payload) {
+        const id = `notice-${acknowledgements.length}`;
+        acknowledgements.push({ kind: 'followUp', payload, id });
+        return { id };
+      },
+      async deleteReply(id = '@original') { acknowledgements.push({ kind: 'deleteReply', id }); },
       async showModal(payload) { interaction.replied = true; acknowledgements.push({ kind: 'showModal', payload }); },
     };
     return interaction;
@@ -149,9 +161,159 @@ function deferred() {
   return { promise, resolve, reject };
 }
 
+test('ordinary music entry hides NAS while independently whitelisted members get a private entrance', async () => {
+  const fixture = makeFixture({ loggedIn: false, withSession: false });
+  delete fixture.services.canUseNas;
+  fixture.services.youtubeAvailable = true;
+  updateAiSetting(GUILD_ID, 'whitelist', JSON.stringify([USER_ID]));
+  const ordinary = fixture.interaction({ kind: 'command' });
+  await execute(ordinary, fixture.services);
+  assert.doesNotMatch(noticeText(ordinary), /NAS|私人音樂庫|登入|MUSIC_API_BASE_URL/);
+  assert.ok(components(lastPayload(ordinary)).some(item => item.custom_id?.endsWith(':youtube')));
+  assertNoSideEffects(fixture);
+  updateAiSetting(GUILD_ID, 'nas_music_whitelist', JSON.stringify([USER_ID]));
+  const allowed = fixture.interaction({ kind: 'command' });
+  await execute(allowed, fixture.services);
+  const nasId = components(lastPayload(allowed)).find(item => item.custom_id?.endsWith(':nas')).custom_id;
+  const entrance = fixture.interaction({ customId: nasId });
+  await handleMusicInteraction(entrance, fixture.services);
+  assert.match(noticeText(entrance), /登入/);
+  assertNoSideEffects(fixture);
+  assert.equal(entrance.ephemeral, true);
+});
+
+test('a valid old NAS login nonce cannot bypass revoked permission or grant access from AI whitelist', async () => {
+  const fixture = makeFixture({ loggedIn: false });
+  const { id } = await loginView(fixture);
+  delete fixture.services.canUseNas;
+  updateAiSetting(GUILD_ID, 'whitelist', JSON.stringify([USER_ID]));
+  const submit = fixture.interaction({ kind: 'modal', customId: `musicauth:${id}:login_submit`, fields: { email: 'x', password: 'x' } });
+  await handleMusicInteraction(submit, fixture.services);
+  assert.equal(fixture.calls.login.length, 0);
+  assert.equal(fixture.calls.connect.length, 0);
+  assert.match(noticeText(submit), /沒有私人音樂庫的使用資格/);
+  assert.equal(components(lastPayload(submit)).some(item => item.custom_id?.endsWith(':login')), false);
+});
+
+test('NAS authorization is rechecked after a delayed lookup and revoked results never enqueue', async () => {
+  const fixture = makeFixture();
+  delete fixture.services.canUseNas;
+  updateAiSetting(GUILD_ID, 'nas_music_whitelist', JSON.stringify([USER_ID]));
+  const browser = await browse(fixture);
+  const entered = deferred();
+  const gate = deferred();
+  fixture.services.library.getTrack = async () => { entered.resolve(); await gate.promise; return track(); };
+  const select = fixture.interaction({ kind: 'select', customId: `musiclib:${browser.id}:enqueue`, values: [track().id] });
+  const pending = handleMusicInteraction(select, fixture.services);
+  await entered.promise;
+  updateAiSetting(GUILD_ID, 'nas_music_whitelist', '[]');
+  gate.resolve();
+  await pending;
+  assert.equal(fixture.calls.enqueue.length, 0);
+  assert.equal(fixture.accounts.size, 0);
+  assert.match(noticeText(select), /沒有私人音樂庫的使用資格/);
+});
+
+test('NAS revocation cleanup blocks replacement login until the old cleanup has completed', async () => {
+  const fixture = makeFixture();
+  const old = await browse(fixture);
+  const entered = deferred();
+  const cleanupGate = deferred();
+  fixture.services.accounts.logout = async () => {
+    fixture.accounts.clear();
+    entered.resolve();
+    await cleanupGate.promise;
+  };
+  const cleanup = revokeNasMusicAccess(GUILD_ID, USER_ID, fixture.services);
+  await entered.promise;
+  const entry = fixture.interaction({ kind: 'command' });
+  const reopening = openPrivateNasMusic(entry, fixture.services);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(entry.acknowledgements.length, 1, 'only the private defer can happen during cleanup');
+  assert.equal(fixture.calls.login.length, 0);
+  cleanupGate.resolve();
+  await cleanup;
+  await reopening;
+  assert.ok(components(lastPayload(entry)).some(item => item.custom_id?.endsWith(':login')));
+  const stale = fixture.interaction({ customId: `musiclib:${old.id}:search` });
+  await handleMusicInteraction(stale, fixture.services);
+  assert.match(noticeText(stale), /面板已失效/);
+});
+
+test('unauthorized legacy browse opens only YouTube and does not access an old NAS account', async () => {
+  const fixture = makeFixture();
+  fixture.services.canUseNas = () => false;
+  fixture.services.youtubeAvailable = true;
+  const button = fixture.interaction({ customId: 'music:session:browse' });
+  await handleMusicInteraction(button, fixture.services);
+  assert.doesNotMatch(noticeText(button), /NAS|私人音樂庫|登入/);
+  assert.equal(fixture.calls.search.length, 0);
+});
+
+test('a NAS login submitted before revocation cannot resurrect after a delayed acknowledgement and regrant', async () => {
+  const fixture = makeFixture({ loggedIn: false });
+  const { id } = await loginView(fixture);
+  const acknowledged = deferred();
+  const release = deferred();
+  const submit = fixture.interaction({ kind: 'modal', customId: `musicauth:${id}:login_submit`, fields: { email: 'x', password: 'x' } });
+  const originalDefer = submit.deferReply;
+  submit.deferReply = async (...args) => { await originalDefer(...args); acknowledged.resolve(); await release.promise; };
+  const pending = handleMusicInteraction(submit, fixture.services);
+  await acknowledged.promise;
+  await revokeNasMusicAccess(GUILD_ID, USER_ID, fixture.services);
+  release.resolve();
+  await pending;
+  assert.equal(fixture.calls.login.length, 0);
+  assert.equal(fixture.accounts.size, 0);
+  assert.match(noticeText(submit), /已取消/);
+});
+
+test('runtime playback resolver rechecks the requester NAS grant on every play while YouTube remains independent', async () => {
+  const fixture = makeFixture({ withSession: false, loggedIn: false });
+  const client = { guilds: { cache: new Collection([[GUILD_ID, fixture.guild]]) } };
+  const nasLibrary = { marker: 'private-library' };
+  const entry = fixture.interaction({ kind: 'command' });
+  entry.client = client;
+  let manager;
+  mock.method(MusicYouTubeClient.prototype, 'available', async () => true);
+  mock.method(MusicPlaybackManager.prototype, 'getSession', function () { manager = this; return null; });
+  mock.method(MusicAccounts.prototype, 'get', (guildId, userId) => userId === USER_ID ? { id: 'account', library: nasLibrary } : null);
+  updateAiSetting(GUILD_ID, 'nas_music_whitelist', JSON.stringify([USER_ID]));
+  await execute(entry);
+  const youtubeId = components(lastPayload(entry)).find(item => item.custom_id?.endsWith(':youtube')).custom_id;
+  await handleMusicInteraction(fixture.interaction({ customId: youtubeId }));
+  const queued = { ...track(), requestedBy: USER_ID };
+  assert.equal(await manager.resolveLibrary({ guildId: GUILD_ID }, queued), nasLibrary);
+  updateAiSetting(GUILD_ID, 'nas_music_whitelist', '[]');
+  await assert.rejects(manager.resolveLibrary({ guildId: GUILD_ID }, queued), { code: 'MUSIC_FORBIDDEN' });
+  assert.ok(await manager.resolveLibrary({ guildId: GUILD_ID }, { ...queued, source: 'youtube' }) instanceof MusicYouTubeClient);
+  await assert.rejects(manager.resolveLibrary({ guildId: GUILD_ID }, { ...queued, requestedBy: 'other' }), { code: 'MUSIC_FORBIDDEN' });
+});
+
+test('shutdown cancels delayed NAS modal acknowledgement without recreating an account or private login nonce', async () => {
+  const fixture = makeFixture({ loggedIn: false });
+  const { id } = await loginView(fixture);
+  const entered = deferred();
+  const gate = deferred();
+  const submit = fixture.interaction({ kind: 'modal', customId: `musicauth:${id}:login_submit`, fields: { email: 'x', password: 'x' } });
+  const acknowledge = submit.deferReply;
+  submit.deferReply = async (...args) => { await acknowledge(...args); entered.resolve(); await gate.promise; };
+  const pending = handleMusicInteraction(submit, fixture.services);
+  await entered.promise;
+  await stopMusicPlayback();
+  gate.resolve();
+  await pending;
+  assert.equal(fixture.calls.login.length, 0);
+  assert.equal(fixture.accounts.size, 0);
+  assert.match(noticeText(submit), /已取消/);
+  for (const ack of submit.acknowledgements) {
+    if (ack.payload?.components) assert.equal(components(ack.payload).some(item => item.custom_id?.startsWith('musicauth:')), false);
+  }
+});
+
 async function loginView(fixture, userId = USER_ID) {
   const interaction = fixture.interaction({ kind: 'command', userId });
-  await execute(interaction, fixture.services);
+  await openPrivateNasMusic(interaction, fixture.services);
   const id = components(lastPayload(interaction)).find(component => component.custom_id?.startsWith('musicauth:'))?.custom_id.split(':')[1];
   assert.ok(id, 'private entry must expose a scoped login action');
   return { id, interaction };
@@ -363,7 +525,7 @@ test('a logged-in viewer can reach private logout even after leaving voice', asy
   const fixture = makeFixture();
   fixture.member.voice.channel = null;
   const interaction = fixture.interaction({ kind: 'command' });
-  await execute(interaction, fixture.services);
+  await openPrivateNasMusic(interaction, fixture.services);
   assertNoSideEffects(fixture);
   assert.match(noticeText(interaction), /一般語音頻道/);
   assert.ok(components(lastPayload(interaction)).some(component => component.custom_id?.endsWith(':logout')));
@@ -493,7 +655,7 @@ test('music access rejects DM, missing or different voice, Stage and missing mem
     scenario.change(fixture);
     const interaction = fixture.interaction({ kind: 'command' });
     assert.throws(() => assertMusicAccess(interaction, fixture.services.config, fixture.session), { code: scenario.code });
-    await execute(interaction, fixture.services);
+    await openPrivateNasMusic(interaction, fixture.services);
     assertNoSideEffects(fixture);
     assert.match(noticeText(interaction), scenario.notice);
     assert.equal(interaction.acknowledgements[0].payload.flags, MessageFlags.Ephemeral);
@@ -510,7 +672,7 @@ test('music access rejects DM, missing or different voice, Stage and missing mem
 test('first execute authenticates before connecting, publishes one player and returns the private library', async () => {
   const fixture = makeFixture({ withSession: false, tracks: Array.from({ length: 15 }, (_, index) => track(index + 1)) });
   const interaction = fixture.interaction({ kind: 'command' });
-  await execute(interaction, fixture.services);
+  await openPrivateNasMusic(interaction, fixture.services);
   assert.deepEqual(fixture.order, ['login', 'connect', 'panel', 'search']);
   assert.equal(fixture.calls.connect[0][0], fixture.guild);
   assert.equal(fixture.calls.connect[0][1], fixture.voiceChannel);
@@ -522,7 +684,7 @@ test('first execute authenticates before connecting, publishes one player and re
   const privatePayload = lastPayload(interaction);
   assert.ok(privatePayload.flags & MessageFlags.IsComponentsV2);
   assert.equal(components(privatePayload).find((component) => component.type === ComponentType.StringSelect).options.length, 10);
-  await execute(fixture.interaction({ kind: 'command' }), fixture.services);
+  await openPrivateNasMusic(fixture.interaction({ kind: 'command' }), fixture.services);
   assert.equal(fixture.calls.send.length, 1, 'reopening must reuse the public player message');
 });
 
@@ -530,7 +692,7 @@ test('library authentication failure does not connect or publish an idle player'
   const fixture = makeFixture({ withSession: false });
   fixture.services.library.login = async () => { fixture.calls.login.push(true); throw new Error('login rejected'); };
   const interaction = fixture.interaction({ kind: 'command' });
-  await execute(interaction, fixture.services);
+  await openPrivateNasMusic(interaction, fixture.services);
   assert.equal(fixture.calls.connect.length, 0);
   assert.equal(fixture.calls.send.length, 0);
   assert.equal(fixture.calls.search.length, 0);
@@ -550,7 +712,7 @@ test('execute rechecks voice after login and uses the new channel or rejects a c
       await loginFinished.promise;
     };
     const interaction = fixture.interaction({ kind: 'command' });
-    const operation = execute(interaction, fixture.services);
+    const operation = openPrivateNasMusic(interaction, fixture.services);
     await loginStarted.promise;
     assert.equal(fixture.calls.connect.length, 0);
     const newChannel = { ...fixture.voiceChannel, id: '523456789012345678' };
@@ -587,7 +749,7 @@ test('late public panel delivery after session stop disables that message and do
     sendStarted.resolve();
     return sendFinished.promise;
   };
-  const operation = execute(interaction, fixture.services);
+  const operation = openPrivateNasMusic(interaction, fixture.services);
   await sendStarted.promise;
   fixture.musicSession.status = 'stopped';
   fixture.session = null;
@@ -805,7 +967,8 @@ test('queue controls return private queue and use target page ids without mutati
   const next = fixture.interaction({ customId: 'music:session:qnext:1' });
   await handleMusicInteraction(next, fixture.services);
   assert.equal(next.acknowledgements[0].kind, 'update');
-  assert.match(noticeText(next), /\*\*11\. 歌曲 11\*\* {2}\n歌手 · NAS · 3:00/);
+  assert.match(noticeText(next), /\*\*11\. 歌曲 11\*\* {2}\n歌手 · 3:00/);
+  assert.doesNotMatch(noticeText(next), /NAS/);
   assert.match(noticeText(next), /\*\*20\. 歌曲 20\*\*/);
   assert.equal(fixture.calls.control.length, 0);
   assert.equal(fixture.calls.search.length, 0);
@@ -865,6 +1028,49 @@ async function settleCover(fixture, request, buffer = Buffer.from('synthetic cov
   await new Promise(resolve => setImmediate(resolve));
   await fixture.presenter.update(fixture.session);
 }
+
+test('panel removal drains the active edit, drops queued updates and aborts late cover uploads', async () => {
+  const { presenter, session, requests } = panelFixture();
+  const editing = deferred();
+  const entered = deferred();
+  const events = [];
+  session.message = {
+    async edit() { events.push('edit'); entered.resolve(); await editing.promise; },
+    async delete() { events.push('delete'); },
+  };
+  const first = presenter.update(session);
+  await entered.promise;
+  const queued = presenter.update(session);
+  const removal = presenter.remove(session);
+  assert.equal(presenter.remove(session), removal);
+  assert.equal(requests[0].signal.aborted, true);
+  requests[0].resolve({ buffer: Buffer.from('late cover') });
+  await presenter.update(session);
+  assert.deepEqual(events, ['edit']);
+  editing.resolve();
+  await Promise.all([first, queued, removal]);
+  await presenter.close();
+  assert.deepEqual(events, ['edit', 'delete']);
+  assert.equal(session.message, null);
+});
+
+test('already deleted panel is a successful removal but other Discord errors remain failures', async () => {
+  for (const code of [10008, '10008', 50013]) {
+    const { presenter, session } = panelFixture();
+    let deletes = 0;
+    session.message = { async delete() { deletes++; throw Object.assign(new Error('upstream'), { code }); } };
+    if (code === 50013) {
+      await assert.rejects(presenter.remove(session), error => error instanceof MusicError && error.code === 'MUSIC_PANEL_DELETE');
+      await assert.rejects(presenter.remove(session), { code: 'MUSIC_PANEL_DELETE' });
+      assert.ok(session.message);
+    } else {
+      await presenter.remove(session);
+      assert.equal(session.message, null);
+    }
+    assert.equal(deletes, 1);
+    await presenter.close();
+  }
+});
 
 test('slow covers do not delay text updates and progress edits retain the uploaded attachment', async () => {
   const fixture = panelFixture();
@@ -1234,6 +1440,125 @@ function youtubeSubmit(fixture, customId, userId = USER_ID) {
   return fixture.interaction({ kind: 'modal', customId, userId, fields: { url: 'https://youtu.be/video000001?list=ignored&t=60' } });
 }
 
+test('YouTube processing remains visible until completion, then success disappears after five seconds', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const gate = deferred();
+  const entered = deferred();
+  const fixture = enableYouTube(makeFixture({ loggedIn: false }), () => { entered.resolve(); return gate.promise; });
+  const submit = youtubeSubmit(fixture, await youtubeModal(fixture));
+  const pending = handleMusicInteraction(submit, fixture.services);
+  await entered.promise;
+  t.mock.timers.tick(30_000);
+  await Promise.resolve();
+  assert.equal(submit.acknowledgements.filter(ack => ack.kind === 'deleteReply').length, 0);
+  gate.resolve(youtubeItem());
+  await pending;
+  assert.match(noticeText(submit), /影片曲目.*已交給播放器/);
+  t.mock.timers.tick(4999);
+  await Promise.resolve();
+  assert.equal(submit.acknowledgements.filter(ack => ack.kind === 'deleteReply').length, 0);
+  t.mock.timers.tick(1);
+  await Promise.resolve();
+  assert.deepEqual(submit.acknowledgements.filter(ack => ack.kind === 'deleteReply'), [{ kind: 'deleteReply', id: '@original' }]);
+});
+
+test('YouTube failure edits the processing reply instead of adding a message and expires after thirty seconds', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const fixture = enableYouTube(makeFixture({ loggedIn: false }), () => { throw new MusicError('MUSIC_YOUTUBE_UNAVAILABLE'); });
+  const submit = youtubeSubmit(fixture, await youtubeModal(fixture));
+  const editReply = submit.editReply;
+  submit.editReply = async payload => { await editReply(payload); submit.replied = true; };
+  await handleMusicInteraction(submit, fixture.services);
+  assert.equal(submit.acknowledgements.filter(ack => ack.kind === 'followUp').length, 0);
+  assert.match(noticeText(submit), /音樂操作未完成/);
+  t.mock.timers.tick(29_999);
+  await Promise.resolve();
+  assert.equal(submit.acknowledgements.filter(ack => ack.kind === 'deleteReply').length, 0);
+  t.mock.timers.tick(1);
+  await Promise.resolve();
+  assert.deepEqual(submit.acknowledgements.at(-1), { kind: 'deleteReply', id: '@original' });
+});
+
+test('NAS success and failure delete only their private followup while keeping the library panel', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const failed of [false, true]) {
+    const fixture = makeFixture();
+    const browser = await browse(fixture);
+    if (failed) fixture.services.library.getTrack = async () => { throw new MusicError('MUSIC_NOT_FOUND'); };
+    const select = fixture.interaction({ kind: 'select', customId: `musiclib:${browser.id}:enqueue`, values: [track().id] });
+    await handleMusicInteraction(select, fixture.services);
+    const notice = select.acknowledgements.find(ack => ack.kind === 'followUp');
+    assert.ok(notice.payload.flags & MessageFlags.Ephemeral);
+    const delay = failed ? 30_000 : 5000;
+    t.mock.timers.tick(delay - 1);
+    await Promise.resolve();
+    assert.equal(select.acknowledgements.filter(ack => ack.kind === 'deleteReply').length, 0);
+    t.mock.timers.tick(1);
+    await Promise.resolve();
+    assert.deepEqual(select.acknowledgements.at(-1), { kind: 'deleteReply', id: notice.id });
+    assert.notEqual(notice.id, '@original');
+    assert.equal(browser.interaction.acknowledgements.filter(ack => ack.kind === 'deleteReply').length, 0);
+  }
+});
+
+test('notice cleanup tolerates manual dismissal and safely logs other deletion failures', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const code of [10008, 50013]) {
+    const fixture = enableYouTube(makeFixture({ loggedIn: false }));
+    const submit = youtubeSubmit(fixture, await youtubeModal(fixture));
+    submit.deleteReply = async () => { throw Object.assign(new Error('secret upstream URL'), { code }); };
+    await handleMusicInteraction(submit, fixture.services);
+    t.mock.timers.tick(5000);
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await stopMusicPlayback();
+  }
+  assert.deepEqual(logger.warn.mock.calls.map(call => call.arguments), [['[Music] point notice cleanup failed']]);
+});
+
+test('shutdown cancels notice timers and waits for an already running deletion', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const fixture = enableYouTube(makeFixture({ loggedIn: false }));
+  const submit = youtubeSubmit(fixture, await youtubeModal(fixture));
+  const gate = deferred();
+  submit.deleteReply = () => gate.promise;
+  await handleMusicInteraction(submit, fixture.services);
+  t.mock.timers.tick(5000);
+  await Promise.resolve();
+  let stopped = false;
+  const stopping = stopMusicPlayback().then(() => { stopped = true; });
+  await Promise.resolve();
+  assert.equal(stopped, false);
+  gate.resolve();
+  await stopping;
+  const another = enableYouTube(makeFixture({ loggedIn: false }));
+  const queued = youtubeSubmit(another, await youtubeModal(another));
+  await handleMusicInteraction(queued, another.services);
+  await stopMusicPlayback();
+  t.mock.timers.tick(30_000);
+  await Promise.resolve();
+  assert.equal(queued.acknowledgements.filter(ack => ack.kind === 'deleteReply').length, 0);
+});
+
+test('notice timer capacity clears the oldest confirmation early without touching panels', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const fixture = makeFixture();
+  const browser = await browse(fixture);
+  const requests = [];
+  for (let index = 0; index < 101; index++) {
+    const select = fixture.interaction({ kind: 'select', customId: `musiclib:${browser.id}:enqueue`, values: [track().id] });
+    await handleMusicInteraction(select, fixture.services);
+    requests.push(select);
+  }
+  assert.equal(requests[0].acknowledgements.filter(ack => ack.kind === 'deleteReply').length, 1);
+  assert.equal(requests.slice(1).flatMap(request => request.acknowledgements.filter(ack => ack.kind === 'deleteReply')).length, 0);
+  t.mock.timers.tick(5000);
+  await Promise.resolve();
+  assert.equal(requests.flatMap(request => request.acknowledgements.filter(ack => ack.kind === 'deleteReply')).length, 101);
+  assert.equal(browser.interaction.acknowledgements.filter(ack => ack.kind === 'deleteReply').length, 0);
+});
+
 test('YouTube-only entry privately resolves without NAS login, then creates the shared player', async () => {
   const fixture = enableYouTube(makeFixture({ withSession: false, loggedIn: false }));
   fixture.services.config.nasConfigured = false;
@@ -1466,10 +1791,11 @@ test('leaving voice during first connection cleans the unexposed empty player', 
   assert.match(noticeText(submit), /語音頻道/);
 });
 
-test('stopping during first panel publication keeps the late panel stopped and rejects enqueue', async () => {
+test('stopping during first panel publication deletes the late panel and rejects enqueue', async () => {
   const publication = deferred();
   const entered = deferred();
   const fixture = enableYouTube(makeFixture({ withSession: false, loggedIn: false }));
+  fixture.services.panels = new MusicPanelPresenter({ manager: fixture.services.manager, accounts: fixture.services.accounts });
   const view = await loginView(fixture);
   const modal = await youtubeModal(fixture, { customId: `musicauth:${view.id}:youtube` });
   const submit = youtubeSubmit(fixture, modal);
@@ -1479,11 +1805,56 @@ test('stopping during first panel publication keeps the late panel stopped and r
   fixture.services.manager.control = async session => { session.status = 'stopped'; fixture.session = null; };
   await handleMusicInteraction(fixture.interaction({ customId: 'music:session:stop' }), fixture.services);
   const edits = [];
-  publication.resolve({ async edit(payload) { edits.push(payload); } });
+  let deletes = 0;
+  publication.resolve({ async edit(payload) { edits.push(payload); }, async delete() { deletes++; } });
   await pending;
   assert.equal(fixture.calls.enqueue.length, 0);
-  assert.equal(edits.length, 1);
-  assert.ok(components(edits[0]).filter(component => component.custom_id?.startsWith('music:')).every(component => component.disabled));
+  assert.equal(edits.length, 0);
+  assert.equal(deletes, 1);
+  assert.equal(fixture.musicSession.message, null);
+});
+
+test('manual stop waits for playback cleanup before deleting only its own panel', async () => {
+  const fixture = makeFixture();
+  const cleanup = deferred();
+  const entered = deferred();
+  let deletes = 0;
+  fixture.musicSession.message = { async delete() { deletes++; } };
+  fixture.services.panels = new MusicPanelPresenter({ manager: fixture.services.manager, accounts: fixture.services.accounts });
+  fixture.services.manager.control = async (session, action) => {
+    assert.equal(action, 'stop');
+    session.status = 'stopped';
+    fixture.session = null;
+    entered.resolve();
+    await cleanup.promise;
+  };
+  const stop = fixture.interaction({ customId: 'music:session:stop' });
+  const pending = handleMusicInteraction(stop, fixture.services);
+  await entered.promise;
+  assert.equal(deletes, 0);
+  cleanup.resolve();
+  await pending;
+  assert.equal(deletes, 1);
+  assert.equal(fixture.musicSession.message, null);
+  assert.deepEqual(stop.acknowledgements.map(ack => ack.kind), ['deferUpdate']);
+  const repeated = fixture.interaction({ customId: 'music:session:stop' });
+  await handleMusicInteraction(repeated, fixture.services);
+  assert.equal(deletes, 1);
+  assert.match(noticeText(repeated), /失效/);
+});
+
+test('panel deletion failure reports a private safe notice after stopping playback', async () => {
+  const fixture = makeFixture();
+  fixture.musicSession.message = { async delete() { throw new Error('sensitive upstream details'); } };
+  fixture.services.panels = new MusicPanelPresenter({ manager: fixture.services.manager, accounts: fixture.services.accounts });
+  fixture.services.manager.control = async session => { session.status = 'stopped'; fixture.session = null; };
+  const stop = fixture.interaction({ customId: 'music:session:stop' });
+  await handleMusicInteraction(stop, fixture.services);
+  assert.equal(fixture.session, null);
+  assert.match(noticeText(stop), /已停止並離開.*無法刪除/);
+  assert.doesNotMatch(noticeText(stop), /sensitive/);
+  assert.ok(lastPayload(stop).flags & MessageFlags.Ephemeral);
+  assert.ok(logger.warn.mock.calls.some(call => call.arguments[0].includes('MUSIC_PANEL_DELETE')));
 });
 
 test('a voice session abort cancels pending metadata immediately before its delayed final panel update', async () => {

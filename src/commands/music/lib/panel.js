@@ -1,5 +1,6 @@
 import { ComponentType } from 'discord.js';
 import { v2EditPayload } from '../../../utils/componentsV2.js';
+import { MusicError } from '../../../utils/musicLibrary.js';
 import { buildMusicPlayerPayload, normalizeMusicCoverUrl } from './ui.js';
 
 function uploadedCoverUrl(id, ...values) {
@@ -54,9 +55,10 @@ export class MusicPanelPresenter {
       state = { cover: null, editing: Promise.resolve(), failed: false };
       this.states.set(session, state);
     }
+    if (state.removing) return Promise.resolve();
     this.syncCover(session, state);
     const edit = state.editing.catch(() => {}).then(async () => {
-      if (this.closed || state.failed) return;
+      if (this.closed || state.failed || state.removing) return;
       this.syncCover(session, state);
       const cover = state.cover;
       const image = cover?.image;
@@ -80,6 +82,7 @@ export class MusicPanelPresenter {
           cover.image = null;
         }
       } catch (error) {
+        if (state.removing) return;
         if (!image && !attachment) throw error;
         cover.image = null;
         cover.attachment = null;
@@ -93,6 +96,29 @@ export class MusicPanelPresenter {
     return this.trackTask(edit);
   }
 
+  remove(session) {
+    if (!session.message) return Promise.resolve();
+    let state = this.states.get(session);
+    if (!state) {
+      state = { cover: null, editing: Promise.resolve(), failed: false };
+      this.states.set(session, state);
+    }
+    if (state.removal) return state.removal;
+    state.removing = true;
+    state.cover?.controller.abort();
+    state.cover = null;
+    const message = session.message;
+    // Finish the in-flight edit before deleting; queued updates cannot revive the panel.
+    state.removal = state.editing.catch(() => {}).then(async () => {
+      try { await message.delete(); }
+      catch (error) {
+        if (error?.code !== 10008 && error?.code !== '10008') throw new MusicError('MUSIC_PANEL_DELETE');
+      }
+      if (session.message === message) session.message = null;
+    });
+    return this.trackTask(state.removal);
+  }
+
   syncCover(session, state) {
     const track = session.status === 'stopped' ? null : session.current;
     const isYouTube = track?.source === 'youtube';
@@ -103,7 +129,7 @@ export class MusicPanelPresenter {
       && existing.accountId === account?.id && existing.source === source) return;
     existing?.controller.abort();
     state.cover = null;
-    if (!track || !source || this.closed || state.failed) return;
+    if (!track || !source || this.closed || state.failed || state.removing) return;
     const controller = new AbortController();
     const cover = {
       track, accountId: account?.id, source, generation: session.generation, controller,

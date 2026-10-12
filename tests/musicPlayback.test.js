@@ -526,6 +526,97 @@ function audioTicks(player, count) {
   }
 }
 
+// FFmpeg-generated 300ms stereo Ogg Opus silence: 16 audio packets, including the final partial frame.
+const TAIL_OGG = Buffer.from('T2dnUwACAAAAAAAAAAANGziuAAAAAG6CAeIBE09wdXNIZWFkAQI4AYC7AAAAAABPZ2dTAAAAAAAAAAAAAA0bOK4BAAAAItGE9QE+T3B1c1RhZ3MNAAAATGF2ZjYyLjEyLjEwMQEAAAAdAAAAZW5jb2Rlcj1MYXZjNjIuMjguMTAxIGxpYm9wdXNPZ2dTAAR4OQAAAAAAAA0bOK4CAAAAfzCo7hADAwMDAwMDAwMDAwMDAwMD/P/+/P/+/P/+/P/+/P/+/P/+/P/+/P/+/P/+/P/+/P/+/P/+/P/+/P/+/P/+/P/+', 'base64');
+
+test('real voice player drains the complete tail when FFmpeg closes stdin after input EOF and exits successfully', async () => {
+  for (const pipeCode of ['EPIPE', 'ERR_STREAM_PREMATURE_CLOSE']) {
+    const source = Readable.from([Buffer.from('complete synthetic input')]);
+    const child = audioChild();
+    let finishInput;
+    child.stdin = new Writable({
+      write(_chunk, _encoding, callback) { callback(); },
+      final(callback) { finishInput = callback; },
+    });
+    const transport = await createMusicAudioResource({ openStream: async () => source }, track(1), {
+      spawnImpl: () => child,
+    });
+    const player = createAudioPlayer();
+    const errors = [];
+    let sentPackets = 0;
+    Object.defineProperty(player, 'playable', { get: () => [{
+      prepareAudioPacket() { sentPackets++; }, dispatchAudio() {},
+    }] });
+    player.on('error', error => errors.push(error));
+    try {
+      child.stdout.push(TAIL_OGG);
+      player.play(transport.resource);
+      await entersState(player, AudioPlayerStatus.Playing, 1000);
+      audioTicks(player, 1);
+      assert.equal(source.readableEnded, true);
+      assert.equal(typeof finishInput, 'function');
+      finishInput(Object.assign(new Error('synthetic pipe closed'), { code: pipeCode }));
+      await flush();
+      child.emit('exit', 0, null);
+      child.stdout.push(null);
+      await flush();
+      assert.deepEqual(errors, [], 'successful FFmpeg EOF must not destroy buffered audio');
+      assert.equal(transport.failure, null);
+      for (let tick = 0; tick < 30 && player.state.status !== AudioPlayerStatus.Idle; tick++) {
+        audioTicks(player, 1);
+        await flush();
+      }
+      assert.equal(transport.resource.playStream.readableEnded, true);
+      assert.equal(player.state.status, AudioPlayerStatus.Idle);
+      assert.equal(sentPackets, 21, 'all 16 audio packets and five SDK tail-padding packets must be sent');
+    } finally { player.stop(true); await transport.dispose(); }
+  }
+});
+
+test('tail pipe handling preserves incomplete input, upstream errors and unsuccessful FFmpeg exits', async () => {
+  for (const scenario of ['partial', 'upstream', 'nonzero', 'signal', 'cancel']) {
+    const source = scenario === 'partial' || scenario === 'upstream'
+      ? new Readable({ read() {} }) : Readable.from([Buffer.from('complete synthetic input')]);
+    if (scenario === 'partial' || scenario === 'upstream') source.push(Buffer.from('partial input'));
+    const child = audioChild();
+    let finishInput;
+    child.stdin = new Writable({
+      write(_chunk, _encoding, callback) { callback(); },
+      final(callback) { finishInput = callback; },
+    });
+    const transport = await createMusicAudioResource({ openStream: async () => source }, track(1), {
+      spawnImpl: () => child,
+    });
+    const player = createAudioPlayer();
+    const errors = [];
+    Object.defineProperty(player, 'playable', { get: () => [{ prepareAudioPacket() {}, dispatchAudio() {} }] });
+    player.on('error', error => errors.push(error));
+    try {
+      child.stdout.push(TAIL_OGG);
+      player.play(transport.resource);
+      await entersState(player, AudioPlayerStatus.Playing, 1000);
+      const pipeError = Object.assign(new Error('synthetic pipe closed'), { code: 'EPIPE' });
+      if (scenario === 'partial') child.stdin.destroy(pipeError);
+      else if (scenario === 'upstream') source.destroy(new MusicError('MUSIC_YOUTUBE_UNAVAILABLE'));
+      else finishInput(pipeError);
+      await flush();
+      if (scenario === 'cancel') {
+        player.stop(true);
+        await transport.dispose();
+        assert.equal(transport.failure, null);
+        assert.deepEqual(errors, []);
+      } else {
+        child.emit('exit', scenario === 'nonzero' ? 1 : scenario === 'signal' ? null : 0,
+          scenario === 'signal' ? 'SIGTERM' : null);
+        await flush();
+        assert.equal(errors.length, 1);
+        assert.equal(transport.failure.code, scenario === 'upstream' ? 'MUSIC_YOUTUBE_UNAVAILABLE'
+          : scenario === 'partial' ? 'MUSIC_PLAYBACK' : 'MUSIC_FFMPEG');
+      }
+    } finally { player.stop(true); await transport.dispose(); }
+  }
+});
+
 test('real voice player survives a brief supply gap and resumes the same song', async () => {
   const playback = streamingFixture();
   const { manager, streams, failures } = playback;

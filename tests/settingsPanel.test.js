@@ -1,6 +1,6 @@
 import test, { afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { ButtonStyle, ChannelType, Collection, ComponentType, MessageFlags, PermissionFlagsBits } from 'discord.js';
+import { ButtonStyle, ChannelType, Collection, ComponentType, MessageFlags, PermissionFlagsBits, PermissionsBitField } from 'discord.js';
 import { data, settingsViewTesting } from '../src/commands/admin/settings.js';
 import { countV2Components, ephemeralV2Payload } from '../src/utils/componentsV2.js';
 import { getAiSettings, getDb, getGuildSettings, updateAiSetting, updateGuildSetting } from '../src/utils/database.js';
@@ -9,6 +9,7 @@ import { normalizeSelfRoleSettings } from '../src/utils/roleSettings.js';
 import { cleanupTestDatabase, initTestDatabase } from './helpers/database.js';
 
 afterEach(() => {
+  settingsViewTesting.setMusicBridgeLoader(null);
   cleanupTestDatabase();
 });
 
@@ -32,7 +33,7 @@ test('/設定 is restricted to Administrator by command metadata', () => {
 });
 
 test('confirmation page is private Components V2 UI with confirm and cancel actions', () => {
-  const context = { userId: 'admin', pending: { confirm: 'steam_publish' } };
+  const context = { userId: 'admin', isAdministrator: true, pending: { confirm: 'steam_publish' } };
   const view = settingsViewTesting.renderConfirm(context);
   const payload = ephemeralV2Payload(view.components);
   const panel = view.components[0].toJSON();
@@ -53,7 +54,7 @@ test('welcome settings can be disabled without deleting the custom message', asy
   updateGuildSetting(guildId, 'welcome_message', '歡迎 {user}');
   let edited;
   const context = {
-    userId: 'admin',
+    userId: 'admin', isAdministrator: true,
     guild: { id: guildId },
     view: 'welcome',
     pending: {},
@@ -171,7 +172,7 @@ test('reaction-role panel supports selected role plus emoji pair building', asyn
     },
   };
   const context = {
-    userId: 'admin',
+    userId: 'admin', isAdministrator: true,
     guild,
     view: 'reaction',
     pending: { reactionRole: role.id },
@@ -235,7 +236,7 @@ test('self-role settings normalize legacy string entries and preserve requiremen
 
 test('announcement page includes publishing target and mutually exclusive mention controls', () => {
   const context = {
-    userId: 'admin',
+    userId: 'admin', isAdministrator: true,
     pending: {},
   };
   const view = settingsViewTesting.renderAnnouncement(context);
@@ -253,9 +254,9 @@ test('AI settings page exposes unlocked private draft center', () => {
   const guildId = `settings-ai-draft-${process.pid}`;
   updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
   const context = {
-    userId: 'admin',
+    userId: 'admin', isAdministrator: true,
     guild: { id: guildId },
-    view: 'ai',
+    view: 'ai_drafts',
     pending: {},
     notice: null,
   };
@@ -278,9 +279,9 @@ test('AI settings page exposes the core enable toggle and current status', () =>
   const guildId = `settings-ai-enabled-${process.pid}`;
   updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
   const context = {
-    userId: 'admin',
+    userId: 'admin', isAdministrator: true,
     guild: { id: guildId },
-    view: 'ai',
+    view: 'ai_core',
     pending: {},
     notice: null,
   };
@@ -330,9 +331,9 @@ test('AI reference sources are hidden by default and can be enabled independentl
   const guildId = `settings-ai-citations-${process.pid}`;
   updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
   const context = {
-    userId: 'admin',
+    userId: 'admin', isAdministrator: true,
     guild: { id: guildId },
-    view: 'ai',
+    view: 'ai_core',
     pending: {},
     notice: null,
   };
@@ -369,9 +370,9 @@ test('AI action tools are disabled by default and have an independent bounded to
   const guildId = `settings-ai-action-tools-${process.pid}`;
   updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
   const context = {
-    userId: 'admin',
+    userId: 'admin', isAdministrator: true,
     guild: { id: guildId },
-    view: 'ai',
+    view: 'ai_access',
     pending: {},
     notice: null,
   };
@@ -437,9 +438,9 @@ test('AI announcement draft panel offers preview controls only after a draft exi
   const guildId = `settings-ai-announcement-draft-${process.pid}`;
   updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
   const context = {
-    userId: 'admin',
+    userId: 'admin', isAdministrator: true,
     guild: { id: guildId },
-    view: 'ai',
+    view: 'ai_drafts',
     pending: {
       aiDraft: {
         type: 'announcement',
@@ -469,7 +470,7 @@ test('welcome modal uses AI private draft as a prefilled setting draft', () => {
   initTestDatabase();
   const guildId = `settings-ai-welcome-draft-${process.pid}`;
   const context = {
-    userId: 'admin',
+    userId: 'admin', isAdministrator: true,
     guild: { id: guildId },
     pending: { welcomeMessageDraft: '歡迎 {user} 來到伺服器！' },
   };
@@ -488,7 +489,7 @@ test('welcome modal uses AI private draft as a prefilled setting draft', () => {
 test('all settings text modals use descriptive label components', () => {
   initTestDatabase();
   const context = {
-    userId: 'admin',
+    userId: 'admin', isAdministrator: true,
     guild: { id: `settings-modal-labels-${process.pid}` },
     pending: {},
   };
@@ -510,7 +511,7 @@ test('settings home health overview uses neutral admin wording', async () => {
   initTestDatabase();
   const guildId = `settings-home-neutral-${process.pid}`;
   const context = {
-    userId: 'admin',
+    userId: 'admin', isAdministrator: true,
     guild: {
       id: guildId,
       name: 'Test Server',
@@ -556,7 +557,7 @@ test('settings function selector routes to the selected existing view', async ()
   const guildId = `settings-view-select-${process.pid}`;
   let edited;
   const context = {
-    userId: 'admin',
+    userId: 'admin', isAdministrator: true,
     guild: { id: guildId },
     view: 'home',
     pending: { confirm: 'steam_publish' },
@@ -582,7 +583,7 @@ test('settings notices remain complete Markdown outside the compact ANSI summary
   initTestDatabase();
   const notice = 'AI 歡迎訊息草稿已帶入設定欄位，請檢查內容並確認後儲存。';
   const view = settingsViewTesting.renderWelcome({
-    userId: 'admin',
+    userId: 'admin', isAdministrator: true,
     guild: { id: `settings-notice-${process.pid}` },
     pending: {},
     notice,
@@ -626,7 +627,7 @@ test('settings pages stay within component and button-style limits', async () =>
   const client = { ws: { ping: 25 }, guilds: { cache: new Collection([[guildId, guild]]) } };
   const views = [
     'home', 'welcome', 'logging', 'leveling', 'steam', 'selfrole', 'reaction',
-    'ai', 'serverinfo', 'botstatus', 'announcement', 'member', 'confirm',
+    'ai', 'ai_core', 'ai_access', 'ai_drafts', 'ai_nas', 'serverinfo', 'botstatus', 'announcement', 'member', 'confirm',
   ];
   const summaryLabels = {
     home: '健康',
@@ -637,6 +638,7 @@ test('settings pages stay within component and button-style limits', async () =>
     selfrole: '領取選項',
     reaction: '公開站點',
     ai: '智慧核心',
+    ai_core: '智慧核心', ai_access: 'AI 白名單', ai_drafts: '私人草稿', ai_nas: 'NAS 服務',
     serverinfo: '健康',
     botstatus: '系統',
     announcement: '發布頻道',
@@ -645,7 +647,7 @@ test('settings pages stay within component and button-style limits', async () =>
 
   for (const viewName of views) {
     const context = {
-      userId: 'admin', guild, client, view: viewName, pending: {}, notice: null,
+      userId: 'admin', isAdministrator: true, guild, client, view: viewName, pending: {}, notice: null,
     };
     if (viewName === 'confirm') context.pending.confirm = 'steam_publish';
     const view = await settingsViewTesting.renderView(context);
@@ -673,7 +675,7 @@ test('settings pages stay within component and button-style limits', async () =>
 test('Steam panel exposes independent limited-free push controls', () => {
   initTestDatabase();
   const guildId = `settings-steam-free-${process.pid}`;
-  const context = { userId: 'admin', guild: { id: guildId }, view: 'steam', pending: {}, notice: null };
+  const context = { userId: 'admin', isAdministrator: true, guild: { id: guildId }, view: 'steam', pending: {}, notice: null };
   const panel = settingsViewTesting.renderSteam(context).components[0].toJSON();
   const text = JSON.stringify(panel);
   const actionIds = panel.components
@@ -712,7 +714,7 @@ test('disabling Steam free updates marks the managed board as paused', async () 
   let panelEdit;
   const message = { edit: async (payload) => { boardEdit = payload; } };
   const context = {
-    userId: 'admin',
+    userId: 'admin', isAdministrator: true,
     guild: {
       id: guildId,
       channels: {
@@ -740,7 +742,7 @@ test('disabling Steam free updates marks the managed board as paused', async () 
 });
 
 test('confirmation page describes limited-free Steam publish action', () => {
-  const context = { userId: 'admin', pending: { confirm: 'steam_free_publish' } };
+  const context = { userId: 'admin', isAdministrator: true, pending: { confirm: 'steam_free_publish' } };
   const view = settingsViewTesting.renderConfirm(context);
   const text = JSON.stringify(view.components[0].toJSON());
 
@@ -772,7 +774,7 @@ test('locked AI page provides control-center verification with a primary login a
   process.env.AI_ADMIN_PASSWORD = 'royal-secret';
 
   try {
-    const context = { userId: 'admin', guild: { id: guildId }, view: 'ai', pending: {}, notice: null };
+    const context = { userId: 'admin', isAdministrator: true, guild: { id: guildId }, view: 'ai', pending: {}, notice: null };
     const panel = settingsViewTesting.renderAi(context).components[0].toJSON();
     const buttons = panel.components
       .filter((component) => component.type === ComponentType.ActionRow)
@@ -798,7 +800,7 @@ test('AI unlock modal grants persistent access and renders state-aware button co
   process.env.AI_ADMIN_PASSWORD = 'royal-secret';
   let updated;
 
-  const context = { userId: 'admin', guild: { id: guildId }, view: 'ai', pending: {}, notice: null };
+  const context = { userId: 'admin', isAdministrator: true, guild: { id: guildId }, view: 'ai', pending: {}, notice: null };
   const submit = {
     user: { id: 'admin' },
     memberPermissions: { has: () => true },
@@ -819,8 +821,12 @@ test('AI unlock modal grants persistent access and renders state-aware button co
 
     assert.equal(getAiSettings(guildId).admin_ids.includes('admin'), true);
     assert.match(text, /身分驗證成功/);
-    assert.match(text, /AI 設定/);
-    assert.match(text, /聯網檢索可能執行多次計費查詢/);
+    assert.match(text, /AI／私人音樂管理中心/);
+    assert.match(text, /兩份使用白名單互不授權/);
+    context.view = 'ai_core';
+    const core = settingsViewTesting.renderAi(context).components[0].toJSON();
+    assert.match(JSON.stringify(core), /聯網檢索可能執行多次計費查詢/);
+    buttons.splice(0, buttons.length, ...core.components.filter((child) => child.type === ComponentType.ActionRow).flatMap((row) => row.components));
     assert.equal(buttons.find((button) => button.label === '開啟聯網').style, ButtonStyle.Success);
     assert.equal(buttons.find((button) => button.label === '關閉記憶').style, ButtonStyle.Secondary);
     assert.equal(buttons.find((button) => button.label === '啟動派對').style, ButtonStyle.Secondary);
@@ -862,7 +868,7 @@ test('AI model selector uses the two approved models and migrates legacy choices
     );
   }
 
-  const context = { userId: 'admin', guild: { id: guildId }, view: 'ai', pending: {}, notice: null };
+  const context = { userId: 'admin', isAdministrator: true, guild: { id: guildId }, view: 'ai_core', pending: {}, notice: null };
   const panelText = JSON.stringify(settingsViewTesting.renderAi(context).components[0].toJSON());
 
   for (const model of AI_MODELS) {
@@ -881,9 +887,9 @@ test('AI panel displays whitelist members beside its whitelist controls', () => 
   updateAiSetting(guildId, 'whitelist', JSON.stringify(whitelist));
 
   const context = {
-    userId: 'admin',
+    userId: 'admin', isAdministrator: true,
     guild: { id: guildId },
-    view: 'ai',
+    view: 'ai_access',
     pending: { aiUser: '2000' },
     notice: null,
   };
@@ -898,6 +904,262 @@ test('AI panel displays whitelist members beside its whitelist controls', () => 
   assert.match(panelText, /目前選取：<@2000>/);
 });
 
+test('AI and NAS management pages keep independent lists and preserve private drafts across navigation', async () => {
+  initTestDatabase();
+  const guildId = `settings-ai-nas-navigation-${process.pid}`;
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
+  updateAiSetting(guildId, 'whitelist', JSON.stringify(['111111111111111111']));
+  updateAiSetting(guildId, 'nas_music_whitelist', JSON.stringify(['222222222222222222']));
+  const draft = { type: 'welcome', text: '歡迎 {user}', sourceBrief: '歡迎新人', tone: 'clear' };
+  const context = {
+    userId: 'admin', isAdministrator: true, guild: { id: guildId }, view: 'ai_drafts',
+    pending: { aiDraft: draft }, notice: null, editResponse: async () => {},
+  };
+  const component = {
+    values: ['ai_nas'], memberPermissions: { has: () => true },
+    async deferUpdate() { this.deferred = true; },
+  };
+  await settingsViewTesting.handleStringSelect(component, context, 'ai_page');
+  assert.equal(context.view, 'ai_nas');
+  assert.equal(context.pending.aiDraft, draft);
+  const nasText = JSON.stringify(settingsViewTesting.renderAi(context).components[0].toJSON());
+  assert.match(nasText, /<@222222222222222222>/);
+  assert.doesNotMatch(nasText, /<@111111111111111111>/);
+  assert.match(nasText, /不會撤銷管理員資格/);
+  context.view = 'ai_access';
+  const aiText = JSON.stringify(settingsViewTesting.renderAi(context).components[0].toJSON());
+  assert.match(aiText, /<@111111111111111111>/);
+  assert.doesNotMatch(aiText, /<@222222222222222222>/);
+  context.view = 'ai';
+  const overview = settingsViewTesting.renderAi(context).components[0].toJSON();
+  const select = overview.components.flatMap((row) => row.components || []).find((entry) => entry.custom_id?.endsWith(':ai_page'));
+  assert.deepEqual(select.options.map((option) => option.value), ['ai', 'ai_core', 'ai_access', 'ai_drafts', 'ai_nas']);
+  assert.match(JSON.stringify(overview), /開啟私人音樂庫/);
+});
+
+test('NAS management list paginates ten members and clamps removed final pages', () => {
+  initTestDatabase();
+  const guildId = `settings-nas-pages-${process.pid}`;
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
+  const members = Array.from({ length: 21 }, (_, index) => String(100000000000000000n + BigInt(index)));
+  updateAiSetting(guildId, 'nas_music_whitelist', JSON.stringify(members));
+  const context = { userId: 'admin', isAdministrator: true, guild: { id: guildId }, view: 'ai_nas', pending: { nasPage: 1 } };
+  let text = JSON.stringify(settingsViewTesting.renderAi(context).components[0].toJSON());
+  assert.match(text, /第 2／3 頁/);
+  for (const userId of members.slice(10, 20)) assert.ok(text.includes(`<@${userId}>`));
+  for (const userId of [...members.slice(0, 10), members[20]]) assert.ok(!text.includes(`<@${userId}>`));
+  context.pending.nasPage = 10;
+  settingsViewTesting.renderAi(context);
+  assert.equal(context.pending.nasPage, 2);
+  updateAiSetting(guildId, 'nas_music_whitelist', '[]');
+  text = JSON.stringify(settingsViewTesting.renderAi(context).components[0].toJSON());
+  assert.equal(context.pending.nasPage, 0);
+  assert.match(text, /尚未加入成員/);
+});
+
+test('NAS list management requires both live Administrator and persistent management authorization', async () => {
+  initTestDatabase();
+  const guildId = `settings-nas-denied-${process.pid}`;
+  const selected = '111111111111111111';
+  const context = { userId: 'admin', isAdministrator: true, guild: { id: guildId }, view: 'ai_nas', pending: { nasUser: selected } };
+  let reply;
+  const component = { memberPermissions: { has: () => true }, reply: async (payload) => { reply = payload; } };
+  await settingsViewTesting.handleButton(component, context, 'ai_nas_add');
+  assert.deepEqual(getAiSettings(guildId).nas_music_whitelist, []);
+  assert.match(JSON.stringify(reply), /管理中心已鎖定/);
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
+  component.memberPermissions.has = () => false;
+  await settingsViewTesting.handleButton(component, context, 'ai_nas_add');
+  assert.deepEqual(getAiSettings(guildId).nas_music_whitelist, []);
+  assert.equal(context.isAdministrator, false);
+  const locked = settingsViewTesting.renderAi(context).components[0].toJSON();
+  assert.doesNotMatch(JSON.stringify(locked), /加入 NAS 白名單|ai_page/);
+});
+
+test('NAS grant and removal affect only the NAS list and preserve implicit administrator access', async () => {
+  initTestDatabase();
+  const guildId = `settings-nas-grant-${process.pid}`;
+  const selected = '111111111111111111';
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin', selected]));
+  updateAiSetting(guildId, 'whitelist', JSON.stringify(['222222222222222222']));
+  const context = {
+    userId: 'admin', isAdministrator: true,
+    guild: { id: guildId, members: { fetch: async () => ({ permissions: new PermissionsBitField(PermissionFlagsBits.Administrator) }) } },
+    view: 'ai_nas', pending: { nasUser: selected }, editResponse: async () => {},
+  };
+  const component = { memberPermissions: { has: () => true }, async deferUpdate() { this.deferred = true; } };
+  await settingsViewTesting.handleButton(component, context, 'ai_nas_add');
+  assert.deepEqual(getAiSettings(guildId).nas_music_whitelist, [selected]);
+  assert.deepEqual(getAiSettings(guildId).whitelist, ['222222222222222222']);
+  await settingsViewTesting.handleButton(component, context, 'ai_nas_remove');
+  assert.deepEqual(getAiSettings(guildId).nas_music_whitelist, []);
+  assert.match(context.notice, /NAS 使用權仍有效/);
+  assert.deepEqual(getAiSettings(guildId).admin_ids, ['admin', selected]);
+});
+
+test('all management pages and draft states remain below Discord limits with one readable summary', () => {
+  initTestDatabase();
+  const guildId = `settings-nas-bounded-${process.pid}`;
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
+  const drafts = [null, { type: 'announcement', title: '合成公告', content: '合成內容', footer: '測試' }, { type: 'welcome', text: '歡迎' }, { type: 'selfrole', text: '領取說明' }];
+  for (const view of ['ai', 'ai_core', 'ai_access', 'ai_drafts', 'ai_nas']) {
+    for (const aiDraft of drafts) {
+      const context = { userId: 'admin', isAdministrator: true, guild: { id: guildId }, view, pending: { aiDraft }, notice: { label: '測試', text: '狀態訊息' } };
+      const result = settingsViewTesting.renderAi(context);
+      const panel = result.components[0].toJSON();
+      const text = collectComponentText(panel).join('\n');
+      assert.ok(countV2Components(result.components) <= 40, view);
+      assert.equal((text.match(/```ansi/g) || []).length, 1);
+      assert.match(stripAnsi(text), /\[[^\]]+\] .+/);
+      assert.equal(panel.components.some((entry) => entry.type === ComponentType.Separator), false);
+      for (const row of panel.components.filter((entry) => entry.type === ComponentType.ActionRow)) {
+        assert.ok(row.components.length <= 5);
+        assert.ok(row.components.filter((entry) => entry.style === ButtonStyle.Primary).length <= 1);
+      }
+    }
+  }
+});
+
+test('removing a NAS-only member clears the grant without touching AI or YouTube state', async () => {
+  initTestDatabase();
+  const guildId = `settings-nas-remove-${process.pid}`;
+  const selected = '111111111111111111';
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
+  updateAiSetting(guildId, 'whitelist', JSON.stringify([selected]));
+  updateAiSetting(guildId, 'nas_music_whitelist', JSON.stringify([selected]));
+  const context = { userId: 'admin', isAdministrator: true, guild: { id: guildId }, view: 'ai_nas', pending: { nasUser: selected }, editResponse: async () => {} };
+  await settingsViewTesting.handleButton({
+    memberPermissions: { has: () => true },
+    async deferUpdate() { this.deferred = true; },
+  }, context, 'ai_nas_remove');
+  assert.deepEqual(getAiSettings(guildId).nas_music_whitelist, []);
+  assert.deepEqual(getAiSettings(guildId).whitelist, [selected]);
+  assert.deepEqual(getAiSettings(guildId).admin_ids, ['admin']);
+  assert.doesNotMatch(context.notice, /仍有效/);
+});
+
+test('NAS removal does not infer Administrator from a whitelist grant during the role lookup', async () => {
+  initTestDatabase();
+  const guildId = `settings-nas-role-source-${process.pid}`;
+  const selected = '111111111111111111';
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin', selected]));
+  updateAiSetting(guildId, 'nas_music_whitelist', JSON.stringify([selected]));
+  let cleared = 0;
+  settingsViewTesting.setMusicBridgeLoader(async () => ({ revokeNasMusicAccess: () => { cleared++; return Promise.resolve(); } }));
+  const permissions = new PermissionsBitField();
+  Object.defineProperty(permissions, 'bitfield', { get() {
+    updateAiSetting(guildId, 'nas_music_whitelist', JSON.stringify([selected]));
+    queueMicrotask(() => updateAiSetting(guildId, 'nas_music_whitelist', '[]'));
+    return 0n;
+  } });
+  const context = {
+    userId: 'admin', isAdministrator: true, view: 'ai_nas', pending: { nasUser: selected },
+    guild: { id: guildId, members: { fetch: async () => ({ permissions }) } }, editResponse: async () => {},
+  };
+  await settingsViewTesting.handleButton({
+    memberPermissions: { has: () => true }, async deferUpdate() { this.deferred = true; },
+  }, context, 'ai_nas_remove');
+  assert.deepEqual(getAiSettings(guildId).nas_music_whitelist, []);
+  assert.equal(cleared, 1);
+  assert.doesNotMatch(context.notice, /仍有效/);
+});
+
+test('AI modal submission rechecks persistent management authorization after waiting', async () => {
+  initTestDatabase();
+  const guildId = `settings-ai-late-modal-${process.pid}`;
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
+  const previousPrompt = getAiSettings(guildId).system_prompt;
+  const context = { userId: 'admin', isAdministrator: true, guild: { id: guildId }, view: 'ai_core', pending: {} };
+  let response;
+  const submit = {
+    memberPermissions: { has: () => true },
+    fields: { getTextInputValue: () => '不應儲存的提示詞' },
+    reply: async (payload) => { response = payload; },
+  };
+  await settingsViewTesting.openModal({
+    memberPermissions: { has: () => true },
+    showModal: async () => {},
+    awaitModalSubmit: async () => {
+      updateAiSetting(guildId, 'admin_ids', '[]');
+      return submit;
+    },
+  }, context, 'ai_prompt');
+  assert.equal(getAiSettings(guildId).system_prompt, previousPrompt);
+  assert.match(JSON.stringify(response), /管理中心已鎖定/);
+});
+
+test('NAS removal loads cleanup bridge before committing and rechecks management access after the wait', async () => {
+  initTestDatabase();
+  const guildId = `settings-nas-loader-race-${process.pid}`;
+  const selected = '111111111111111111';
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin']));
+  updateAiSetting(guildId, 'nas_music_whitelist', JSON.stringify([selected]));
+  let releaseBridge;
+  let bridgeStarted;
+  let revoked = false;
+  let reply;
+  const started = new Promise(resolve => { bridgeStarted = resolve; });
+  const bridge = new Promise(resolve => { releaseBridge = resolve; });
+  settingsViewTesting.setMusicBridgeLoader(() => { bridgeStarted(); return bridge; });
+  const context = { userId: 'admin', isAdministrator: true, guild: { id: guildId }, view: 'ai_nas', pending: { nasUser: selected }, editResponse: async () => {} };
+  const remove = settingsViewTesting.handleButton({
+    memberPermissions: { has: () => true },
+    async deferUpdate() { this.deferred = true; },
+    followUp: async payload => { reply = payload; },
+  }, context, 'ai_nas_remove');
+  await started;
+  assert.deepEqual(getAiSettings(guildId).nas_music_whitelist, [selected]);
+  updateAiSetting(guildId, 'admin_ids', '[]');
+  releaseBridge({ revokeNasMusicAccess: () => { revoked = true; return Promise.resolve(); } });
+  await remove;
+  assert.equal(revoked, false);
+  assert.deepEqual(getAiSettings(guildId).nas_music_whitelist, [selected]);
+  assert.match(JSON.stringify(reply), /管理中心已鎖定/);
+});
+
+test('NAS regrant between the denied Discord lookup and removal continuation preserves the replacement login', async () => {
+  initTestDatabase();
+  const guildId = `settings-nas-regrant-race-${process.pid}`;
+  const selected = '111111111111111111';
+  updateAiSetting(guildId, 'admin_ids', JSON.stringify(['admin', selected]));
+  updateAiSetting(guildId, 'nas_music_whitelist', JSON.stringify([selected]));
+  let releaseMember;
+  let lookupStarted;
+  let bridgeLoads = 0;
+  let loginGeneration = 1;
+  let clearedGeneration = null;
+  const started = new Promise(resolve => { lookupStarted = resolve; });
+  const member = new Promise(resolve => { releaseMember = resolve; });
+  // Regrant after the resolver reads denied permissions, before the caller resumes its await.
+  member.then(() => queueMicrotask(() => queueMicrotask(() => {
+    updateAiSetting(guildId, 'nas_music_whitelist', JSON.stringify([selected]));
+    loginGeneration = 2;
+  })));
+  settingsViewTesting.setMusicBridgeLoader(async () => {
+    bridgeLoads++;
+    assert.deepEqual(getAiSettings(guildId).nas_music_whitelist, [selected]);
+    return { revokeNasMusicAccess: () => { clearedGeneration = loginGeneration; return Promise.resolve(); } };
+  });
+  const context = {
+    userId: 'admin', isAdministrator: true,
+    guild: { id: guildId, members: { fetch: () => { lookupStarted(); return member; } } },
+    view: 'ai_nas', pending: { nasUser: selected }, editResponse: async () => {},
+  };
+  const remove = settingsViewTesting.handleButton({
+    memberPermissions: { has: () => true },
+    async deferUpdate() { this.deferred = true; },
+  }, context, 'ai_nas_remove');
+  await started;
+  assert.deepEqual(getAiSettings(guildId).nas_music_whitelist, []);
+  releaseMember({ permissions: new PermissionsBitField() });
+  await remove;
+  assert.equal(bridgeLoads, 1);
+  assert.equal(clearedGeneration, null);
+  assert.equal(loginGeneration, 2);
+  assert.deepEqual(getAiSettings(guildId).nas_music_whitelist, [selected]);
+  assert.match(context.notice, /已重新授權/);
+});
+
 test('self-role panel presents a royal publishing flow for member-facing role selection', () => {
   initTestDatabase();
   const guildId = `settings-self-role-${process.pid}`;
@@ -905,7 +1167,7 @@ test('self-role panel presents a royal publishing flow for member-facing role se
     id: guildId,
     roles: { cache: new Map([['games', { id: 'games' }]]) },
   };
-  const context = { userId: 'admin', guild, view: 'selfrole', pending: {}, notice: null };
+  const context = { userId: 'admin', isAdministrator: true, guild, view: 'selfrole', pending: {}, notice: null };
   const text = JSON.stringify(settingsViewTesting.renderSelfRole(context).components[0].toJSON());
 
   assert.match(text, /皇家自助身分領取/);
@@ -947,7 +1209,7 @@ test('AI unlock modal keeps invalid credentials locked and presents a denied sta
   process.env.AI_ADMIN_PASSWORD = 'royal-secret';
   let updated;
 
-  const context = { userId: 'admin', guild: { id: guildId }, view: 'ai', pending: {}, notice: null };
+  const context = { userId: 'admin', isAdministrator: true, guild: { id: guildId }, view: 'ai', pending: {}, notice: null };
   const submit = {
     user: { id: 'admin' },
     memberPermissions: { has: () => true },

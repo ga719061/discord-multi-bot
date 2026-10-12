@@ -9,6 +9,8 @@ import {
   buildMusicLoginPayload,
   buildMusicLoginModal,
   buildMusicYouTubeModal,
+  buildMusicLauncherPayload,
+  buildMusicPointNotice,
 } from '../src/commands/music/lib/ui.js';
 import { countV2Components } from '../src/utils/componentsV2.js';
 import { ANSI_TONES, UI_COLORS } from '../src/utils/style.js';
@@ -20,6 +22,24 @@ function withoutColors(value) {
 function track(index = 1, extra = {}) {
   return { id: `track-${index}`, title: `歌曲 ${index}`, artist: '測試歌手', album: '測試專輯', duration: 180, requestedBy: '123456789012345678', ...extra };
 }
+
+test('compact point confirmations remain private and sanitize track metadata for both sources', () => {
+  for (const source of ['nas', 'youtube']) {
+    const payload = buildMusicPointNotice(track(1, { source, title: '**歌名** @everyone <@123456789012345678>\u001b[31m\u202e' }), 2);
+    assertPayload(payload, true);
+    assert.match(text(payload), /目前排在第 3 首/);
+    assert.match(text(payload), /歌名/);
+    assert.doesNotMatch(rawText(payload), /\u001b|\u202e|@everyone|<@/);
+    assert.match(rawText(payload), /\\\*\\\*歌名\\\*\\\*/);
+    assert.equal(summary(payload).length, 0);
+    const secret = buildMusicPointNotice(track(1, { source, title: 'https://private.invalid/?token=secret' }), -1);
+    assert.match(text(secret), /未命名曲目.*已交給播放器/);
+    assert.doesNotMatch(text(secret), /private|secret|token/);
+    const long = buildMusicPointNotice(track(1, { source, title: '🎵長歌名'.repeat(100) }), 0);
+    assertPayload(long, true);
+    assert.equal(rawText(long).isWellFormed(), true);
+  }
+});
 
 function state(extra = {}) {
   return { id: 'session', voiceChannelId: '123456789012345678', status: 'playing', current: track(), positionSeconds: 45, loop: 'off', queue: [], ...extra };
@@ -100,6 +120,19 @@ function assertPayload(payload, ephemeral = false) {
   assertControlledEsc(payload.components.map((component) => component.toJSON()));
 }
 
+test('private music launcher shows NAS entrance only when authorized and keeps YouTube usable without NAS', () => {
+  for (const nasAllowed of [false, true]) {
+    for (const youtubeAvailable of [false, true]) {
+      const payload = buildMusicLauncherPayload({ id: 'entry', nasAllowed, youtubeAvailable });
+      assertPayload(payload, true);
+      assert.equal(Boolean(byId(payload, 'musicauth:entry:nas')), nasAllowed);
+      assert.equal(byId(payload, 'musicauth:entry:youtube').disabled, !youtubeAvailable);
+      assert.equal(byId(payload, 'musicauth:entry:youtube').style, ButtonStyle.Primary);
+      if (!nasAllowed) assert.doesNotMatch(text(payload), /NAS|帳號|登入|MUSIC_API_BASE_URL|私人音樂庫/);
+    }
+  }
+});
+
 test('music player is public, highlights current playback and previews only the next three tracks', () => {
   const payload = buildMusicPlayerPayload(state({ queue: Array.from({ length: 100 }, (_, index) => track(index + 2)) }));
   assertPayload(payload);
@@ -118,11 +151,11 @@ test('music player is public, highlights current playback and previews only the 
   assert.match(text(payload), /進度約每 15 秒更新，無法拖曳跳轉/);
   assert.deepEqual(controls(payload).map((component) => component.custom_id), [
     'music:session:pause', 'music:session:skip',
-    'music:session:browse', 'music:session:youtube', 'music:session:queue',
+    'music:session:youtube', 'music:session:queue',
     'music:session:loop', 'music:session:shuffle', 'music:session:stop',
   ]);
-  assert.equal(byId(payload, 'music:session:browse').label, '點歌');
-  assert.equal(byId(payload, 'music:session:browse').style, ButtonStyle.Primary);
+  assert.equal(byId(payload, 'music:session:browse'), undefined);
+  assert.equal(byId(payload, 'music:session:youtube').style, ButtonStyle.Primary);
   assert.equal(byId(payload, 'music:session:loop').label, '循環：關閉');
   assert.equal(byId(payload, 'music:session:stop').style, ButtonStyle.Secondary);
 });
@@ -134,7 +167,7 @@ test('idle music panel keeps browsing available while pause and skip are disable
   assert.match(text(payload), /目前沒有播放中的歌曲/);
   assert.match(text(payload), /播放器會持續待命/);
   assert.match(text(payload), /停止並離開/);
-  assert.equal(byId(payload, 'music:session:browse').disabled, false);
+  assert.equal(byId(payload, 'music:session:youtube').disabled, false);
   assert.equal(byId(payload, 'music:session:pause').disabled, true);
   assert.equal(byId(payload, 'music:session:skip').disabled, true);
   assert.equal(byId(payload, 'music:session:shuffle').disabled, true);
@@ -293,7 +326,7 @@ test('three player button groups preserve scoped IDs, labels, emojis, styles and
       const pause = status === 'paused' ? 'resume' : 'pause';
       const expected = [
         [[pause, status === 'paused' ? '繼續播放' : '暫停', status === 'paused' ? '▶️' : '⏸️'], ['skip', '下一首', '⏭️']],
-        [['browse', '點歌', '🎵'], ['youtube', 'YouTube 點播', '📺'], ['queue', '查看佇列', '📜']],
+        [['youtube', 'YouTube 點播', '📺'], ['queue', '查看佇列', '📜']],
         [['loop', `循環：${{ off: '關閉', track: '單曲循環', queue: '佇列循環' }[loop]}`, loop === 'track' ? '🔂' : '🔁'], ['shuffle', '隨機排序', '🔀'], ['stop', '停止並離開', '⏹️']],
       ];
       const rows = buttonRows(payload);
@@ -302,7 +335,7 @@ test('three player button groups preserve scoped IDs, labels, emojis, styles and
         assert.deepEqual(row.components.map((component) => [component.custom_id, component.label, component.emoji?.name]),
           expected[index].map(([action, label, emoji]) => [`music:session:${action}`, label, emoji]));
         for (const component of row.components) {
-          assert.equal(component.style, component.custom_id.endsWith(':browse') ? ButtonStyle.Primary : ButtonStyle.Secondary);
+          assert.equal(component.style, component.custom_id.endsWith(':youtube') ? ButtonStyle.Primary : ButtonStyle.Secondary);
         }
       }
       const stopped = status === 'stopped';
@@ -310,7 +343,7 @@ test('three player button groups preserve scoped IDs, labels, emojis, styles and
       assert.equal(byId(payload, 'music:session:skip').disabled, stopped);
       assert.equal(byId(payload, 'music:session:shuffle').disabled, true);
       assert.equal(byId(payload, 'music:session:youtube').disabled, true);
-      for (const action of ['browse', 'queue', 'loop', 'stop']) {
+      for (const action of ['queue', 'loop', 'stop']) {
         assert.equal(byId(payload, `music:session:${action}`).disabled, stopped);
       }
     }
@@ -448,7 +481,8 @@ test('private queue uses two-line mixed-source entries below current song and re
   const output = text(payload);
   assert.ok(output.indexOf('目前歌曲') < output.indexOf('**1. 歌曲 2**'));
   assert.match(output, /\[待播\] 2 首/);
-  assert.match(output, /\*\*1\. 歌曲 2\*\* {2}\n[^\n]*測試歌手[^\n]*NAS[^\n]*3:00/);
+  assert.match(output, /\*\*1\. 歌曲 2\*\* {2}\n[^\n]*測試歌手[^\n]*3:00/);
+  assert.doesNotMatch(output, /NAS/);
   assert.match(output, /\*\*2\. 歌曲 3\*\* {2}\n[^\n]*影片頻道[^\n]*YouTube[^\n]*未知時長/);
   assert.deepEqual(buttonRows(payload).map((row) => row.components.map((component) => component.custom_id)), [
     ['music:session:qprev:0', 'music:session:qnext:0'],
@@ -615,7 +649,7 @@ test('YouTube entry points are available without NAS login and remain scoped to 
   assert.equal(byId(library, 'musiclib:browser:youtube').disabled, false);
   const player = buildMusicPlayerPayload(state());
   assert.equal(byId(player, 'music:session:youtube').disabled, false);
-  assert.equal(byId(player, 'music:session:youtube').style, ButtonStyle.Secondary);
+  assert.equal(byId(player, 'music:session:youtube').style, ButtonStyle.Primary);
 });
 
 test('unavailable YouTube tool disables only YouTube entry points', () => {
@@ -629,7 +663,7 @@ test('unavailable YouTube tool disables only YouTube entry points', () => {
   assert.equal(byId(library, 'musiclib:browser:search').disabled, false);
   const player = buildMusicPlayerPayload(state({ youtubeAvailable: false }));
   assert.equal(byId(player, 'music:session:youtube').disabled, true);
-  assert.equal(byId(player, 'music:session:browse').disabled, false);
+  assert.equal(byId(player, 'music:session:browse'), undefined);
 });
 
 test('mixed-source player and queue identify NAS and YouTube with native thumbnail description', () => {
@@ -638,12 +672,12 @@ test('mixed-source player and queue identify NAS and YouTube with native thumbna
   const player = buildMusicPlayerPayload(musicState, { thumbnail: 'attachment://cover-1.webp' });
   assertPayload(player);
   assert.match(text(player), /影片頻道 · YouTube/);
-  assert.match(text(player), /NAS/);
+  assert.doesNotMatch(text(player), /NAS/);
   assert.doesNotMatch(text(player), /未知專輯/);
   assert.equal(elements(player).find(component => component.type === ComponentType.Thumbnail).description, 'YouTube 影片縮圖 · 歌曲 2');
   const queue = buildMusicQueuePayload(musicState);
   assertPayload(queue, true);
-  assert.match(text(queue), /NAS/);
+  assert.doesNotMatch(text(queue), /NAS/);
   assert.match(text(queue), /YouTube/);
 });
 

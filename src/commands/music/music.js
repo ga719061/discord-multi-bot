@@ -4,6 +4,7 @@ import { getMusicConfiguration, MusicError } from '../../utils/musicLibrary.js';
 import { MusicAccounts } from '../../utils/musicAccounts.js';
 import { MusicPlaybackManager } from '../../utils/musicPlayback.js';
 import { MusicYouTubeClient } from '../../utils/musicYoutube.js';
+import { hasNasMusicInteractionAccess, resolveNasMusicAccess } from '../../utils/musicAccess.js';
 import { v2EditPayload, v2Notice } from '../../utils/componentsV2.js';
 import { UI_COLORS } from '../../utils/style.js';
 import { logger } from '../../utils/logger.js';
@@ -11,11 +12,13 @@ import { MusicPanelPresenter } from './lib/panel.js';
 import {
   buildMusicLibraryPayload, buildMusicPlayerPayload, buildMusicQueuePayload,
   buildMusicSearchModal, buildMusicLoginPayload, buildMusicLoginModal, buildMusicYouTubeModal,
+  buildMusicLauncherPayload,
+  buildMusicPointNotice,
 } from './lib/ui.js';
 
 export const data = new SlashCommandBuilder()
   .setName('音樂')
-  .setDescription('🎵 開啟 NAS／YouTube 語音頻道音樂播放器')
+  .setDescription('🎵 開啟 YouTube 語音頻道音樂播放器')
   .setContexts(InteractionContextType.Guild);
 
 const browsers = new Map();
@@ -23,9 +26,33 @@ const authViews = new Map();
 const youtubeViews = new Map();
 const youtubeRequests = new Map();
 const youtubeAttempts = new Map();
+const nasCleanups = new Map();
+const pendingNasLogins = new Map();
+const noticeTimers = new Map();
+const noticeTasks = new Set();
 let runtime = null;
 
-function getRuntime() {
+function scheduleNoticeDeletion(interaction, messageId, delay) {
+  const remove = () => {
+    clearTimeout(timer);
+    noticeTimers.delete(timer);
+    const task = Promise.resolve().then(() => interaction.deleteReply(messageId)).catch(error => {
+      if (error?.code !== 10008 && error?.code !== '10008') logger.warn('[Music] point notice cleanup failed');
+    });
+    noticeTasks.add(task);
+    task.then(() => noticeTasks.delete(task), () => noticeTasks.delete(task));
+  };
+  if (noticeTimers.size >= 100) noticeTimers.values().next().value();
+  const timer = setTimeout(remove, delay);
+  timer.unref?.();
+  noticeTimers.set(timer, remove);
+}
+
+function isPointSubmission(interaction) {
+  return /^(?:musicyoutube:[^:]+:submit|musiclib:[^:]+:enqueue)$/.test(interaction.customId || '');
+}
+
+function getRuntime(client) {
   if (!runtime) {
     const config = getMusicConfiguration();
     const youtube = new MusicYouTubeClient({ ytdlpPath: config.ytdlpPath });
@@ -47,8 +74,12 @@ function getRuntime() {
       onPlaybackError: ({ stage, code, playedSeconds }) => logger.warn(
         `[Music] playback failed stage=${stage} code=${code} playedSeconds=${playedSeconds.toFixed(2)}`,
       ),
-      resolveLibrary(session, track) {
+      async resolveLibrary(session, track) {
         if (track.source === 'youtube') return youtube;
+        if (nasCleanups.has(`${session.guildId}:${track.requestedBy}`)
+          || !await resolveNasMusicAccess(client?.guilds?.cache.get(session.guildId), track.requestedBy)) {
+          throw new MusicError('MUSIC_FORBIDDEN');
+        }
         const account = accounts.get(session.guildId, track.requestedBy);
         if (!account) throw new MusicError('MUSIC_LOGIN');
         return account.library;
@@ -95,7 +126,8 @@ async function updatePanel(session) {
     }
   }
   if (!session.message || !runtime) return;
-  await runtime.panels.update(session);
+  if (session.status === 'stopped' && session.deletePanelOnStop) await runtime.panels.remove(session);
+  else await runtime.panels.update(session);
 }
 
 async function ensurePanel(interaction, services, session) {
@@ -107,17 +139,25 @@ async function ensurePanel(interaction, services, session) {
       session.message = message;
       session.textChannelId = interaction.channelId;
       if (session.status === 'stopped') {
-        await message.edit(v2EditPayload(buildMusicPlayerPayload(manager.snapshot(session))));
+        if (session.deletePanelOnStop) await services.panels.remove(session);
+        else await message.edit(v2EditPayload(buildMusicPlayerPayload(manager.snapshot(session))));
       }
     });
   }
   try { await session.publishPromise; }
-  catch { await manager.stop(session); throw new MusicError('MUSIC_VOICE'); }
+  catch (error) {
+    await manager.stop(session);
+    if (error instanceof MusicError && error.code === 'MUSIC_PANEL_DELETE') throw error;
+    throw new MusicError('MUSIC_VOICE');
+  }
   if (session.status === 'stopped') throw new MusicError('MUSIC_EXPIRED');
   await services.panels?.update(session);
 }
 
 function invalidatePrivateViews(guildId, userId) {
+  for (const view of pendingNasLogins.values()) {
+    if (view.guildId === guildId && view.ownerId === userId) view.cancelled = true;
+  }
   for (const views of [browsers, authViews]) {
     for (const [id, view] of views) {
       if (view.guildId === guildId && view.ownerId === userId) views.delete(id);
@@ -126,23 +166,64 @@ function invalidatePrivateViews(guildId, userId) {
 }
 
 function accountFor(services, interaction, expectedId) {
+  if (!canUseNas(interaction, services) || nasCleanups.has(`${interaction.guildId}:${interaction.user.id}`)) {
+    throw new MusicError('MUSIC_FORBIDDEN');
+  }
   const account = services.accounts.get(interaction.guildId, interaction.user.id);
   if (!account || (expectedId && account.id !== expectedId)) throw new MusicError('MUSIC_LOGIN');
   return account;
 }
 
-function loginPayload(interaction, services) {
+function canUseNas(interaction, services) {
+  return services.canUseNas ? services.canUseNas(interaction) === true : hasNasMusicInteractionAccess(interaction);
+}
+
+async function assertNasAccess(interaction, services, fresh = false) {
+  if (services.accounts.closed || services.manager.closed) throw new MusicError('MUSIC_ABORTED');
+  if (nasCleanups.has(`${interaction.guildId}:${interaction.user.id}`)) throw new MusicError('MUSIC_BUSY');
+  const allowed = services.canUseNas || !fresh
+    ? canUseNas(interaction, services)
+    : await resolveNasMusicAccess(interaction.guild, interaction.user.id);
+  if (!allowed) throw new MusicError('MUSIC_FORBIDDEN');
+}
+
+export function getNasMusicAccountStatus(guildId, userId, services = runtime) {
+  return Boolean(services?.accounts.get(guildId, userId));
+}
+
+export function revokeNasMusicAccess(guildId, userId, services = runtime) {
+  if (!services) return Promise.resolve();
+  const key = `${guildId}:${userId}`;
+  if (nasCleanups.has(key)) return nasCleanups.get(key);
+  if (nasCleanups.size >= 100) return Promise.reject(new MusicError('MUSIC_BUSY'));
+  invalidatePrivateViews(guildId, userId);
+  // Install the barrier before logout invokes synchronous cancellation callbacks.
+  const cleanup = Promise.resolve().then(() => services.accounts.logout(guildId, userId));
+  nasCleanups.set(key, cleanup);
+  cleanup.then(() => nasCleanups.delete(key), () => nasCleanups.delete(key));
+  return cleanup;
+}
+
+function launcherPayload(interaction, services) {
+  const login = loginPayload(interaction, services, false);
+  return buildMusicLauncherPayload({ id: login.id, nasAllowed: canUseNas(interaction, services),
+    youtubeAvailable: services.youtubeAvailable === true });
+}
+
+function loginPayload(interaction, services, render = true) {
   if (!interaction.guildId) throw new MusicError('MUSIC_CHANNEL');
   for (const [id, view] of authViews) {
     if (view.guildId === interaction.guildId && view.ownerId === interaction.user.id) authViews.delete(id);
   }
   if (authViews.size >= 100) authViews.delete(authViews.keys().next().value);
-  const account = services.accounts.get(interaction.guildId, interaction.user.id);
+  const account = render || canUseNas(interaction, services)
+    ? services.accounts.get(interaction.guildId, interaction.user.id) : null;
   const view = {
     id: randomUUID(), ownerId: interaction.user.id, guildId: interaction.guildId,
     accountId: account?.id || null,
   };
   authViews.set(view.id, view);
+  if (!render) return view;
   return buildMusicLoginPayload({ id: view.id, loggedIn: Boolean(account),
     nasConfigured: services.config.nasConfigured !== false, youtubeAvailable: services.youtubeAvailable === true });
 }
@@ -150,6 +231,7 @@ function loginPayload(interaction, services) {
 async function newBrowser(interaction, session, account, services) {
   accountFor(services, interaction, account.id);
   const tracks = await account.library.search();
+  await assertNasAccess(interaction, services, true);
   accountFor(services, interaction, account.id);
   if (session.status === 'stopped') throw new MusicError('MUSIC_EXPIRED');
   for (const [id, browser] of browsers) {
@@ -168,10 +250,23 @@ async function newBrowser(interaction, session, account, services) {
 
 export async function execute(interaction, services) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  try {
+    services ||= getRuntime(interaction.client);
+    if (!interaction.guildId) throw new MusicError('MUSIC_CHANNEL');
+    await youtubeAvailable(services);
+    if (services.manager.closed || services.accounts.closed) throw new MusicError('MUSIC_ABORTED');
+    await interaction.editReply(v2EditPayload(launcherPayload(interaction, services)));
+  } catch (error) { await replyError(interaction, error); }
+}
+
+export async function openPrivateNasMusic(interaction, services) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   let accountId;
   try {
-    services ||= getRuntime();
+    services ||= getRuntime(interaction.client);
     if (!interaction.guildId) throw new MusicError('MUSIC_CHANNEL');
+    await nasCleanups.get(`${interaction.guildId}:${interaction.user.id}`);
+    await assertNasAccess(interaction, services, true);
     await youtubeAvailable(services);
     const account = services.accounts.get(interaction.guildId, interaction.user.id);
     if (!account) {
@@ -185,12 +280,15 @@ export async function execute(interaction, services) {
 
 async function openPlayer(interaction, services, authenticated = false) {
     const { config, manager } = services;
+    await assertNasAccess(interaction, services, true);
     const account = accountFor(services, interaction);
     assertMusicAccess(interaction, config, manager.getSession(interaction.guildId));
     if (!authenticated) await account.library.login();
+    await assertNasAccess(interaction, services, true);
     accountFor(services, interaction, account.id);
     const channel = assertMusicAccess(interaction, config, manager.getSession(interaction.guildId));
     const session = await manager.connect(interaction.guild, channel);
+    await assertNasAccess(interaction, services, true);
     accountFor(services, interaction, account.id);
     assertMusicAccess(interaction, config, session);
     await ensurePanel(interaction, services, session);
@@ -295,9 +393,8 @@ async function submitYouTube(interaction, services, id) {
     assertYouTubeRequest(request, interaction, services);
     const position = session.queue.findLastIndex(entry => entry.source === 'youtube' && entry.id === track.id
       && entry.requestedBy === interaction.user.id);
-    const title = String(track.title).replace(/([\\`*_~|<>])/g, '\\$1').slice(0, 300);
-    await interaction.editReply(v2EditPayload(v2Notice('🎵 已加入 YouTube 點播',
-      `**${title}**\n${position >= 0 ? `目前排在第 ${position + 1} 首。` : '已交給播放器。'}`, UI_COLORS.SUCCESS)));
+    await interaction.editReply(v2EditPayload(buildMusicPointNotice(track, position)));
+    scheduleNoticeDeletion(interaction, '@original', 5000);
   } catch (error) {
     if (createdSession && createdSession.status !== 'stopped'
       && services.manager.getSession(interaction.guildId) === createdSession
@@ -318,6 +415,11 @@ async function handleAuthentication(interaction, services, id, action) {
     await showYouTubeModal(interaction, services);
     return;
   }
+  if (action === 'nas' && interaction.isButton()) {
+    await openPrivateNasMusic(interaction, services);
+    return;
+  }
+  await assertNasAccess(interaction, services);
   if (services.config.nasConfigured === false) throw new MusicError('MUSIC_CONFIG');
   const account = services.accounts.get(interaction.guildId, interaction.user.id);
   if ((account?.id || null) !== view.accountId) throw new MusicError('MUSIC_EXPIRED');
@@ -329,19 +431,27 @@ async function handleAuthentication(interaction, services, id, action) {
     await openPlayer(interaction, services);
   } else if (action === 'login_submit' && interaction.isModalSubmit() && !account) {
     authViews.delete(id);
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    if (pendingNasLogins.size >= 100) throw new MusicError('MUSIC_CAPACITY');
+    pendingNasLogins.set(id, view);
     let accountId;
     try {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      if (view.cancelled) throw new MusicError('MUSIC_ABORTED');
+      await assertNasAccess(interaction, services, true);
+      if (view.cancelled) throw new MusicError('MUSIC_ABORTED');
       const loggedIn = await services.accounts.login(interaction.guildId, interaction.user.id, {
         email: interaction.fields.getTextInputValue('email'),
         password: interaction.fields.getTextInputValue('password'),
       });
       accountId = loggedIn.id;
+      await assertNasAccess(interaction, services, true);
       await openPlayer(interaction, services, true);
     } catch (error) {
       await recoverAccountError(interaction, services, error, accountId, false);
-      await interaction.followUp(loginPayload(interaction, services));
-    }
+      if (!view.cancelled && !services.accounts.closed && !services.manager.closed && canUseNas(interaction, services)) {
+        await interaction.followUp(loginPayload(interaction, services));
+      }
+    } finally { pendingNasLogins.delete(id); }
   } else if (action === 'logout' && interaction.isButton()) {
     authViews.delete(id);
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -359,7 +469,7 @@ export async function handleMusicInteraction(interaction, services) {
   if (!['music:', 'musiclib:', 'musicauth:', 'musicyoutube:'].some(prefix => customId.startsWith(prefix))) return false;
   let accountId;
   try {
-    services ||= getRuntime();
+    services ||= getRuntime(interaction.client);
     const { config, manager } = services;
     const [scope, id, action, page] = customId.split(':');
     if (scope === 'musicyoutube') {
@@ -383,6 +493,7 @@ export async function handleMusicInteraction(interaction, services) {
         await showYouTubeModal(interaction, services, session);
         return true;
       }
+      await assertNasAccess(interaction, services);
       const account = accountFor(services, interaction, browser.accountId);
       accountId = account.id;
       if (browser.busy) throw new MusicError('MUSIC_BUSY');
@@ -396,6 +507,7 @@ export async function handleMusicInteraction(interaction, services) {
           await interaction.deferUpdate();
           browser.query = interaction.fields.getTextInputValue('query').trim().slice(0, 120);
           const tracks = await account.library.search(browser.query);
+          await assertNasAccess(interaction, services, true);
           accountFor(services, interaction, browser.accountId);
           assertMusicAccess(interaction, config, session);
           browser.tracks = tracks;
@@ -413,14 +525,14 @@ export async function handleMusicInteraction(interaction, services) {
         try {
           await interaction.deferUpdate();
           const freshTrack = await account.library.getTrack(track.id);
+          await assertNasAccess(interaction, services, true);
           accountFor(services, interaction, browser.accountId);
           assertMusicAccess(interaction, config, session);
           await manager.enqueue(session, freshTrack, interaction.user.id);
           const position = session.queue.findLastIndex(entry => entry.id === freshTrack.id
             && entry.requestedBy === interaction.user.id);
-          await interaction.followUp(v2Notice('🎵 已加入點播', position >= 0
-            ? `已加入待播佇列，目前排在第 ${position + 1} 首。播放狀態請看頻道內的音樂面板。`
-            : '已交給播放器，播放狀態請看頻道內的音樂面板。', UI_COLORS.SUCCESS));
+          const notice = await interaction.followUp(buildMusicPointNotice(freshTrack, position));
+          scheduleNoticeDeletion(interaction, notice.id, 5000);
         } finally { browser.busy = false; }
       } else throw new MusicError('MUSIC_RESPONSE');
     } else {
@@ -429,14 +541,14 @@ export async function handleMusicInteraction(interaction, services) {
         await showYouTubeModal(interaction, services, session);
       } else if (action === 'browse' && interaction.isButton()) {
         await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-        const account = services.accounts.get(interaction.guildId, interaction.user.id);
-        if (!account) {
-          await interaction.editReply(v2EditPayload(loginPayload(interaction, services)));
-          return true;
-        }
-        accountId = account.id;
-        const browser = await newBrowser(interaction, session, account, services);
-        await interaction.editReply(v2EditPayload(buildMusicLibraryPayload(browser)));
+        await youtubeAvailable(services);
+        if (canUseNas(interaction, services) && services.accounts.get(interaction.guildId, interaction.user.id)) {
+          await assertNasAccess(interaction, services, true);
+          const account = accountFor(services, interaction);
+          accountId = account.id;
+          const browser = await newBrowser(interaction, session, account, services);
+          await interaction.editReply(v2EditPayload(buildMusicLibraryPayload(browser)));
+        } else await interaction.editReply(v2EditPayload(launcherPayload(interaction, services)));
       } else if (['volume', 'volume_submit'].includes(action)) {
         await interaction.reply(v2Notice('🔊 音量由你控制', '請使用 Discord 的個人音量設定調整自己聽到的音量。'));
       } else if (['queue', 'qprev', 'qnext'].includes(action) && interaction.isButton()) {
@@ -447,7 +559,9 @@ export async function handleMusicInteraction(interaction, services) {
         if (action === 'stop') cancelYouTubeRequests(interaction.guildId);
         await interaction.deferUpdate();
         assertMusicAccess(interaction, config, session);
+        if (action === 'stop') session.deletePanelOnStop = true;
         await manager.control(session, action);
+        if (action === 'stop' && session.message) await services.panels.remove(session);
       } else throw new MusicError('MUSIC_RESPONSE');
     }
   } catch (error) { await recoverAccountError(interaction, services, error, accountId); }
@@ -455,13 +569,17 @@ export async function handleMusicInteraction(interaction, services) {
 }
 
 async function recoverAccountError(interaction, services, error, accountId, offerLogin = true) {
+  if (services && error instanceof MusicError && error.code === 'MUSIC_FORBIDDEN') {
+    try { await revokeNasMusicAccess(interaction.guildId, interaction.user.id, services); }
+    catch { logger.warn('[Music] NAS access cleanup failed'); }
+  }
   if (error instanceof MusicError && error.code === 'MUSIC_AUTH' && accountId
     && services.accounts.get(interaction.guildId, interaction.user.id)?.id === accountId) {
     invalidatePrivateViews(interaction.guildId, interaction.user.id);
     await services.accounts.logout(interaction.guildId, interaction.user.id);
   }
   await replyError(interaction, error);
-  if (offerLogin && services && interaction.guildId && error instanceof MusicError
+  if (offerLogin && services && interaction.guildId && canUseNas(interaction, services) && error instanceof MusicError
     && (['MUSIC_AUTH', 'MUSIC_LOGIN'].includes(error.code)
       || (accountId && ['MUSIC_CHANNEL', 'MUSIC_VOICE'].includes(error.code)))) {
     await interaction.followUp(loginPayload(interaction, services));
@@ -473,10 +591,15 @@ async function replyError(interaction, error) {
   logger.warn(`[Music] operation failed code=${safeError.code}`);
   const notice = v2Notice('🎵 音樂操作未完成', safeError.message, UI_COLORS.WARNING);
   try {
-    if (interaction.replied) await interaction.followUp(notice);
-    else if (interaction.deferred && (interaction.isChatInputCommand() || interaction.ephemeral)) await interaction.editReply(v2EditPayload(notice));
-    else if (interaction.deferred) await interaction.followUp(notice);
+    let messageId = '@original';
+    if (interaction.customId?.startsWith('musicyoutube:') && (interaction.replied || interaction.deferred)) {
+      await interaction.editReply(v2EditPayload(notice));
+    } else if (interaction.replied || (interaction.deferred && !interaction.isChatInputCommand() && !interaction.ephemeral)) {
+      const message = await interaction.followUp(notice);
+      messageId = message?.id;
+    } else if (interaction.deferred) await interaction.editReply(v2EditPayload(notice));
     else await interaction.reply(notice);
+    if (isPointSubmission(interaction) && messageId) scheduleNoticeDeletion(interaction, messageId, 30000);
   } catch { logger.warn('[Music] acknowledgement failed'); }
 }
 
@@ -491,6 +614,7 @@ export function handleMusicVoiceState(_oldState, newState, services = runtime) {
 }
 
 export async function stopMusicPlayback() {
+  for (const view of pendingNasLogins.values()) view.cancelled = true;
   cancelYouTubeRequests();
   const pending = [...youtubeRequests.values()].map(request => request.done);
   try {
@@ -506,10 +630,15 @@ export async function stopMusicPlayback() {
     }
   } finally {
     await Promise.all(pending);
+    await Promise.allSettled([...nasCleanups.values()]);
+    for (const timer of noticeTimers.keys()) clearTimeout(timer);
+    noticeTimers.clear();
+    await Promise.allSettled([...noticeTasks]);
     runtime = null;
     browsers.clear();
     authViews.clear();
     youtubeViews.clear();
     youtubeAttempts.clear();
+    pendingNasLogins.clear();
   }
 }

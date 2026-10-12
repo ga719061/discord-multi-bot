@@ -4,6 +4,7 @@ import {
   ButtonStyle,
   ChannelSelectMenuBuilder,
   ChannelType,
+  ComponentType,
   LabelBuilder,
   MessageFlags,
   ModalBuilder,
@@ -49,8 +50,12 @@ import { refreshSteamFreeBoardNow } from '../../utils/steamFreeBoard.js';
 import { ansiRows, UI_COLORS } from '../../utils/style.js';
 import { ephemeralV2Payload, v2Divider, v2EditPayload, v2Notice, v2Panel, v2Payload, v2Text } from '../../utils/componentsV2.js';
 import { parseScopedCustomId, scopedCustomId } from '../../utils/customIds.js';
+import { getMusicConfiguration } from '../../utils/musicLibrary.js';
+import { hasNasMusicAccess, resolveNasMusicAdministrator } from '../../utils/musicAccess.js';
 
 const PANEL_TIMEOUT = 10 * 60_000;
+const defaultMusicBridgeLoader = () => import('../music/music.js');
+let musicBridgeLoader = defaultMusicBridgeLoader;
 const CUSTOM_EMOJI_PATTERN = /^<a?:([A-Za-z0-9_]+):(\d{17,20})>$/;
 const CUSTOM_EMOJI_IDENTIFIER_PATTERN = /^([A-Za-z0-9_]+):(\d{17,20})$/;
 const DISCORD_ID_PATTERN = /^\d{17,20}$/;
@@ -82,7 +87,7 @@ const SETTINGS_VIEW_OPTIONS = [
   { label: 'Steam 推播', value: 'steam', description: '管理特價與限時免費推播' },
   { label: '自助身分組', value: 'selfrole', description: '管理成員自助領取選項' },
   { label: '按鈕身分組', value: 'reaction', description: '建立與管理按鈕身分站' },
-  { label: 'AI 設定', value: 'ai', description: '驗證並管理 AI 功能' },
+  { label: 'AI／私人音樂', value: 'ai', description: '共用管理驗證，分別管理 AI 與 NAS 權限' },
 ];
 const MODULE_STYLE = {
   '歡迎訊息': { section: 'CONFIGURATION / WELCOME', color: UI_COLORS.ROYAL },
@@ -105,7 +110,7 @@ const MODULE_TITLES = {
   'Steam 推播': '🛒 皇家採購推播 | Steam',
   '自助身分組': '🏷️ 皇家自助身分領取 | 自助身分組',
   '按鈕身分組': '🎭 皇家按鈕身分站 | 按鈕身分組',
-  'AI 設定': '🧠 國王智慧核心 | AI 設定',
+  'AI 設定': '🧠 AI／私人音樂管理中心',
   'AI 存取驗證': '🔐 御前智慧驗證 | AI 存取驗證',
   '伺服器資訊': '🏰 領地視察 | 伺服器資訊',
   '機器人狀態': '🏥 大內健康報告 | 機器人狀態',
@@ -150,6 +155,7 @@ function createPanelContext(interaction, { onReturnToHelp = null, initialView = 
     guild: interaction.guild,
     client: interaction.client,
     userId: interaction.user.id,
+    isAdministrator: isAdministrator(interaction),
     view: initialView,
     pending: {},
     currentComponents: [],
@@ -174,6 +180,7 @@ function attachPanelCollector(message, context) {
         await component.reply(v2Notice('🛡️ 御前權限已失效', '你目前沒有 Administrator 權限，無法繼續修改皇家設定。', UI_COLORS.DANGER));
         return;
       }
+      context.isAdministrator = true;
       await routeComponent(component, context);
     } catch (error) {
       const payload = v2Notice('🐕💥 皇家設定操作失敗', `本王無法完成此次操作：${error.message}`, UI_COLORS.DANGER);
@@ -245,6 +252,8 @@ function actionValue(parts) {
 
 async function handleChannelSelect(component, context, action) {
   if (action.startsWith('ai_') && !requireAiUnlock(component, context)) return;
+  if (action.startsWith('ai_draft_')) context.view = 'ai_drafts';
+  if (action === 'ai_party_channel') context.view = 'ai_core';
   const channelId = component.values[0];
   if (action === 'welcome_channel') {
     updateGuildSetting(context.guild.id, 'welcome_channel', channelId);
@@ -278,6 +287,14 @@ async function handleStringSelect(component, context, action) {
     return updateView(component, context);
   }
   if (action.startsWith('ai_') && !requireAiUnlock(component, context)) return;
+  if (action.startsWith('ai_draft_')) context.view = 'ai_drafts';
+  if (action === 'ai_model') context.view = 'ai_core';
+  if (action === 'ai_page') {
+    if (!['ai', 'ai_core', 'ai_access', 'ai_drafts', 'ai_nas'].includes(component.values[0])) return;
+    context.view = component.values[0];
+    context.notice = null;
+    return updateView(component, context);
+  }
   if (action === 'log_types') {
     const toggles = Object.fromEntries(LOG_TYPES.map((type) => [type.value, component.values.includes(type.value) ? 1 : 0]));
     updateGuildSetting(context.guild.id, 'log_toggles', JSON.stringify(toggles));
@@ -345,15 +362,62 @@ async function handleRoleSelect(component, context, action) {
 }
 
 async function handleUserSelect(component, context, action) {
+  if (action === 'ai_nas_user') {
+    if (!requireAiUnlock(component, context)) return;
+    context.pending.nasUser = component.values[0];
+    context.view = 'ai_nas';
+  }
   if (action === 'ai_user') {
     if (!requireAiUnlock(component, context)) return;
     context.pending.aiUser = component.values[0];
+    context.view = 'ai_access';
   }
   if (action === 'member_user') context.pending.memberUser = component.values[0];
   await updateView(component, context);
 }
 
 async function handleButton(component, context, action, value) {
+  if (action.startsWith('ai_') && !requireAiUnlock(component, context)) return;
+  if (action.startsWith('ai_nas_') && action !== 'ai_nas_open') context.view = 'ai_nas';
+  if (action.startsWith('ai_user_')) context.view = 'ai_access';
+  if (action.startsWith('ai_draft_')) context.view = 'ai_drafts';
+  if (action === 'ai_toggle') context.view = value === 'action_tools_enabled' ? 'ai_access' : 'ai_core';
+  if (action === 'ai_nas_open') {
+    const { openPrivateNasMusic } = await import('../music/music.js');
+    return openPrivateNasMusic(component);
+  }
+  if (action === 'ai_nas_page') {
+    context.pending.nasPage = Number.parseInt(value, 10) || 0;
+  }
+  if (action === 'ai_nas_add' || action === 'ai_nas_remove') {
+    const userId = context.pending.nasUser;
+    if (!userId || !DISCORD_ID_PATTERN.test(userId)) return component.reply(v2Notice('🎵 尚未選取成員', '請先選擇要調整 NAS 白名單的成員。', UI_COLORS.WARNING));
+    let bridge;
+    if (action === 'ai_nas_remove') {
+      if (!component.deferred && !component.replied) await component.deferUpdate();
+      bridge = await musicBridgeLoader();
+      if (!requireAiUnlock(component, context)) return;
+    }
+    const whitelist = new Set(getAiSettings(context.guild.id).nas_music_whitelist);
+    if (action === 'ai_nas_add') whitelist.add(userId);
+    else whitelist.delete(userId);
+    updateAiSetting(context.guild.id, 'nas_music_whitelist', JSON.stringify([...whitelist]));
+    context.notice = 'NAS 私人音樂白名單已更新；AI 使用白名單不受影響。';
+    if (action === 'ai_nas_remove') {
+      const isNasAdministrator = getAiSettings(context.guild.id).admin_ids.includes(userId)
+        && await resolveNasMusicAdministrator(context.guild, userId);
+      const remainsAuthorized = hasNasMusicAccess({
+        guildId: context.guild.id, userId, isAdministrator: isNasAdministrator,
+      }, getAiSettings(context.guild.id));
+      if (remainsAuthorized) {
+        context.notice = '已移出 NAS 白名單；此成員仍具有有效資格（已解鎖管理員或已重新授權），NAS 使用權仍有效。';
+      } else {
+        // Establish the per-user cleanup barrier without yielding after the final access check.
+        const cleanup = bridge.revokeNasMusicAccess(context.guild.id, userId);
+        await cleanup;
+      }
+    }
+  }
   if (action === 'announce_compose') {
     if (!context.pending.announceChannel) {
       return component.reply(v2Notice('📜 尚未選擇頒旨頻道', '請先選擇公告要張貼到哪個文字頻道。', UI_COLORS.WARNING));
@@ -529,6 +593,11 @@ async function openModal(component, context, type) {
   if (!isAdministrator(submit)) {
     return submit.reply(v2Notice('🛡️ 御前權限已失效', '你目前沒有 Administrator 權限。', UI_COLORS.DANGER));
   }
+  context.isAdministrator = true;
+  if (type.startsWith('ai_') && type !== 'ai_unlock' && !requireAiUnlock(submit, context)) return;
+  if (type === 'ai_prompt' || type === 'ai_party') context.view = 'ai_core';
+  if (type === 'ai_draft') context.view = 'ai_drafts';
+  if (type === 'ai_unlock') context.view = 'ai';
 
   if (type === 'ai_draft') {
     await submit.deferUpdate();
@@ -780,7 +849,7 @@ function confirmationReturnView(type) {
   if (typeof type !== 'string') return 'home';
   if (type.startsWith('self_')) return 'selfrole';
   if (type.startsWith('reaction_')) return 'reaction';
-  if (type.startsWith('ai_')) return 'ai';
+  if (type.startsWith('ai_')) return 'ai_core';
   return 'steam';
 }
 
@@ -808,7 +877,13 @@ async function renderView(context) {
   if (context.view === 'steam') return renderSteam(context);
   if (context.view === 'selfrole') return renderSelfRole(context);
   if (context.view === 'reaction') return renderReaction(context);
-  if (context.view === 'ai') return renderAi(context);
+  if (['ai', 'ai_core', 'ai_access', 'ai_drafts', 'ai_nas'].includes(context.view)) {
+    if (aiUnlocked(context) && (context.view === 'ai' || context.view === 'ai_nas')) {
+      const { getNasMusicAccountStatus } = await import('../music/music.js');
+      context.nasAccountStatus = getNasMusicAccountStatus(context.guild.id, context.userId);
+    }
+    return renderAi(context);
+  }
   if (context.view === 'serverinfo') return renderServerInfo(context);
   if (context.view === 'botstatus') return renderBotStatus(context);
   if (context.view === 'announcement') return renderAnnouncement(context);
@@ -857,7 +932,7 @@ async function renderHome(context) {
         .setCustomId(id(context, 'view_select'))
         .setPlaceholder('選擇要管理的功能')
         .addOptions(SETTINGS_VIEW_OPTIONS.map((option) => option.value === 'ai' && !aiUnlocked(context)
-          ? { ...option, label: 'AI 驗證' }
+          ? { ...option, label: 'AI／私人音樂驗證' }
           : option))
     ))
     .addSeparatorComponents(v2Divider())
@@ -1079,31 +1154,74 @@ function renderAi(context) {
     const panel = modulePanel(
       context,
       'AI 存取驗證',
-      '國王智慧核心目前封存於御前鎖櫃。驗證成功後，此帳號將持續保有本伺服器的 AI 管理權限。\n密碼僅用於本次驗證，不會顯示於面板或寫入資料庫。',
+      'AI／私人音樂管理中心尚未解鎖。Administrator 完成密碼驗證後，可管理兩份獨立白名單，並使用自己的 NAS 音樂帳號。\n密碼僅用於本次驗證，不會顯示於面板或寫入資料庫。',
       { statusRows: [
         passwordStatus,
-        { label: '管理範圍', value: '模型 / 聯網 / 記憶 / 白名單 / 派對模式', tone: 'info' },
+        { label: '管理範圍', value: 'AI 設定 / AI 草稿 / NAS 私人音樂', tone: 'info' },
       ] }
     )
       .addActionRowComponents(actionButtons(context, [['modal:ai_unlock', '輸入管理密碼', ButtonStyle.Primary]]));
-    return { components: [finishPanel(panel, context)] };
+    return { components: [finishAiPanel(panel, context)] };
   }
   const settings = getAiSettings(context.guild.id);
   const whitelistCount = new Set(settings.whitelist.filter(Boolean).map(String)).size;
   const aiEnabled = settings.enabled === 1 && (settings.expires_at === null || Date.now() <= settings.expires_at);
-  const panel = modulePanel(
-    context,
-    'AI 設定',
-    `智慧核心：**${aiEnabled ? '啟用' : '停用'}** | 國王大腦：\`${settings.model || DEFAULT_AI_MODEL}\`\n天文地理聯網：**${settings.search_enabled ? '開啟' : '關閉'}** | 顯示參考來源：**${settings.citations_enabled ? '開啟' : '關閉'}**\nAI 操作工具：**${settings.action_tools_enabled ? '啟用' : '停用'}**（預設停用） | 御前對話記憶：**${settings.context_enabled ? '開啟' : '關閉'}**\n御准白名單：${whitelistCount} 人\n> 聯網檢索可能執行多次計費查詢；是否在回答附上來源可獨立設定。`,
-    { statusRows: [
+  const nasWhitelist = [...new Set((settings.nas_music_whitelist || []).map(String))];
+  const nasConfigured = getMusicConfiguration().nasConfigured;
+  const loggedIn = typeof context.nasAccountStatus === 'boolean' ? context.nasAccountStatus : Boolean(context.nasAccountStatus?.loggedIn);
+  const pages = [
+    { label: '總覽', value: 'ai' },
+    { label: 'AI 核心', value: 'ai_core' },
+    { label: 'AI 使用權限', value: 'ai_access' },
+    { label: 'AI 草稿', value: 'ai_drafts' },
+    { label: 'NAS 私人音樂', value: 'ai_nas' },
+  ];
+  const view = pages.some((page) => page.value === context.view) ? context.view : 'ai';
+  const descriptions = {
+    ai: '共用管理驗證，分別管理 AI 與 NAS；兩份使用白名單互不授權。AI 核心停用或 Gemini Key 未設定，不影響 NAS 使用。',
+    ai_core: `國王大腦：\`${settings.model || DEFAULT_AI_MODEL}\`\n天文地理聯網：**${settings.search_enabled ? '開啟' : '關閉'}** | 顯示參考來源：**${settings.citations_enabled ? '開啟' : '關閉'}**\n> 聯網檢索可能執行多次計費查詢；是否在回答附上來源可獨立設定。`,
+    ai_access: `御准白名單：${whitelistCount} 人\nAI 操作工具：**${settings.action_tools_enabled ? '啟用' : '停用'}**（預設停用）\n此白名單只授予 AI 使用權，不授予 NAS 或管理權限。`,
+    ai_drafts: '草稿只保存在此私人面板；切換分頁不清除。公告仍須建立預覽並確認發布。',
+    ai_nas: '白名單成員可在私人音樂卡登入自己的 NAS 帳號，不需要管理密碼。\n已解鎖且仍有 Administrator 的管理員自動具有 NAS 資格，移出此白名單不會撤銷管理員資格。',
+  };
+  const rows = {
+    ai: [
+      { label: '智慧核心', value: aiEnabled ? '啟用' : '停用', tone: aiEnabled ? 'success' : 'warning' },
+      { label: 'NAS 服務', value: nasConfigured ? '已設定' : '未設定', tone: nasConfigured ? 'success' : 'warning' },
+      { label: 'AI 白名單', value: `${whitelistCount} 人`, tone: 'special' },
+      { label: 'NAS 白名單', value: `${nasWhitelist.length} 人`, tone: 'royal' },
+    ],
+    ai_core: [
       { label: '智慧核心', value: aiEnabled ? '啟用' : '停用', tone: aiEnabled ? 'success' : 'warning' },
       { label: '聯網檢索', value: settings.search_enabled ? '開啟' : '關閉', tone: settings.search_enabled ? 'info' : 'neutral' },
       { label: '參考來源', value: settings.citations_enabled ? '顯示' : '隱藏', tone: settings.citations_enabled ? 'info' : 'neutral' },
-      { label: '操作工具', value: settings.action_tools_enabled ? '啟用' : '停用', tone: settings.action_tools_enabled ? 'info' : 'neutral' },
       { label: '對話記憶', value: settings.context_enabled ? '開啟' : '關閉', tone: settings.context_enabled ? 'special' : 'neutral' },
-      { label: '白名單', value: `${whitelistCount} 人`, tone: whitelistCount ? 'royal' : 'neutral' },
-    ] }
+    ],
+    ai_access: [
+      { label: 'AI 白名單', value: `${whitelistCount} 人`, tone: 'special' },
+      { label: '操作工具', value: settings.action_tools_enabled ? '啟用' : '停用', tone: settings.action_tools_enabled ? 'success' : 'warning' },
+    ],
+    ai_drafts: [{ label: '私人草稿', value: context.pending.aiDraft ? '已有草稿，尚未發布' : '尚未產生', tone: context.pending.aiDraft ? 'success' : 'neutral' }],
+    ai_nas: [
+      { label: 'NAS 服務', value: nasConfigured ? '已設定' : '未設定', tone: nasConfigured ? 'success' : 'warning' },
+      { label: '本人帳號', value: loggedIn ? '已登入' : '尚未登入', tone: loggedIn ? 'success' : 'warning' },
+      { label: 'NAS 白名單', value: `${nasWhitelist.length} 人`, tone: 'royal' },
+    ],
+  };
+  const panel = modulePanel(
+    context,
+    'AI 設定',
+    `## ${pages.find((page) => page.value === view).label}\n${descriptions[view]}`,
+    { statusRows: rows[view] }
   )
+    .addActionRowComponents(new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder().setCustomId(id(context, 'ai_page')).setPlaceholder('切換管理分頁')
+        .addOptions(pages.map((page) => ({ ...page, default: page.value === view })))
+    ));
+  if (view === 'ai' || view === 'ai_nas') panel.addActionRowComponents(actionButtons(context, [
+    ['ai_nas_open', '開啟私人音樂庫', ButtonStyle.Primary],
+  ]));
+  if (view === 'ai_core') panel
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new StringSelectMenuBuilder().setCustomId(id(context, 'ai_model')).setPlaceholder('選擇 AI 模型')
         .addOptions(AI_MODELS.map((model) => ({ label: model, value: model, default: model === settings.model })))
@@ -1115,8 +1233,8 @@ function renderAi(context) {
       ['ai_toggle:context_enabled', settings.context_enabled ? '關閉記憶' : '開啟記憶', settings.context_enabled ? ButtonStyle.Secondary : ButtonStyle.Success],
       ['modal:ai_prompt', '編輯提示詞', ButtonStyle.Secondary],
     ]));
-  addAiDraftCenter(panel, context);
-  panel
+  if (view === 'ai_drafts') addAiDraftCenter(panel, context);
+  if (view === 'ai_access') panel
     .addTextDisplayComponents(v2Text(renderAiWhitelist(settings.whitelist, context.pending.aiUser)))
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new UserSelectMenuBuilder().setCustomId(id(context, 'ai_user')).setPlaceholder('選擇白名單使用者')
@@ -1125,7 +1243,8 @@ function renderAi(context) {
       ['ai_user_add', '加入白名單', ButtonStyle.Success],
       ['ai_user_remove', '移除白名單', ButtonStyle.Secondary],
       ['ai_toggle:action_tools_enabled', settings.action_tools_enabled ? '停用 AI 操作' : '啟用 AI 操作', settings.action_tools_enabled ? ButtonStyle.Secondary : ButtonStyle.Success],
-    ]))
+    ]));
+  if (view === 'ai_core') panel
     .addActionRowComponents(new ActionRowBuilder().addComponents(
       new ChannelSelectMenuBuilder().setCustomId(id(context, 'ai_party_channel')).setPlaceholder('選擇派對頻道').addChannelTypes(ChannelType.GuildText)
     ))
@@ -1133,7 +1252,34 @@ function renderAi(context) {
       ['modal:ai_party', '設定派對時間', ButtonStyle.Secondary],
       ['prepare_confirm:ai_party', '啟動派對', ButtonStyle.Secondary],
     ]));
-  return { components: [finishPanel(panel, context)] };
+  if (view === 'ai_nas') {
+    const totalPages = Math.max(1, Math.ceil(nasWhitelist.length / 10));
+    const page = Math.max(0, Math.min(totalPages - 1, context.pending.nasPage || 0));
+    context.pending.nasPage = page;
+    const listing = nasWhitelist.slice(page * 10, page * 10 + 10).map((userId) => `- <@${userId}>`).join('\n') || '尚未加入成員。';
+    const selected = context.pending.nasUser ? `\n目前選取：<@${context.pending.nasUser}>` : '';
+    panel.addTextDisplayComponents(v2Text(`## NAS 使用白名單\n第 ${page + 1}／${totalPages} 頁\n${listing}${selected}`))
+      .addActionRowComponents(new ActionRowBuilder().addComponents(
+        new UserSelectMenuBuilder().setCustomId(id(context, 'ai_nas_user')).setPlaceholder('選擇 NAS 白名單成員')
+      ))
+      .addActionRowComponents(actionButtons(context, [
+        ['ai_nas_add', '加入 NAS 白名單', ButtonStyle.Success],
+        ['ai_nas_remove', '移除 NAS 白名單', ButtonStyle.Secondary],
+      ]));
+    const pagination = actionButtons(context, [
+      [`ai_nas_page:${page - 1}`, '上一頁', ButtonStyle.Secondary],
+      [`ai_nas_page:${page + 1}`, '下一頁', ButtonStyle.Secondary],
+    ]);
+    pagination.components[0].setDisabled(page === 0);
+    pagination.components[1].setDisabled(page === totalPages - 1);
+    panel.addActionRowComponents(pagination);
+  }
+  return { components: [finishAiPanel(panel, context)] };
+}
+
+function finishAiPanel(panel, context) {
+  panel.components = panel.components.filter((component) => component.toJSON().type !== ComponentType.Separator);
+  return panel.addActionRowComponents(actionButtons(context, [['back', '返回總覽', ButtonStyle.Secondary]]));
 }
 
 function addAiDraftCenter(panel, context) {
@@ -1545,12 +1691,15 @@ function isAdministrator(interaction) {
 }
 
 function aiUnlocked(context) {
-  return getAiSettings(context.guild.id).admin_ids.includes(context.userId);
+  return context.isAdministrator === true && getAiSettings(context.guild.id).admin_ids.includes(context.userId);
 }
 
 function requireAiUnlock(component, context) {
+  context.isAdministrator = isAdministrator(component);
   if (aiUnlocked(context)) return true;
-  component.reply(v2Notice('🔐 國王智慧核心已鎖定', '請回到皇家管理控制台的 AI 頁完成御前身分驗證。', UI_COLORS.DANGER)).catch(() => {});
+  const payload = v2Notice('🔐 管理中心已鎖定', '僅限仍具有 Administrator 且已完成 AI／私人音樂管理驗證的使用者。', UI_COLORS.DANGER);
+  const respond = component.deferred || component.replied ? component.followUp.bind(component) : component.reply.bind(component);
+  respond(payload).catch(() => {});
   return false;
 }
 
@@ -2010,6 +2159,9 @@ export const settingsViewTesting = {
   extractEmojiAndLabel,
   handleButton,
   handleStringSelect,
+  handleUserSelect,
+  routeComponent,
+  setMusicBridgeLoader(loader) { musicBridgeLoader = loader || defaultMusicBridgeLoader; },
   startAiParty,
   toggleAiSetting,
 };
