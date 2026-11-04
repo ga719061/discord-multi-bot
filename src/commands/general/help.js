@@ -7,6 +7,7 @@ import {
     PermissionFlagsBits,
     SectionBuilder,
     StringSelectMenuBuilder,
+    UserSelectMenuBuilder,
 } from 'discord.js';
 import fs from 'fs';
 import path from 'path';
@@ -21,6 +22,9 @@ import { execute as openWuwaSearch } from '../gacha/wuwa.js';
 import { execute as openMusicPlayer } from '../music/music.js';
 import { openPollComposer } from '../fun/poll.js';
 import { openGiveawayComposer } from '../fun/giveaway.js';
+import { execute as patKing } from '../fun/pat.js';
+import { hugUser } from '../fun/hug.js';
+import { feedKing, foodChoices } from '../fun/feed.js';
 import { openReminderComposer, openReminderManager } from './remind.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -40,6 +44,8 @@ const DIRECT_QUERY_ACTIONS = {
     投票: { action: 'poll', label: '建立皇家投票', style: ButtonStyle.Primary },
     抽獎: { action: 'giveaway', label: '建立皇家抽獎', style: ButtonStyle.Primary },
     提醒: { action: 'reminder_create', label: '新增皇家提醒', style: ButtonStyle.Primary },
+    摸摸: { action: 'pat', label: '摸摸國王', style: ButtonStyle.Secondary },
+    抱抱: { action: 'hug', label: '抱抱國王', style: ButtonStyle.Secondary },
 };
 const EXTRA_DIRECT_ACTIONS = {
     提醒: [{ action: 'reminder_manage', label: '管理我的提醒', style: ButtonStyle.Secondary }],
@@ -134,19 +140,20 @@ const COMMAND_META = {
     延遲: { label: '延遲測試', examples: ['/延遲'] },
     提醒: { label: '提醒系統', examples: ['/提醒（彈窗新增，完成卡可管理清單）'] },
     每日一汪: { label: '每日一汪', examples: ['/每日一汪'] },
-    餵食: { label: '餵食國王', examples: ['/餵食 食物:steak'] },
+    餵食: { label: '餵食國王', examples: ['從 `/幫助` 的娛樂分類選擇食物'] },
     占卜: { label: '皇家占卜', examples: ['/占卜 問題:今天適合開台嗎'] },
     抽獎: { label: '皇家抽獎', examples: ['從 `/幫助` 點擊「建立皇家抽獎」'] },
-    抱抱: { label: '抱抱國王', examples: ['/抱抱', '/抱抱 對象:@朋友'] },
-    摸摸: { label: '摸摸頭', examples: ['/摸摸'] },
+    抱抱: { label: '抱抱國王', examples: ['從 `/幫助` 的娛樂分類按「抱抱國王」，或選擇朋友'] },
+    摸摸: { label: '摸摸頭', examples: ['從 `/幫助` 的娛樂分類按「摸摸國王」'] },
     投票: { label: '正式投票', examples: ['從 `/幫助` 點擊「建立皇家投票」'] },
-    汪汪: { label: '陪王聊天', examples: ['/汪汪 內容:國王今天心情如何'] },
     等級: { label: '爵位查詢', examples: ['/等級', '/等級 使用者:@朋友'] },
     排行榜: { label: '排行榜', examples: ['/排行榜'] },
     特價查詢: { label: '皇家採購查詢', examples: ['/特價查詢（輸入名稱後選取正確 Steam 遊戲）'] },
-    戰績: { label: '皇家戰報查詢', examples: ['/戰績（彈窗內選擇遊戲並輸入 Riot ID）'] },
-    鳴潮抽卡: { label: '皇家鳴潮喚取卷宗', examples: ['/鳴潮抽卡（綁定 UID、更新或查詢指定卡池）'] },
+    戰績: { label: '皇家戰報查詢', examples: ['從 `/幫助` 按「戰績查詢」'] },
+    鳴潮抽卡: { label: '皇家鳴潮喚取卷宗', examples: ['從 `/幫助` 按「鳴潮抽卡」'] },
     音樂: { label: '皇家音樂播放器', examples: ['/音樂（先加入語音頻道，貼上 YouTube 單曲連結點播）'] },
+    點播: { label: 'YouTube 點播', examples: ['/點播', '/點播 連結:https://www.youtube.com/watch?v=影片ID'] },
+    播放器: { label: '播放器控制', examples: ['/播放器 現在播放', '/播放器 佇列', '/播放器 下一首', '/播放器 循環 模式:單曲'] },
     設定: { label: '皇家管理控制台', examples: ['/設定'] },
 };
 
@@ -254,6 +261,22 @@ async function openHelpPanel(interaction, replaceMessage) {
         }
         if (componentInteraction.customId === makeCustomId(context, 'launch', 'reminder_manage')) {
             await openReminderManager(componentInteraction);
+            return;
+        }
+        if (componentInteraction.customId === makeCustomId(context, 'launch', 'pat')) {
+            await patKing(componentInteraction);
+            return;
+        }
+        if (componentInteraction.customId === makeCustomId(context, 'launch', 'hug')) {
+            await hugUser(componentInteraction);
+            return;
+        }
+        if (componentInteraction.customId === makeCustomId(context, 'launch', 'hug_target') && componentInteraction.isUserSelectMenu()) {
+            await hugUser(componentInteraction, componentInteraction.users.get(componentInteraction.values[0]));
+            return;
+        }
+        if (componentInteraction.customId === makeCustomId(context, 'launch', 'feed') && componentInteraction.isStringSelectMenu()) {
+            await feedKing(componentInteraction, componentInteraction.values[0]);
             return;
         }
 
@@ -518,9 +541,11 @@ function renderCategory(context, category, page) {
             .addSeparatorComponents(v2Divider())
             .addTextDisplayComponents(v2Text([
                 '## 👑 皇家互動入口',
-                '投票與抽獎使用下方按鈕建立，依彈窗填寫後即可在頻道頒布。',
+                category.id === 'fun'
+                    ? '摸摸與抱抱可直接互動，也能選擇擁抱對象或餵食食物；投票與抽獎依彈窗填寫後在頻道頒布。'
+                    : '使用下方按鈕開啟私人查詢與管理介面。',
             ].join('\n')))
-            .addActionRowComponents(...buildDirectQueryRows(context, interactiveCommands));
+            .addActionRowComponents(...buildDirectQueryRows(context, interactiveCommands), ...buildFunSelectRows(context, interactiveCommands));
     }
 
     for (const command of pageCommands) {
@@ -758,6 +783,31 @@ function getDirectActions(commandName) {
         ...(primary ? [primary] : []),
         ...(EXTRA_DIRECT_ACTIONS[commandName] ?? []),
     ];
+}
+
+function buildFunSelectRows(context, commands) {
+    const names = new Set(commands.map((command) => command.name));
+    const rows = [];
+    if (names.has('抱抱')) {
+        rows.push(new ActionRowBuilder().addComponents(
+            new UserSelectMenuBuilder()
+                .setCustomId(makeCustomId(context, 'launch', 'hug_target'))
+                .setPlaceholder('選擇要抱抱的朋友')
+                .setMinValues(1)
+                .setMaxValues(1)
+        ));
+    }
+    if (names.has('餵食')) {
+        rows.push(new ActionRowBuilder().addComponents(
+            new StringSelectMenuBuilder()
+                .setCustomId(makeCustomId(context, 'launch', 'feed'))
+                .setPlaceholder('選擇餵給國王的食物')
+                .setMinValues(1)
+                .setMaxValues(1)
+                .addOptions(...foodChoices.map(({ name, value }) => ({ label: name, value })))
+        ));
+    }
+    return rows;
 }
 
 function getCategoryUsageText(command) {

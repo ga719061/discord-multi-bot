@@ -78,22 +78,31 @@ HTTP `/livez`（及相容 `/`）只確認伺服器存活；`/readyz` 同時檢�
 
 Docker runtime 內建支援 libopus 的 FFmpeg 與固定版本的官方 yt-dlp standalone；本機需安裝工具或用上述 path 變數指定。YouTube 缺工具只停用該入口；此版本不使用 cookies、帳號或 PO Token，遇到驗證、地區限制或 HTTP 403 可能無法播放。固定版本／checksum 與不得更換鏡像的限制見[音樂模組](modules/music.md)。
 
+Bilibili 影片點播與 YouTube 共用此工具與安全代碼；目前不登入或使用 cookies，只接受第一 P 的 BV 影片，並先完整下載再播放。HTTP 567 或其他未分類上游錯誤可能顯示 `MUSIC_YOUTUBE_UNAVAILABLE`，原始網址與 stderr 不寫入日誌；無法由代碼推定特定根因。需在實際 NAS 網路環境另行驗收可播放性。
+
 YouTube 工具建置每 5 秒顯示連線／下載進度。`CONNECT_TIMEOUT`／`ENOTFOUND` 檢查 NAS 到 GitHub release assets 的連線與 DNS；`DOWNLOAD_STALLED` 表示連續沒有下載資料，`DOWNLOAD_TIMEOUT` 表示未於總期限完成。不得跳過 checksum 或改用未核准鏡像；已執行的舊建置不會套用腳本更新，需取消後重新建置。
 
 | 安全日誌或代碼 | 判讀與下一步 |
 | --- | --- |
 | `playback failed`，stage=prepare/audio，`MUSIC_STREAM_STALLED` | 尚未到檔尾但供料持續中斷；檢查連線與負載，手動下一首或重點播 |
 | `MUSIC_FFMPEG` | 轉碼程序異常終止；檢查 FFmpeg 可用性與容器資源 |
+| `MUSIC_YOUTUBE_BLOCKED` | 上游回報 403 或驗證要求；改選公開可播放影片，不能據此直接判定 NAS IP 被封鎖 |
+| `MUSIC_YOUTUBE_RATE_LIMIT` | 上游回報 429；暫停反覆點播，稍後再試 |
+| `MUSIC_YOUTUBE_NETWORK` | 下載回報網路中斷、讀取逾時或資料不完整；檢查 NAS 對外連線後重點播 |
+| `MUSIC_YOUTUBE_TIMEOUT` | 解析／首筆音訊或整首下載超時；慢速或長曲可能在載入階段失敗，可換較短曲目或改善連線後重試 |
+| `MUSIC_YOUTUBE_PROCESS` | 下載子程序收到終止訊號；檢查 NAS／容器資源與是否有人手動終止，不能只憑此碼認定 OOM |
+| `MUSIC_YOUTUBE_UNAVAILABLE` | 上游未分類錯誤或輸出管線異常；單憑此碼無法分辨 HTTP 狀態或原始原因 |
+| `youtube failed` | 搭配鄰近的 `playback failed` 判讀：origin=exit 是下載程序非零／signal 退出，stdout 是輸出管線錯誤，process 是子程序錯誤；exitCode／signal／systemCode／bytes／httpStatus／stderrTags 是固定安全診斷，NONE 表示尚無該觀察 |
 | `operation failed`，`MUSIC_EXPIRED` | 舊 nonce／session 的面板操作失效；由 `/音樂` 或 `/幫助` 重開，不據此推定音訊故障 |
 | `cover unavailable`，stage=upload，`DISCORD_MISSING_PERMISSIONS` | 檢查文字頻道「附加檔案」權限；文字播放器仍可使用 |
 | `cover unavailable`，stage=download，`MUSIC_SIZE` | 封面超過大小限制；保留文字播放器，不影響音訊 |
 | `MUSIC_PANEL_DELETE` | 播放器已停止，但公開貼文無法刪除；人工清除貼文 |
 
-封面會公開到面板頻道；換歌時下載，刷新重用 Discord 附件。安全日誌只保留 stage、固定 code 及適用的 playedSeconds；不要為了排障加入帳密、曲目、NAS 路徑、原始 URL、stderr 或上游錯誤內容。
+封面會公開到面板頻道；換歌時下載，刷新重用 Discord 附件。播放日誌只保留 stage、固定 code 及適用的 playedSeconds；YouTube 失敗另可記錄上表的安全程序快照，欄位規則見[音樂模組](modules/music.md)。不要為了排障加入帳密、曲目、NAS 路徑、原始 URL、stderr 或任意上游錯誤內容。HTTP status／stderrTags 是觀察值，重試過程的訊息不一定是最終根因；一次獨立診斷成功也不能證明間歇故障已修復。程式由 Dockerfile COPY 進 image，套用診斷更新需依既有流程重新建置並啟動容器；沒有變更 slash manifest 時不需 `npm run deploy`。
 
 月下樂藏網站與 Discord 同時出現曲名／專輯亂碼時，先修後端 metadata 索引。既有部署的 `backend/app/metadata.py` 提供保守、可逆、冪等的標籤修復；更新 music 容器並重掃後，Discord 仍要重新搜尋與點播。該後端不在本 repo，處理前須確認實際部署版本，不能在 bot 猜測編碼或改音檔、CUE、ID。
 
-CUE 由月下樂藏重掃建立虛擬分軌與獨立 ID，bot 只播放 API 已裁切單首 FLAC；改 CUE 不能只更新 bot。分軌首次快取可能等待較久。M4A／MP4 使用私有暫存支援檔尾索引，停止與換歌須完成程序／暫存清理；容器暫存空間按兩個播放器預留約 1GB。
+CUE 由月下樂藏重掃建立虛擬分軌與獨立 ID，bot 只播放 API 已裁切單首 FLAC；改 CUE 不能只更新 bot。分軌首次快取可能等待較久。YouTube 各格式皆先完整下載到私有暫存再播放，啟播可能較慢；下載階段有限次重試，失敗提前在載入時顯示，避免一邊播放一邊重試而斷音，但不代表上游連線重設已消失。下載期限／容量與轉碼規則見[音樂模組](modules/music.md#播放資源與生命週期)。NAS M4A／MP4 仍使用私有暫存支援檔尾索引。停止與換歌須完成程序／暫存清理；容器暫存空間按兩個播放器預留約 1GB。
 
 使用 `npm run verify:music` 以合成 WAV、MP3、FLAC／CUE、M4A 及 mock YouTube WebM／M4A 驗證轉碼與取消，不登入實際館藏或 Discord。單元測試的範圍見[開發文件](development.md)。NAS 實際播放、網路／YouTube 可用性、兩播放器負載，以及 Discord 桌面／手機與深淺主題仍須發布環境人工驗收；Message.style 只能使用合成資料，不能輸入 token、帳密或正式 webhook。
 

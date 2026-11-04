@@ -21,10 +21,45 @@ import {
     buildReminderSuccessPayload,
     data as reminderData,
 } from '../src/commands/general/remind.js';
+import { execute as patKing, helpOnly as patHelpOnly } from '../src/commands/fun/pat.js';
+import { hugUser, helpOnly as hugHelpOnly } from '../src/commands/fun/hug.js';
+import { feedKing, foodChoices, helpOnly as feedHelpOnly } from '../src/commands/fun/feed.js';
+import { helpOnly as statsHelpOnly } from '../src/commands/esports/stats.js';
+import { helpOnly as wuwaHelpOnly } from '../src/commands/gacha/wuwa.js';
 
 function serialize(payload) {
     return JSON.stringify(payload.components.map((component) => component.toJSON()));
 }
+
+test('games and simple entertainment remain available through help without slash registration', () => {
+    for (const helpOnly of [patHelpOnly, hugHelpOnly, feedHelpOnly, statsHelpOnly, wuwaHelpOnly]) {
+        assert.equal(helpOnly, true);
+    }
+});
+
+test('entertainment helpers preserve king, friend and food interactions without slash options', async () => {
+    let payload;
+    const interaction = {
+        user: { toString: () => '<@viewer>' },
+        client: { user: { id: 'king' } },
+        async reply(reply) { payload = reply; },
+    };
+    await patKing(interaction);
+    assert.match(serialize(payload), /摸摸吉吉國王/);
+    await hugUser(interaction);
+    assert.match(serialize(payload), /抱抱吉吉國王/);
+    await hugUser(interaction, { id: 'friend', toString: () => '<@friend>' });
+    assert.match(serialize(payload), /吃醋了/);
+    assert.match(serialize(payload), /<@friend>/);
+    await hugUser(interaction, { id: 'king' });
+    assert.match(serialize(payload), /抱抱吉吉國王/);
+    assert.equal(foodChoices.length, 8);
+    for (const food of foodChoices) {
+        await feedKing(interaction, food.value);
+        assert.match(serialize(payload), /餵食吉吉國王/);
+    }
+    await assert.rejects(feedKing(interaction, '__proto__'), /不支援的食物/);
+});
 
 test('interactive public commands open without legacy slash parameters', () => {
     assert.equal(pollHelpOnly, true);

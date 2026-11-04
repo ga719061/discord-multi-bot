@@ -108,6 +108,19 @@ test('mixed-source queues keep only NAS requesters accounts active', async () =>
   } finally { await value.close(); }
 });
 
+test('Bilibili playback never loads NAS accounts or treats Bilibili IDs as YouTube thumbnails', async () => {
+  const value = fixture();
+  try {
+    value.session.current = track('bilibili', { id: 'BV1Y4411A7Q7' });
+    value.session.queue = [track('bilibili', { id: 'BV1Y4411A7Q8' })];
+    await value.presenter.update(value.session);
+    value.logout();
+    assert.equal(value.accountReads.length, 0);
+    assert.equal(value.requests.length, 0);
+    assert.equal(value.bodies.length, 1);
+  } finally { await value.close(); }
+});
+
 test('source switches cancel old cover requests and reject late YouTube and NAS results', async () => {
   const value = fixture();
   try {

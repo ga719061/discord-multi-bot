@@ -12,11 +12,16 @@ import {
 import { MusicError } from './musicLibrary.js';
 
 export const MUSIC_QUEUE_LIMIT = 100;
+const YOUTUBE_DEMUXERS = new Map([
+  ['audio/webm', 'matroska'], ['audio/mp4', 'mov'], ['audio/ogg', 'ogg'],
+  ['audio/mpeg', 'mp3'], ['audio/aac', 'aac'], ['audio/flac', 'flac'], ['audio/wav', 'wav'],
+]);
 
 export async function createMusicAudioResource(library, track, {
   signal, ffmpegPath = 'ffmpeg', spawnImpl = spawn,
 } = {}) {
-  const opened = track.source === 'youtube' ? await library.openAudio(track, { signal }) : {
+  const remote = track.source === 'youtube' || track.source === 'bilibili';
+  const opened = remote ? await library.openAudio(track, { signal }) : {
     source: await library.openStream(track.id, { signal, isCueTrack: track.isCueTrack === true }),
     mime: track.mime,
   };
@@ -27,20 +32,33 @@ export async function createMusicAudioResource(library, track, {
     throw new MusicError('MUSIC_ABORTED');
   }
   const seekable = /^(?:audio\/(?:mp4|x-m4a)|video\/mp4)$/i.test(opened.mime || '');
+  const fileInput = seekable || remote;
+  const demuxer = seekable ? 'mov' : YOUTUBE_DEMUXERS.get(opened.mime);
+  if (fileInput && !demuxer) {
+    await disposeSource();
+    throw new MusicError('MUSIC_YOUTUBE_RESPONSE');
+  }
   let temporaryDirectory;
   let input = 'pipe:0';
-  if (seekable) {
+  if (fileInput) {
+    const downloadDeadline = AbortSignal.timeout(60_000);
     try {
       temporaryDirectory = await mkdtemp(join(tmpdir(), 'gigi-music-'));
-      input = join(temporaryDirectory, 'audio.m4a');
+      input = join(temporaryDirectory, seekable ? 'audio.m4a' : 'audio');
+      // Drain YouTube independently of voice backpressure. Only a complete,
+      // successful download may start playback; retries cannot starve live audio.
       await pipeline(source, createWriteStream(input, { mode: 0o600 }), {
-        signal: AbortSignal.any([...(signal ? [signal] : []), AbortSignal.timeout(60_000)]),
+        signal: AbortSignal.any([...(signal ? [signal] : []), downloadDeadline]),
       });
     } catch (error) {
+      // Snapshot the original cause before cleanup can cross the download deadline.
+      const failure = signal?.aborted ? new MusicError('MUSIC_ABORTED')
+        : error instanceof MusicError ? error
+        : remote && downloadDeadline.aborted ? new MusicError('MUSIC_YOUTUBE_TIMEOUT')
+        : new MusicError('MUSIC_PLAYBACK');
       await disposeSource();
       if (temporaryDirectory) await rm(temporaryDirectory, { recursive: true, force: true });
-      throw signal?.aborted ? new MusicError('MUSIC_ABORTED')
-        : error instanceof MusicError ? error : new MusicError('MUSIC_PLAYBACK');
+      throw failure;
     }
   }
   let disposed = false;
@@ -48,9 +66,10 @@ export async function createMusicAudioResource(library, track, {
   let child;
   try { child = spawnImpl(ffmpegPath, [
     '-hide_banner', '-loglevel', 'error', '-nostdin',
-    '-protocol_whitelist', seekable ? 'file,pipe,crypto,data' : 'pipe,crypto,data',
-    // Force the MOV demuxer and disable external references for local seekable input.
-    ...(seekable ? ['-f', 'mov', '-enable_drefs', '0', '-use_absolute_path', '0'] : []),
+    '-protocol_whitelist', fileInput ? 'file,pipe,crypto,data' : 'pipe,crypto,data',
+    ...(fileInput ? ['-f', demuxer] : []),
+    // Disable external references for local MOV input.
+    ...(seekable ? ['-enable_drefs', '0', '-use_absolute_path', '0'] : []),
     '-i', input,
     '-vn', '-sn', '-dn', '-af', 'volume=0.5',
     '-ar', '48000', '-ac', '2', '-c:a', 'libopus', '-b:a', '128k', '-vbr', 'on',
@@ -116,7 +135,7 @@ export async function createMusicAudioResource(library, track, {
   }
   try {
     const resource = createAudioResource(child.stdout, { inputType: StreamType.OggOpus });
-    if (seekable) child.stdin.end();
+    if (fileInput) child.stdin.end();
     else pipeline(source, child.stdin).catch(async error => {
       if (disposed) return;
       // stdin may close before its finish event. Preserve buffered output only when
@@ -261,7 +280,7 @@ export class MusicPlaybackManager {
   }
 
   async removeUserTracks(session, requestedBy) {
-    const ownsNasTrack = track => track?.requestedBy === requestedBy && track.source !== 'youtube';
+    const ownsNasTrack = track => track?.requestedBy === requestedBy && !['youtube', 'bilibili'].includes(track.source);
     session.queue = session.queue.filter(track => !ownsNasTrack(track));
     if (session.status === 'stopped' || !ownsNasTrack(session.current)) {
       await this.notify(session);
@@ -374,7 +393,7 @@ export class MusicPlaybackManager {
     this.notify(session);
   }
 
-  async control(session, action) {
+  async control(session, action, loopMode) {
     if (action === 'stop') return this.stop(session);
     return this.exclusive(session, async () => {
       if (action === 'pause') {
@@ -388,7 +407,8 @@ export class MusicPlaybackManager {
         session.status = 'loading';
         await this.startNext(session);
       } else if (action === 'loop') {
-        session.loop = { off: 'track', track: 'queue', queue: 'off' }[session.loop];
+        if (loopMode !== undefined && !['off', 'track', 'queue'].includes(loopMode)) throw new MusicError('MUSIC_RESPONSE');
+        session.loop = loopMode ?? { off: 'track', track: 'queue', queue: 'off' }[session.loop];
       } else if (action === 'shuffle') {
         for (let i = session.queue.length - 1; i > 0; i--) {
           const j = Math.floor(Math.random() * (i + 1));

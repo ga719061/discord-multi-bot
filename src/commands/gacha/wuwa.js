@@ -43,6 +43,7 @@ const WUWA_IMPORT_COMMAND = `iwr -UseBasicParsing -Headers @{"User-Agent"="Mozil
 export const data = new SlashCommandBuilder()
   .setName('鳴潮抽卡')
   .setDescription('🌊 查詢、綁定與更新鳴潮喚取紀錄');
+export const helpOnly = true;
 
 export async function execute(interaction) {
   const sessionId = interaction.id;
@@ -64,7 +65,7 @@ export async function execute(interaction) {
 
   collector.on('collect', async (component) => {
     if (component.user.id !== ownerId) {
-      return component.reply(v2Notice('🌊 這份喚取卷宗不屬於你', '請自行使用 `/鳴潮抽卡` 開啟私人卷宗。', UI_COLORS.WARNING));
+      return component.reply(v2Notice('🌊 這份喚取卷宗不屬於你', '請從 `/幫助` 的「鳴潮抽卡」開啟私人卷宗。', UI_COLORS.WARNING));
     }
     try {
       const action = parseAction(component.customId, sessionId);
@@ -155,7 +156,7 @@ export function buildHomePayload(userId, account, expired = false) {
           .setURL(WUWA_IMPORT_SCRIPT_URL)
       )
     );
-  if (expired) panel.addTextDisplayComponents(v2Text('## ⌛ 操作頁已逾時\n請重新使用 `/鳴潮抽卡`。'));
+  if (expired) panel.addTextDisplayComponents(v2Text('## ⌛ 操作頁已逾時\n請從 `/幫助` 重新開啟「鳴潮抽卡」。'));
   return ephemeralV2Payload([panel]);
 }
 
@@ -166,7 +167,7 @@ export function buildImportModal(sessionId, updating = false) {
     .addTextDisplayComponents(
       new TextDisplayBuilder().setContent([
         '**匯入方式**',
-        '請先在遊戲內開啟喚取紀錄，再從 `/鳴潮抽卡` 首頁複製 PowerShell 指令取得 URL。',
+        '請先在遊戲內開啟喚取紀錄，再從喚取卷宗首頁複製 PowerShell 指令取得 URL。',
         '貼上喚取紀錄 URL，或上傳支援的 JSON；兩者皆有時優先使用 JSON。',
       ].join('\n'))
     )
@@ -332,7 +333,7 @@ async function openPoolSelector(component, sessionId) {
   collector.on('collect', async (publish) => {
     try {
       if (publish.user.id !== component.user.id) {
-        return publish.reply(v2Notice('這份卷宗不屬於你', '請自行使用 `/鳴潮抽卡` 查詢。', UI_COLORS.WARNING));
+        return publish.reply(v2Notice('這份卷宗不屬於你', '請從 `/幫助` 的「鳴潮抽卡」自行查詢。', UI_COLORS.WARNING));
       }
       if (published) return publish.reply(v2Notice('卷宗已發布', '不會重複發布相同圖片。', UI_COLORS.WARNING));
       if (!component.channel?.send) {

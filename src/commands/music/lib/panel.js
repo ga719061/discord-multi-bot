@@ -47,7 +47,7 @@ export class MusicPanelPresenter {
 
   update(session) {
     if (this.closed || !session.message) return Promise.resolve();
-    for (const userId of new Set([session.current, ...session.queue].filter(track => track && track.source !== 'youtube').map(track => track.requestedBy))) {
+    for (const userId of new Set([session.current, ...session.queue].filter(track => track && !['youtube', 'bilibili'].includes(track.source)).map(track => track.requestedBy))) {
       this.accounts.get(session.guildId, userId);
     }
     let state = this.states.get(session);
@@ -57,40 +57,57 @@ export class MusicPanelPresenter {
     }
     if (state.removing) return Promise.resolve();
     this.syncCover(session, state);
-    const edit = state.editing.catch(() => {}).then(async () => {
-      if (this.closed || state.failed || state.removing) return;
-      this.syncCover(session, state);
-      const cover = state.cover;
-      const image = cover?.image;
-      const attachment = cover?.attachment;
-      const filename = attachment?.name || (image ? cover.filename : null);
-      const payload = v2EditPayload(buildMusicPlayerPayload(this.manager.snapshot(session), {
-        thumbnail: attachment?.url || (image ? `attachment://${filename}` : undefined),
-      }));
-      payload.attachments = attachment ? [{ id: attachment.id }] : [];
-      if (image && !attachment) payload.files = [{ attachment: image.buffer, name: filename }];
+    state.dirty = true;
+    if (state.running) return state.editing;
+    state.running = true;
+    const edit = Promise.resolve().then(async () => {
       try {
-        const message = await session.message.edit(payload);
-        if (image && !attachment && state.cover === cover) {
-          const uploaded = uploadedCover(message, filename);
-          if (!uploaded) {
-            const error = new Error('Music cover attachment missing');
-            error.code = 'MUSIC_COVER_ATTACHMENT';
-            throw error;
+        while (state.dirty && !this.closed && !state.failed && !state.removing) {
+          state.dirty = false;
+          this.syncCover(session, state);
+          const cover = state.cover;
+          const image = cover?.image;
+          const attachment = cover?.attachment;
+          const filename = attachment?.name || (image ? cover.filename : null);
+          const payload = v2EditPayload(buildMusicPlayerPayload(this.manager.snapshot(session), {
+            thumbnail: attachment?.url || (image ? `attachment://${filename}` : undefined),
+          }));
+          payload.attachments = attachment ? [{ id: attachment.id }] : [];
+          const signature = JSON.stringify(payload);
+          if (image && !attachment) payload.files = [{ attachment: image.buffer, name: filename }];
+          if (!payload.files && state.lastMessage === session.message && state.signature === signature) continue;
+          try {
+            const target = session.message;
+            const message = await target.edit(payload);
+            state.lastMessage = target;
+            state.signature = signature;
+            if (image && !attachment && state.cover === cover) {
+              const uploaded = uploadedCover(message, filename);
+              if (!uploaded) {
+                const error = new Error('Music cover attachment missing');
+                error.code = 'MUSIC_COVER_ATTACHMENT';
+                throw error;
+              }
+              cover.attachment = uploaded;
+              cover.image = null;
+            }
+          } catch (error) {
+            state.signature = null;
+            if (state.removing) return;
+            if (!image && !attachment) throw error;
+            cover.image = null;
+            cover.attachment = null;
+            this.onCoverError(error, 'upload');
+            const fallback = {
+              ...v2EditPayload(buildMusicPlayerPayload(this.manager.snapshot(session))), attachments: [],
+            };
+            const target = session.message;
+            await target.edit(fallback);
+            state.lastMessage = target;
+            state.signature = JSON.stringify(fallback);
           }
-          cover.attachment = uploaded;
-          cover.image = null;
         }
-      } catch (error) {
-        if (state.removing) return;
-        if (!image && !attachment) throw error;
-        cover.image = null;
-        cover.attachment = null;
-        this.onCoverError(error, 'upload');
-        await session.message.edit({
-          ...v2EditPayload(buildMusicPlayerPayload(this.manager.snapshot(session))), attachments: [],
-        });
-      }
+      } finally { state.running = false; }
     });
     state.editing = edit;
     return this.trackTask(edit);
@@ -122,7 +139,8 @@ export class MusicPanelPresenter {
   syncCover(session, state) {
     const track = session.status === 'stopped' ? null : session.current;
     const isYouTube = track?.source === 'youtube';
-    const account = track && !isYouTube ? this.accounts.get(session.guildId, track.requestedBy) : null;
+    const isBilibili = track?.source === 'bilibili';
+    const account = track && !isYouTube && !isBilibili ? this.accounts.get(session.guildId, track.requestedBy) : null;
     const source = isYouTube ? this.youtube : account?.library;
     const existing = state.cover;
     if (existing && existing.track === track && existing.generation === session.generation
@@ -159,7 +177,7 @@ export class MusicPanelPresenter {
 
   invalidateOwner(session, userId) {
     const state = this.states.get(session);
-    if (state?.cover?.track.source !== 'youtube' && state?.cover?.track.requestedBy === userId) {
+    if (state?.cover?.track.source !== 'youtube' && state?.cover?.track.source !== 'bilibili' && state?.cover?.track.requestedBy === userId) {
       state.cover.controller.abort();
       state.cover = null;
     }

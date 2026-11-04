@@ -12,6 +12,7 @@ export const data = new SlashCommandBuilder()
             .setDescriptionLocalizations({ 'zh-TW': '或者...抱別人？（國王會吃醋喔）' })
             .setRequired(false)
     );
+export const helpOnly = true;
 
 const hugKingReactions = [
     { text: '🐕💕 汪～好溫暖...本王勉強讓你抱一下...\n*小小的身體縮在你懷裡* 嗯...不準放開。', color: UI_COLORS.FUN },
@@ -30,8 +31,10 @@ const jealousReactions = [
 ];
 
 export async function execute(interaction) {
-    const target = interaction.options.getUser('對象');
+    return hugUser(interaction, interaction.options.getUser('對象'));
+}
 
+export async function hugUser(interaction, target = null) {
     if (target && target.id !== interaction.client.user.id) {
         // 抱別人 - 國王吃醋
         const jealous = jealousReactions[Math.floor(Math.random() * jealousReactions.length)];

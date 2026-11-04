@@ -24,7 +24,7 @@ function track(index = 1, extra = {}) {
 }
 
 test('compact point confirmations remain private and sanitize track metadata for both sources', () => {
-  for (const source of ['nas', 'youtube']) {
+  for (const source of ['nas', 'youtube', 'bilibili']) {
     const payload = buildMusicPointNotice(track(1, { source, title: '**歌名** @everyone <@123456789012345678>\u001b[31m\u202e' }), 2);
     assertPayload(payload, true);
     assert.match(text(payload), /目前排在第 3 首/);
@@ -160,6 +160,15 @@ test('music player is public, highlights current playback and previews only the 
   assert.equal(byId(payload, 'music:session:stop').style, ButtonStyle.Secondary);
 });
 
+test('private point entry links to the shared player without exposing account actions to ordinary members', () => {
+  const playerUrl = 'https://discord.com/channels/123456789012345678/223456789012345678/323456789012345678';
+  const payload = buildMusicLauncherPayload({ id: 'entry', nasAllowed: false, playerUrl });
+  assertPayload(payload, true);
+  assert.ok(text(payload).includes(`[前往共用控制面板](${playerUrl})`));
+  assert.match(text(payload), /個人點播入口|同一語音頻道/);
+  assert.doesNotMatch(text(payload), /NAS|帳號|登入|私人音樂庫/);
+});
+
 test('idle music panel keeps browsing available while pause and skip are disabled', () => {
   const payload = buildMusicPlayerPayload(state({ status: 'idle', current: null, queue: [] }));
   assertPayload(payload);
@@ -287,7 +296,7 @@ test('player summary colors distinguish state, progress and loop without colorin
 test('private summaries show colored page counts and service states exactly once', () => {
   const library = buildMusicLibraryPayload({ id: 'browser', query: '歌手', tracks: Array.from({ length: 100 }, (_, index) => track(index + 1)), page: 9 });
   const queue = buildMusicQueuePayload(state({ queue: Array.from({ length: 100 }, (_, index) => track(index + 1)) }), 9);
-  for (const [payload, label, value] of [[library, '結果', '100 首搜尋結果'], [queue, '待播', '100 首']]) {
+  for (const [payload, label, value] of [[library, '結果', '顯示 100 首搜尋結果'], [queue, '待播', '100 首']]) {
     assertPayload(payload, true);
     const content = summary(payload)[0].content;
     assert.equal(content.split('\n').length, 4, 'private lists have exactly two summary rows');
@@ -305,7 +314,7 @@ test('private summaries show colored page counts and service states exactly once
         for (const [label, available, value] of [
           ['帳號', loggedIn, loggedIn ? '已登入' : '尚未登入'],
           ['NAS', nasConfigured, nasConfigured ? '可用' : '未設定'],
-          ['YouTube', youtubeAvailable, youtubeAvailable ? '可用' : '無法使用'],
+          ['影片點播', youtubeAvailable, youtubeAvailable ? '可用' : '無法使用'],
         ]) {
           assert.ok(content.includes(`\u001b[37m[${label}]\u001b[0m \u001b[${ANSI_TONES[available ? 'success' : 'warning']}m${value}\u001b[0m`));
         }
@@ -326,7 +335,7 @@ test('three player button groups preserve scoped IDs, labels, emojis, styles and
       const pause = status === 'paused' ? 'resume' : 'pause';
       const expected = [
         [[pause, status === 'paused' ? '繼續播放' : '暫停', status === 'paused' ? '▶️' : '⏸️'], ['skip', '下一首', '⏭️']],
-        [['youtube', 'YouTube 點播', '📺'], ['queue', '查看佇列', '📜']],
+        [['youtube', '影片點播', '📺'], ['queue', '查看佇列', '📜']],
         [['loop', `循環：${{ off: '關閉', track: '單曲循環', queue: '佇列循環' }[loop]}`, loop === 'track' ? '🔂' : '🔁'], ['shuffle', '隨機排序', '🔀'], ['stop', '停止並離開', '⏹️']],
       ];
       const rows = buttonRows(payload);
@@ -421,6 +430,23 @@ test('empty library is private and has no invalid empty select menu', () => {
   assert.equal(byId(payload, 'musiclib:browser:prev').disabled, true);
   assert.equal(byId(payload, 'musiclib:browser:next').disabled, true);
   assert.equal(byId(payload, 'musiclib:browser:search').disabled, false);
+  assert.equal(byId(payload, 'musiclib:browser:latest'), undefined);
+});
+
+test('empty search results keep search and return actions above the result with specific recovery guidance', () => {
+  for (const disabled of [false, true]) {
+    const payload = buildMusicLibraryPayload({ id: 'browser', query: '不存在的歌曲', tracks: [], disabled });
+    assertPayload(payload, true);
+    assert.match(text(payload), /\[結果\] 顯示 0 首搜尋結果/);
+    assert.match(text(payload), /縮短關鍵字.*歌手或專輯.*返回最新曲目/);
+    assert.equal(byId(payload, 'musiclib:browser:enqueue'), undefined);
+    assert.equal(byId(payload, 'musiclib:browser:latest').disabled, disabled);
+    assert.equal(byId(payload, 'musiclib:browser:prev').disabled, true);
+    assert.equal(byId(payload, 'musiclib:browser:next').disabled, true);
+    const items = payload.components[0].toJSON().components;
+    assert.ok(items.findIndex(item => item.type === ComponentType.ActionRow)
+      < items.findIndex(item => item.content?.includes('找不到歌曲')));
+  }
 });
 
 test('library pages contain ten stable track ids, preserve newest order and cap browsing at 100', () => {
@@ -440,6 +466,7 @@ test('library pages contain ten stable track ids, preserve newest order and cap 
   assert.match(text(last), /100 首/);
   assert.match(text(last), /搜尋可找到其他曲目/);
   assert.equal(byId(last, 'musiclib:browser:enqueue').options.at(-1).value, 'track-100');
+  assert.equal(byId(last, 'musiclib:browser:enqueue').options.at(-1).label, '100. 歌曲 100');
   assert.equal(byId(last, 'musiclib:browser:prev').disabled, false);
   assert.equal(byId(last, 'musiclib:browser:next').disabled, true);
   const partial = buildMusicLibraryPayload({ id: 'browser', tracks: tracks.slice(0, 11), page: 1 });
@@ -453,23 +480,42 @@ test('private library separates track metadata and account actions while preserv
   assertPayload(payload, true);
   assert.equal(payload.components[0].toJSON().accent_color, UI_COLORS.ROYAL);
   assert.match(text(payload), /搜尋：.*歌手/);
-  assert.match(text(payload), /\[頁碼\] 第 1 \/ 1 頁\n\[結果\] 2 首搜尋結果/);
-  assert.match(text(payload), /\*\*1\. 歌曲 1\*\* {2}\n[^\n]*測試歌手[^\n]*測試專輯[^\n]*3:00[^\n]*/);
-  assert.match(text(payload), /\*\*2\. 歌曲 2\*\* {2}\n[^\n]*測試歌手[^\n]*未知專輯[^\n]*未知時長/);
+  assert.match(text(payload), /\[頁碼\] 第 1 \/ 1 頁\n\[結果\] 顯示 2 首搜尋結果/);
+  assert.match(text(payload), /\*\*1\. 歌曲 1\*\* {2}\n-# 測試歌手 · 測試專輯 · 3:00 · CUE 分軌 03/);
+  assert.match(text(payload), /\*\*2\. 歌曲 2\*\* {2}\n-# 測試歌手 · 未知專輯 · 未知時長/);
+  assert.doesNotMatch(text(payload), /NAS/);
   assert.match(text(payload), /CUE 分軌 03/);
   const rows = buttonRows(payload);
   assert.deepEqual(rows.map((row) => row.components.map((component) => component.custom_id)), [
-    ['musiclib:browser:search', 'musiclib:browser:prev', 'musiclib:browser:next'],
+    ['musiclib:browser:search', 'musiclib:browser:latest'],
+    ['musiclib:browser:prev', 'musiclib:browser:next'],
     ['musiclib:browser:account', 'musiclib:browser:youtube'],
   ]);
   assert.deepEqual(rows.map((row) => row.components.map((component) => [component.label, component.emoji?.name])), [
-    [['搜尋曲庫', '🔍'], ['上一頁', '◀️'], ['下一頁', '▶️']],
-    [['帳號／登出', '👤'], ['YouTube 點播', '📺']],
+    [['搜尋曲庫', '🔍'], ['返回最新曲目', '↩️']],
+    [['上一頁', '◀️'], ['下一頁', '▶️']],
+    [['帳號／登出', '👤'], ['影片點播', '📺']],
   ]);
   const select = byId(payload, 'musiclib:browser:enqueue');
   assert.deepEqual(select.options.map((option) => option.value), ['track-1', 'track-2']);
   assert.equal(select.min_values, 1);
   assert.equal(select.max_values, 1);
+  const items = payload.components[0].toJSON().components;
+  assert.ok(items.findIndex(item => item.type === ComponentType.ActionRow)
+    < items.findIndex(item => item.content?.includes('**1. 歌曲 1**')));
+});
+
+test('same-title songs remain distinguishable by album and matching list numbers across pages', () => {
+  const tracks = Array.from({ length: 12 }, (_, index) => track(index + 1, { title: '同名歌曲', album: `專輯 ${index + 1}` }));
+  const payload = buildMusicLibraryPayload({ id: 'browser', tracks, page: 1 });
+  assertPayload(payload, true);
+  const select = byId(payload, 'musiclib:browser:enqueue');
+  assert.deepEqual(select.options.map(option => [option.label, option.description, option.value]), [
+    ['11. 同名歌曲', '測試歌手 · 專輯 11 · 3:00', 'track-11'],
+    ['12. 同名歌曲', '測試歌手 · 專輯 12 · 3:00', 'track-12'],
+  ]);
+  assert.match(text(payload), /\*\*11\. 同名歌曲\*\*/);
+  assert.match(text(payload), /\*\*12\. 同名歌曲\*\*/);
 });
 
 test('private queue uses two-line mixed-source entries below current song and retains navigation', () => {
@@ -595,6 +641,20 @@ test('search modal uses scoped ids and declares supported input limits', () => {
   const query = flatten(search).find((component) => component.custom_id === 'query');
   assert.equal(query.max_length, 120);
   assert.equal(query.required, false);
+  assert.equal(query.value, undefined);
+});
+
+test('search modal prefills the current query without leaking unsafe text or splitting long emoji', () => {
+  const input = value => flatten(buildMusicSearchModal('browser', value).toJSON())
+    .find(component => component.custom_id === 'query');
+  assert.equal(input('周杰倫 七里香').value, '周杰倫 七里香');
+  const long = input('🎵'.repeat(100)).value;
+  assert.ok(long.length <= 120);
+  assert.equal(long.isWellFormed(), true);
+  assert.equal(input('https://private.invalid/?token=secret').value, undefined);
+  const unsafe = input('歌手\u001b[31m\u202e\n@everyone').value;
+  assert.doesNotMatch(unsafe, /\u001b|\u202e|\n|@everyone/);
+  assert.match(unsafe, /歌手/);
 });
 
 test('music login views remain private and provide scoped login or logout without credentials', () => {
@@ -642,7 +702,7 @@ test('YouTube entry points are available without NAS login and remain scoped to 
   assert.equal(byId(login, 'musicauth:auth-session:login').disabled, true);
   assert.equal(byId(login, 'musicauth:auth-session:youtube').disabled, false);
   assert.match(text(login), /NAS 曲庫尚未設定/);
-  assert.match(text(login), /YouTube 點播不需要 NAS 登入/);
+  assert.match(text(login), /YouTube 與 Bilibili 點播不需要 NAS 登入/);
   const library = buildMusicLibraryPayload({ id: 'browser', tracks: [track()] });
   assertPayload(library, true);
   assert.equal(byId(library, 'musiclib:browser:youtube').style, ButtonStyle.Secondary);
@@ -657,7 +717,7 @@ test('unavailable YouTube tool disables only YouTube entry points', () => {
   assertPayload(login, true);
   assert.equal(byId(login, 'musicauth:auth-session:login').disabled, false);
   assert.equal(byId(login, 'musicauth:auth-session:youtube').disabled, true);
-  assert.match(text(login), /YouTube 工具尚未安裝或無法使用/);
+  assert.match(text(login), /影片點播工具尚未安裝或無法使用/);
   const library = buildMusicLibraryPayload({ id: 'browser', tracks: [track()], youtubeAvailable: false });
   assert.equal(byId(library, 'musiclib:browser:youtube').disabled, true);
   assert.equal(byId(library, 'musiclib:browser:search').disabled, false);
@@ -691,6 +751,25 @@ test('YouTube modal scopes submission and bounds the URL without prefilled data'
   assert.equal(inputs[0].required, true);
   assert.equal(inputs[0].style, TextInputStyle.Short);
   assert.equal('value' in inputs[0], false);
+  assert.match(inputs[0].label, /YouTube.*Bilibili/);
+});
+
+test('Bilibili tracks are identified in the player, queue and point notice without NAS metadata', () => {
+  const video = track(3, { source: 'bilibili', artist: '影片頻道', album: '' });
+  const musicState = state({ current: video, queue: [track(), video] });
+  const player = buildMusicPlayerPayload(musicState, { thumbnail: 'attachment://cover.webp' });
+  const queue = buildMusicQueuePayload(musicState);
+  const notice = buildMusicPointNotice(video, 0);
+  assertPayload(player);
+  assertPayload(queue, true);
+  assertPayload(notice, true);
+  assert.match(text(player), /影片頻道 · Bilibili/);
+  assert.match(text(player), /歌曲 3.*Bilibili/);
+  assert.match(text(queue), /歌曲 3[^]*影片頻道 · Bilibili/);
+  assert.match(text(notice), /已加入 Bilibili 點播/);
+  assert.doesNotMatch(text(player), /未知專輯|NAS/);
+  assert.equal(elements(player).find(component => component.type === ComponentType.Thumbnail).description,
+    'Bilibili 影片縮圖 · 歌曲 3');
 });
 
 test('music login modal declares scoped submission, bounded inputs and no prefilled credentials', () => {

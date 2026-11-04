@@ -30,7 +30,87 @@ const nasCleanups = new Map();
 const pendingNasLogins = new Map();
 const noticeTimers = new Map();
 const noticeTasks = new Set();
+const privateViews = new Map();
+const privateTasks = new Set();
 let runtime = null;
+
+function rememberPrivateView(view, interaction) {
+  const sameKind = [...privateViews.values()].filter(candidate => candidate.kind === view.kind);
+  if (sameKind.length >= 100) closePrivateView(sameKind[0]);
+  Object.assign(view, { interaction, writes: new Set(), closed: false });
+  privateViews.set(view.id, view);
+  return view;
+}
+
+function refreshPrivateView(view, interaction) {
+  if (interaction.message?.id === view.messageId && (interaction.deferred || interaction.replied)) {
+    view.interaction = interaction;
+  }
+}
+
+function writePrivateView(view, interaction, operation) {
+  if (view.closed) return Promise.reject(new MusicError('MUSIC_EXPIRED'));
+  const task = Promise.resolve().then(operation).then(response => {
+    view.messageId ||= response?.resource?.message?.id || response?.id;
+    refreshPrivateView(view, interaction);
+    return response;
+  });
+  view.writes.add(task);
+  task.then(() => view.writes.delete(task), () => view.writes.delete(task));
+  return task;
+}
+
+function closePrivateView(view) {
+  if (view.closed) return view.cleanup;
+  view.closed = true;
+  privateViews.delete(view.id);
+  if (browsers.get(view.id) === view) browsers.delete(view.id);
+  // A reply already being published must settle before deleting it.
+  const task = Promise.allSettled([...view.writes]).then(async () => {
+    try { await view.interaction.deleteReply(view.messageId || '@original'); }
+    catch (error) {
+      if (![10008, 10015, 50027].includes(Number(error?.code))) logger.warn('[Music] private view cleanup failed');
+    }
+  });
+  view.cleanup = task;
+  privateTasks.add(task);
+  task.then(() => privateTasks.delete(task), () => privateTasks.delete(task));
+  return task;
+}
+
+function closeSessionViews(session) {
+  cancelYouTubeRequests(session.guildId, session.id);
+  const tasks = [];
+  for (const view of privateViews.values()) {
+    if (view.guildId === session.guildId && view.sessionId === session.id) tasks.push(closePrivateView(view));
+  }
+  if (tasks.length) session.privateCleanup = Promise.all([session.privateCleanup, ...tasks]);
+  return session.privateCleanup || Promise.resolve();
+}
+
+function isPrivateControlMessage(interaction) {
+  const flags = interaction.message?.flags;
+  const ephemeral = flags?.has ? flags.has(MessageFlags.Ephemeral) : Boolean(Number(flags) & MessageFlags.Ephemeral);
+  const [scope, id, action] = interaction.customId.split(':');
+  if (!ephemeral || (scope !== 'musiclib' && !(scope === 'music' && ['qprev', 'qnext'].includes(action)))) return false;
+  const controlId = scope === 'musiclib' && action === 'search_submit' && interaction.isModalSubmit()
+    ? `musiclib:${id}:search` : interaction.customId;
+  const matches = component => {
+    const data = component.toJSON?.() || component;
+    return data.custom_id === controlId || (data.components || []).some(matches);
+  };
+  return (interaction.message.components || []).some(matches);
+}
+
+async function closeExpiredPrivateReply(interaction) {
+  const [, id] = interaction.customId.split(':');
+  const owner = browsers.get(id)?.ownerId;
+  if ((owner && owner !== interaction.user.id) || !isPrivateControlMessage(interaction)) return false;
+  if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
+  try { await interaction.deleteReply(); }
+  catch (error) { if (Number(error?.code) !== 10008) throw error; }
+  return true;
+}
 
 function scheduleNoticeDeletion(interaction, messageId, delay) {
   const remove = () => {
@@ -49,13 +129,20 @@ function scheduleNoticeDeletion(interaction, messageId, delay) {
 }
 
 function isPointSubmission(interaction) {
-  return /^(?:musicyoutube:[^:]+:submit|musiclib:[^:]+:enqueue)$/.test(interaction.customId || '');
+  return (interaction.commandName === '點播' && Boolean(interaction.options?.getString('連結')?.trim()))
+    || /^(?:musicyoutube:[^:]+:submit|musiclib:[^:]+:enqueue)$/.test(interaction.customId || '');
 }
 
 function getRuntime(client) {
   if (!runtime) {
     const config = getMusicConfiguration();
-    const youtube = new MusicYouTubeClient({ ytdlpPath: config.ytdlpPath });
+    const youtube = new MusicYouTubeClient({
+      ytdlpPath: config.ytdlpPath,
+      onFailure: ({ stage, origin, exitCode, signal, systemCode, bytes, httpStatus, stderrTags }) => logger.warn(
+        `[Music] youtube failed stage=${stage} origin=${origin} exitCode=${exitCode ?? 'NONE'} signal=${signal}`
+        + ` systemCode=${systemCode} bytes=${bytes} httpStatus=${httpStatus ?? 'NONE'} stderrTags=${stderrTags}`,
+      ),
+    });
     let manager;
     let panels;
     const accounts = new MusicAccounts({
@@ -70,12 +157,15 @@ function getRuntime(client) {
     });
     manager = new MusicPlaybackManager({
       ffmpegPath: config.ffmpegPath, onUpdate: updatePanel,
-      onStop: session => cancelYouTubeRequests(session.guildId),
+      onStop: session => {
+        cancelYouTubeRequests(session.guildId);
+        closeSessionViews(session);
+      },
       onPlaybackError: ({ stage, code, playedSeconds }) => logger.warn(
         `[Music] playback failed stage=${stage} code=${code} playedSeconds=${playedSeconds.toFixed(2)}`,
       ),
       async resolveLibrary(session, track) {
-        if (track.source === 'youtube') return youtube;
+        if (track.source === 'youtube' || track.source === 'bilibili') return youtube;
         if (nasCleanups.has(`${session.guildId}:${track.requestedBy}`)
           || !await resolveNasMusicAccess(client?.guilds?.cache.get(session.guildId), track.requestedBy)) {
           throw new MusicError('MUSIC_FORBIDDEN');
@@ -120,10 +210,7 @@ export function assertMusicAccess(interaction, config, session = null) {
 
 async function updatePanel(session) {
   if (session.status === 'stopped') {
-    cancelYouTubeRequests(session.guildId, session.id);
-    for (const [id, browser] of browsers) {
-      if (browser.guildId === session.guildId && browser.sessionId === session.id) browsers.delete(id);
-    }
+    await closeSessionViews(session);
   }
   if (!session.message || !runtime) return;
   if (session.status === 'stopped' && session.deletePanelOnStop) await runtime.panels.remove(session);
@@ -162,6 +249,9 @@ function invalidatePrivateViews(guildId, userId) {
     for (const [id, view] of views) {
       if (view.guildId === guildId && view.ownerId === userId) views.delete(id);
     }
+  }
+  for (const view of privateViews.values()) {
+    if (view.guildId === guildId && view.ownerId === userId && view.accountId) closePrivateView(view);
   }
 }
 
@@ -204,10 +294,33 @@ export function revokeNasMusicAccess(guildId, userId, services = runtime) {
   return cleanup;
 }
 
-function launcherPayload(interaction, services) {
+function launcherPayload(interaction, services, playerUrl) {
   const login = loginPayload(interaction, services, false);
   return buildMusicLauncherPayload({ id: login.id, nasAllowed: canUseNas(interaction, services),
-    youtubeAvailable: services.youtubeAvailable === true });
+    youtubeAvailable: services.youtubeAvailable === true, playerUrl });
+}
+
+function sharedPlayerUrl(session) {
+  return `https://discord.com/channels/${session.guildId}/${session.textChannelId}/${session.message.id}`;
+}
+
+async function openSharedPlayer(interaction, services) {
+  const { manager, config } = services;
+  const existing = manager.getSession(interaction.guildId);
+  const channel = assertMusicAccess(interaction, config, existing);
+  const session = await manager.connect(interaction.guild, channel);
+  try {
+    if (manager.getSession(interaction.guildId) !== session || session.status === 'stopped') throw new MusicError('MUSIC_EXPIRED');
+    assertMusicAccess(interaction, config, session);
+    await ensurePanel(interaction, services, session);
+    if (manager.getSession(interaction.guildId) !== session || session.status === 'stopped') throw new MusicError('MUSIC_EXPIRED');
+    assertMusicAccess(interaction, config, session);
+    return session;
+  } catch (error) {
+    // A failed opening must not leave a new voice session without a public control panel.
+    if (!existing && !session.message && manager.getSession(interaction.guildId) === session) await manager.stop(session);
+    throw error;
+  }
 }
 
 function loginPayload(interaction, services, render = true) {
@@ -234,28 +347,32 @@ async function newBrowser(interaction, session, account, services) {
   await assertNasAccess(interaction, services, true);
   accountFor(services, interaction, account.id);
   if (session.status === 'stopped') throw new MusicError('MUSIC_EXPIRED');
-  for (const [id, browser] of browsers) {
+  for (const browser of browsers.values()) {
     const active = services.manager.getSession(browser.guildId);
-    if (!active || active.id !== browser.sessionId || active.status === 'stopped') browsers.delete(id);
+    if (!active || active.id !== browser.sessionId || active.status === 'stopped') closePrivateView(browser);
   }
-  if (browsers.size >= 100) browsers.delete(browsers.keys().next().value);
   const browser = {
-    id: randomUUID(), ownerId: interaction.user.id, guildId: interaction.guildId,
+    id: randomUUID(), kind: 'library', ownerId: interaction.user.id, guildId: interaction.guildId,
     sessionId: session.id, accountId: account.id, query: '', tracks, page: 0, busy: false,
     youtubeAvailable: services.youtubeAvailable === true,
   };
   browsers.set(browser.id, browser);
-  return browser;
+  return rememberPrivateView(browser, interaction);
 }
 
 export async function execute(interaction, services) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
     services ||= getRuntime(interaction.client);
     if (!interaction.guildId) throw new MusicError('MUSIC_CHANNEL');
+    const shared = interaction.isChatInputCommand() && interaction.commandName === data.name;
+    const initial = shared ? services.manager.getSession(interaction.guildId) : null;
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     await youtubeAvailable(services);
     if (services.manager.closed || services.accounts.closed) throw new MusicError('MUSIC_ABORTED');
-    await interaction.editReply(v2EditPayload(launcherPayload(interaction, services)));
+    if (shared && services.manager.getSession(interaction.guildId) !== initial) throw new MusicError('MUSIC_EXPIRED');
+    // Help buttons retain their scoped private entry; the slash command opens the shared player immediately.
+    const session = shared ? await openSharedPlayer(interaction, services) : null;
+    await interaction.editReply(v2EditPayload(launcherPayload(interaction, services, session ? sharedPlayerUrl(session) : undefined)));
   } catch (error) { await replyError(interaction, error); }
 }
 
@@ -293,7 +410,7 @@ async function openPlayer(interaction, services, authenticated = false) {
     assertMusicAccess(interaction, config, session);
     await ensurePanel(interaction, services, session);
     const browser = await newBrowser(interaction, session, account, services);
-    await interaction.editReply(v2EditPayload(buildMusicLibraryPayload(browser)));
+    await writePrivateView(browser, interaction, () => interaction.editReply(v2EditPayload(buildMusicLibraryPayload(browser))));
 }
 
 async function youtubeAvailable(services) {
@@ -318,7 +435,7 @@ function cancelYouTubeRequests(guildId, sessionId) {
   }
 }
 
-async function showYouTubeModal(interaction, services, session = null) {
+async function createYouTubeView(interaction, services, session = null) {
   const initial = services.manager.getSession(interaction.guildId);
   if (!await youtubeAvailable(services)) throw new MusicError('MUSIC_YOUTUBE_TOOL');
   if (services.manager.closed) throw new MusicError('MUSIC_ABORTED');
@@ -332,6 +449,11 @@ async function showYouTubeModal(interaction, services, session = null) {
   }
   const view = { id: randomUUID(), guildId: interaction.guildId, ownerId: interaction.user.id,
     sessionId: current?.id || null, sessionSignal: current?.controller?.signal, voiceChannelId: channel.id };
+  return view;
+}
+
+async function showYouTubeModal(interaction, services, session = null) {
+  const view = await createYouTubeView(interaction, services, session);
   boundedSet(youtubeViews, view.id, view);
   await interaction.showModal(buildMusicYouTubeModal(view.id));
 }
@@ -352,6 +474,10 @@ async function submitYouTube(interaction, services, id) {
   if (!view || view.ownerId !== interaction.user.id || view.guildId !== interaction.guildId) throw new MusicError('MUSIC_EXPIRED');
   // Claim before acknowledging or resolving so duplicate submits cannot share a nonce.
   youtubeViews.delete(id);
+  await enqueueYouTube(interaction, services, view, interaction.fields.getTextInputValue('url').trim());
+}
+
+async function enqueueYouTube(interaction, services, view, url) {
   if (services.youtubeAvailable !== true || !services.youtube) throw new MusicError('MUSIC_YOUTUBE_TOOL');
   const key = view.ownerId;
   if (youtubeRequests.has(key) || Date.now() - (youtubeAttempts.get(key) || 0) < 8000) throw new MusicError('MUSIC_BUSY');
@@ -368,10 +494,10 @@ async function submitYouTube(interaction, services, id) {
       request.view.sessionId = initial.id;
       request.signal = AbortSignal.any([request.signal, ...(initial.controller ? [initial.controller.signal] : [])]);
     }
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    await interaction.editReply(v2EditPayload(v2Notice('🎵 YouTube 點播', '正在解析影片，請稍候。')));
+    if (!interaction.deferred) await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await interaction.editReply(v2EditPayload(v2Notice('🎵 影片點播', '正在解析影片，請稍候。')));
     assertYouTubeRequest(request, interaction, services);
-    const track = await services.youtube.getTrack(interaction.fields.getTextInputValue('url').trim(), {
+    const track = await services.youtube.getTrack(url, {
       signal: request.signal,
     });
     let { session, channel } = assertYouTubeRequest(request, interaction, services);
@@ -391,7 +517,7 @@ async function submitYouTube(interaction, services, id) {
     assertYouTubeRequest(request, interaction, services);
     await services.manager.enqueue(session, track, interaction.user.id);
     assertYouTubeRequest(request, interaction, services);
-    const position = session.queue.findLastIndex(entry => entry.source === 'youtube' && entry.id === track.id
+    const position = session.queue.findLastIndex(entry => entry.source === track.source && entry.id === track.id
       && entry.requestedBy === interaction.user.id);
     await interaction.editReply(v2EditPayload(buildMusicPointNotice(track, position)));
     scheduleNoticeDeletion(interaction, '@original', 5000);
@@ -406,6 +532,77 @@ async function submitYouTube(interaction, services, id) {
     if (youtubeRequests.get(key) === request) youtubeRequests.delete(key);
     finish();
   }
+}
+
+export async function executeYouTubePoint(interaction, services) {
+  try {
+    services ||= getRuntime(interaction.client);
+    const url = interaction.options.getString('連結')?.trim();
+    if (!url) {
+      await showYouTubeModal(interaction, services);
+      return;
+    }
+    const view = await createYouTubeView(interaction, services);
+    await enqueueYouTube(interaction, services, view, url);
+  } catch (error) { await replyError(interaction, error); }
+}
+
+async function showMusicQueue(interaction, services, session) {
+  const payload = buildMusicQueuePayload(services.manager.snapshot(session), 0);
+  const view = rememberPrivateView({ id: randomUUID(), kind: 'queue', ownerId: interaction.user.id,
+    guildId: session.guildId, sessionId: session.id }, interaction);
+  await writePrivateView(view, interaction, () => interaction.deferred
+    ? interaction.editReply(v2EditPayload(payload)) : interaction.reply({ ...payload, withResponse: true }));
+}
+
+async function controlPlayer(interaction, services, session, action, loopMode) {
+  assertMusicAccess(interaction, services.config, session);
+  if (services.manager.getSession(interaction.guildId) !== session || session.status === 'stopped') throw new MusicError('MUSIC_EXPIRED');
+  if (action === 'stop') cancelYouTubeRequests(interaction.guildId);
+  const youtubeCleanup = action === 'stop'
+    ? Promise.all([...youtubeRequests.values()].filter(request => request.view.guildId === session.guildId).map(request => request.done))
+    : Promise.resolve();
+  const privateCleanup = action === 'stop' ? closeSessionViews(session) : Promise.resolve();
+  if (action === 'stop') session.deletePanelOnStop = true;
+  if (loopMode === undefined) await services.manager.control(session, action);
+  else await services.manager.control(session, action, loopMode);
+  await Promise.all([privateCleanup, youtubeCleanup]);
+  if (action === 'stop' && session.message) await services.panels.remove(session);
+}
+
+export async function executePlayerControl(interaction, services) {
+  try {
+    services ||= getRuntime(interaction.client);
+    const session = services.manager.getSession(interaction.guildId);
+    if (!session || session.status === 'stopped') throw new MusicError('MUSIC_EXPIRED');
+    assertMusicAccess(interaction, services.config, session);
+    const command = interaction.options.getSubcommand();
+    if (command === '停止') cancelYouTubeRequests(interaction.guildId);
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    if (services.manager.getSession(interaction.guildId) !== session || session.status === 'stopped') throw new MusicError('MUSIC_EXPIRED');
+    assertMusicAccess(interaction, services.config, session);
+    if (command === '佇列') {
+      await showMusicQueue(interaction, services, session);
+      return;
+    }
+    if (command === '現在播放') {
+      await youtubeAvailable(services);
+      if (services.manager.getSession(interaction.guildId) !== session || session.status === 'stopped') throw new MusicError('MUSIC_EXPIRED');
+      assertMusicAccess(interaction, services.config, session);
+      await ensurePanel(interaction, services, session);
+      if (services.manager.getSession(interaction.guildId) !== session || session.status === 'stopped') throw new MusicError('MUSIC_EXPIRED');
+      assertMusicAccess(interaction, services.config, session);
+      const view = rememberPrivateView({ id: randomUUID(), kind: 'now', ownerId: interaction.user.id,
+        guildId: session.guildId, sessionId: session.id }, interaction);
+      await writePrivateView(view, interaction, () => interaction.editReply(v2EditPayload(v2Notice('🎵 共用播放器',
+        `[前往共用控制面板](${sharedPlayerUrl(session)})\n同一語音頻道的成員都可以操作，進度會自動更新。`, UI_COLORS.SUCCESS))));
+      return;
+    }
+    const action = { 暫停: 'pause', 繼續: 'resume', 下一首: 'skip', 循環: 'loop', 隨機: 'shuffle', 停止: 'stop' }[command];
+    if (!action) throw new MusicError('MUSIC_RESPONSE');
+    await controlPlayer(interaction, services, session, action, action === 'loop' ? interaction.options.getString('模式', true) : undefined);
+    await interaction.editReply(v2EditPayload(v2Notice('🎵 播放器', `${command}操作已完成。`, UI_COLORS.SUCCESS)));
+  } catch (error) { await replyError(interaction, error); }
 }
 
 async function handleAuthentication(interaction, services, id, action) {
@@ -500,33 +697,41 @@ export async function handleMusicInteraction(interaction, services) {
       if (action === 'account' && interaction.isButton()) {
         await interaction.reply(loginPayload(interaction, services));
       } else if (action === 'search' && interaction.isButton()) {
-        await interaction.showModal(buildMusicSearchModal(id));
-      } else if (action === 'search_submit' && interaction.isModalSubmit()) {
+        await interaction.showModal(buildMusicSearchModal(id, browser.query));
+      } else if ((action === 'search_submit' && interaction.isModalSubmit())
+        || (action === 'latest' && interaction.isButton())) {
         browser.busy = true;
         try {
           await interaction.deferUpdate();
-          browser.query = interaction.fields.getTextInputValue('query').trim().slice(0, 120);
-          const tracks = await account.library.search(browser.query);
+          refreshPrivateView(browser, interaction);
+          const query = action === 'latest' ? '' : interaction.fields.getTextInputValue('query').trim().slice(0, 120);
+          const tracks = await account.library.search(query);
           await assertNasAccess(interaction, services, true);
           accountFor(services, interaction, browser.accountId);
+          if (manager.getSession(interaction.guildId) !== session || session.status === 'stopped'
+            || browsers.get(id) !== browser) throw new MusicError('MUSIC_EXPIRED');
           assertMusicAccess(interaction, config, session);
+          browser.query = query;
           browser.tracks = tracks;
           browser.page = 0;
-          await interaction.editReply(v2EditPayload(buildMusicLibraryPayload(browser)));
+          await writePrivateView(browser, interaction, () => interaction.editReply(v2EditPayload(buildMusicLibraryPayload(browser))));
         } finally { browser.busy = false; }
       } else if (['prev', 'next'].includes(action) && interaction.isButton()) {
         browser.page = Math.max(0, Math.min(Math.max(0, Math.ceil(browser.tracks.length / 10) - 1),
           browser.page + (action === 'prev' ? -1 : 1)));
-        await interaction.update({ components: buildMusicLibraryPayload(browser).components });
+        await writePrivateView(browser, interaction, () => interaction.update({ components: buildMusicLibraryPayload(browser).components }));
       } else if (action === 'enqueue' && interaction.isStringSelectMenu()) {
         const track = browser.tracks.find(entry => entry.id === interaction.values[0]);
         if (!track) throw new MusicError('MUSIC_RESPONSE');
         browser.busy = true;
         try {
           await interaction.deferUpdate();
+          refreshPrivateView(browser, interaction);
           const freshTrack = await account.library.getTrack(track.id);
           await assertNasAccess(interaction, services, true);
           accountFor(services, interaction, browser.accountId);
+          if (manager.getSession(interaction.guildId) !== session || session.status === 'stopped'
+            || browsers.get(id) !== browser) throw new MusicError('MUSIC_EXPIRED');
           assertMusicAccess(interaction, config, session);
           await manager.enqueue(session, freshTrack, interaction.user.id);
           const position = session.queue.findLastIndex(entry => entry.id === freshTrack.id
@@ -547,24 +752,38 @@ export async function handleMusicInteraction(interaction, services) {
           const account = accountFor(services, interaction);
           accountId = account.id;
           const browser = await newBrowser(interaction, session, account, services);
-          await interaction.editReply(v2EditPayload(buildMusicLibraryPayload(browser)));
+          await writePrivateView(browser, interaction, () => interaction.editReply(v2EditPayload(buildMusicLibraryPayload(browser))));
         } else await interaction.editReply(v2EditPayload(launcherPayload(interaction, services)));
       } else if (['volume', 'volume_submit'].includes(action)) {
         await interaction.reply(v2Notice('🔊 音量由你控制', '請使用 Discord 的個人音量設定調整自己聽到的音量。'));
       } else if (['queue', 'qprev', 'qnext'].includes(action) && interaction.isButton()) {
-        const payload = buildMusicQueuePayload(manager.snapshot(session), Number(page) || 0);
-        if (action === 'queue') await interaction.reply(payload);
-        else await interaction.update({ components: payload.components });
+        if (action === 'queue') {
+          await showMusicQueue(interaction, services, session);
+        } else {
+          const payload = buildMusicQueuePayload(manager.snapshot(session), Number(page) || 0);
+          let view = [...privateViews.values()].find(candidate => candidate.sessionId === session.id
+            && candidate.guildId === session.guildId && candidate.ownerId === interaction.user.id
+            && candidate.messageId === interaction.message?.id && candidate.kind === 'queue');
+          if (!view && isPrivateControlMessage(interaction)) {
+            view = rememberPrivateView({ id: randomUUID(), kind: 'queue', ownerId: interaction.user.id,
+              guildId: session.guildId, sessionId: session.id, messageId: interaction.message.id }, interaction);
+          }
+          if (view) await writePrivateView(view, interaction, () => interaction.update({ components: payload.components }));
+          else await interaction.update({ components: payload.components });
+        }
       } else if (['pause', 'resume', 'skip', 'loop', 'shuffle', 'stop'].includes(action) && interaction.isButton()) {
         if (action === 'stop') cancelYouTubeRequests(interaction.guildId);
         await interaction.deferUpdate();
-        assertMusicAccess(interaction, config, session);
-        if (action === 'stop') session.deletePanelOnStop = true;
-        await manager.control(session, action);
-        if (action === 'stop' && session.message) await services.panels.remove(session);
+        await controlPlayer(interaction, services, session, action);
       } else throw new MusicError('MUSIC_RESPONSE');
     }
-  } catch (error) { await recoverAccountError(interaction, services, error, accountId); }
+  } catch (error) {
+    if (error instanceof MusicError && error.code === 'MUSIC_EXPIRED') {
+      try { if (await closeExpiredPrivateReply(interaction)) return true; }
+      catch { logger.warn('[Music] expired private view cleanup failed'); }
+    }
+    await recoverAccountError(interaction, services, error, accountId);
+  }
   return true;
 }
 
@@ -592,7 +811,7 @@ async function replyError(interaction, error) {
   const notice = v2Notice('🎵 音樂操作未完成', safeError.message, UI_COLORS.WARNING);
   try {
     let messageId = '@original';
-    if (interaction.customId?.startsWith('musicyoutube:') && (interaction.replied || interaction.deferred)) {
+    if ((interaction.customId?.startsWith('musicyoutube:') || interaction.commandName === '點播') && (interaction.replied || interaction.deferred)) {
       await interaction.editReply(v2EditPayload(notice));
     } else if (interaction.replied || (interaction.deferred && !interaction.isChatInputCommand() && !interaction.ephemeral)) {
       const message = await interaction.followUp(notice);
@@ -608,14 +827,33 @@ export function handleMusicVoiceState(_oldState, newState, services = runtime) {
   const session = services.manager.getSession(newState.guild.id);
   if (!session) return;
   if (newState.id === newState.client.user.id && newState.channelId !== session.voiceChannelId) {
-    cancelYouTubeRequests(newState.guild.id);
-    services.manager.stop(session);
+    cancelYouTubeRequests(session.guildId);
+    const cleanup = closeSessionViews(session);
+    return Promise.all([services.manager.stop(session), cleanup]);
   }
+}
+
+export async function handleMusicMessageDelete(message, services = runtime) {
+  if (!services || !message.guildId) return;
+  const session = services.manager.getSession(message.guildId);
+  if (!session?.message || session.guildId !== message.guildId
+    || session.message.id !== message.id || session.textChannelId !== message.channelId) return;
+  session.deletePanelOnStop = true;
+  cancelYouTubeRequests(session.guildId);
+  const cleanup = closeSessionViews(session);
+  try { await services.manager.stop(session); await services.panels.remove(session); }
+  catch { logger.warn('[Music] deleted player cleanup failed'); }
+  finally { await cleanup; }
+}
+
+export async function handleMusicMessageDeleteBulk(messages, _channel, services = runtime) {
+  await Promise.all([...messages.values()].map(message => handleMusicMessageDelete(message, services)));
 }
 
 export async function stopMusicPlayback() {
   for (const view of pendingNasLogins.values()) view.cancelled = true;
   cancelYouTubeRequests();
+  for (const view of privateViews.values()) closePrivateView(view);
   const pending = [...youtubeRequests.values()].map(request => request.done);
   try {
     if (runtime) {
@@ -634,6 +872,7 @@ export async function stopMusicPlayback() {
     for (const timer of noticeTimers.keys()) clearTimeout(timer);
     noticeTimers.clear();
     await Promise.allSettled([...noticeTasks]);
+    await Promise.allSettled([...privateTasks]);
     runtime = null;
     browsers.clear();
     authViews.clear();

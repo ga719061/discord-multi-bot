@@ -29,6 +29,32 @@ test('command manifest retains /help and excludes stale English commands', async
     assert.deepEqual(names.filter((name) => /^[a-z0-9_-]+$/i.test(name)), ['help']);
 });
 
+test('public manifest keeps compact entries and exposes music shortcuts', async () => {
+    const manifest = await buildCommandManifest();
+    const names = validateCommandManifest(manifest);
+
+    assert.deepEqual([...names].sort(), [
+        'help', '幫助', '設定', '延遲', '提醒', '每日一汪', '占卜',
+        '等級', '排行榜', '特價查詢', '音樂', '點播', '播放器',
+    ].sort());
+
+    const play = manifest.find((command) => command.name === '點播');
+    assert.deepEqual(play.options.map((option) => [option.name, option.type, option.required ?? false]), [
+        ['連結', 3, false],
+    ]);
+    const player = manifest.find((command) => command.name === '播放器');
+    assert.deepEqual(player.options.map((option) => option.name), [
+        '現在播放', '佇列', '暫停', '繼續', '下一首', '循環', '隨機', '停止',
+    ]);
+    assert.equal(player.options.every((option) => option.type === 1), true);
+    const loop = player.options.find((option) => option.name === '循環');
+    assert.equal(loop.options.length, 1);
+    assert.equal(loop.options[0].name, '模式');
+    assert.equal(loop.options[0].type, 3);
+    assert.equal(loop.options[0].required, true);
+    assert.deepEqual(loop.options[0].choices.map((choice) => choice.value), ['off', 'track', 'queue']);
+});
+
 test('command manifest rejects duplicate and unsupported English command names', () => {
     assert.throws(
         () => validateCommandManifest([{ name: '幫助' }, { name: '幫助' }]),

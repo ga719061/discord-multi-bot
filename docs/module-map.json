@@ -165,10 +165,6 @@
         "ui"
       ]
     },
-    "src/commands/fun/talk.js": {
-      "owner": "community",
-      "sharedWith": []
-    },
     "src/commands/gacha/lib/constants.js": {
       "owner": "games",
       "sharedWith": [
@@ -264,6 +260,22 @@
       ]
     },
     "src/commands/music/music.js": {
+      "owner": "music",
+      "sharedWith": [
+        "community",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/commands/music/play.js": {
+      "owner": "music",
+      "sharedWith": [
+        "community",
+        "settings-database",
+        "ui"
+      ]
+    },
+    "src/commands/music/player.js": {
       "owner": "music",
       "sharedWith": [
         "community",

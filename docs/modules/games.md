@@ -10,6 +10,7 @@
 
 ## 不可破壞的規則
 
+- 戰績與鳴潮抽卡皆為 `helpOnly`，只保留 `/幫助` →「遊戲查詢」的互動入口，不部署 `/戰績`／`/鳴潮抽卡` slash command。移除公開入口不得刪除查詢、匯入、統計、綁定或圖卡功能；面板流程及權限維持既有合約。
 - VALORANT 的 OP.GG action discovery 必須選取玩家路由的 `page-*.js`，不能取第一個含 `valorant/profile` 的腳本（可能是 `not-found-*.js`）；測試須涵蓋錯誤頁腳本在前、action 位於玩家頁 dependency chunk 的情況。
 - 戰績圖片只下載允許清單內的 HTTPS 資產，拒絕 redirect，圖片與 metadata 上限皆為 5MB；不得重新接受上游 HTML 提供的任意 host。VALORANT 地圖縮圖依序使用 `listViewIcon`、`displayIcon`、`splash`，避免為小縮圖下載超過 5MB 的 splash；資產索引需支援本地化名稱回退，圖片或 metadata 暫時失敗不得永久快取 `null`。
 - 鳴潮喚取授權：完整 URL、`recordId`、`serverId`、`cardPoolId` 只能存在單次記憶體流程，不得寫入資料庫或 log；`wuwa_accounts` 只保存 Discord user、UID 與版本化歷史。更新紀錄要以有序序列合併，不能用時間作唯一鍵。

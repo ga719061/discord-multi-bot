@@ -360,6 +360,97 @@ test('help expiration disables every interactive control and adds a V2 status no
     assert.match(JSON.stringify(closed), /大典已合上/);
 });
 
+test('entertainment help keeps target and food selectors within the V2 limits', () => {
+    const category = {
+        id: 'fun', label: '娛樂', emoji: '🎲', description: '陪伴國王。', group: 'public',
+        commands: [
+            createCommand('每日一汪'), createCommand('占卜'),
+            ...['摸摸', '抱抱', '餵食', '投票', '抽獎'].map(name => ({ ...createCommand(name), helpOnly: true })),
+        ],
+    };
+    const context = { ...createContext(), catalog: [category] };
+    const view = helpViewTesting.renderCategory(context, category, 0).components[0].toJSON();
+    const controls = view.components.flatMap(component => component.components ?? []);
+    const hugSelect = controls.find(component => component.type === ComponentType.UserSelect);
+    const foodSelect = controls.find(component => component.custom_id === 'help:viewer:launch:feed');
+    assert.equal(hugSelect.custom_id, 'help:viewer:launch:hug_target');
+    assert.equal(foodSelect.options.length, 8);
+    assert.match(JSON.stringify(view), /help:viewer:launch:pat/);
+    assert.match(JSON.stringify(view), /help:viewer:launch:hug/);
+    assert.doesNotMatch(collectText(view), /\/摸摸|\/抱抱|\/餵食|\/汪汪/);
+    assert.ok(countComponents(view) <= 40);
+    assertPrimaryButtonLimit(view);
+    const closed = helpViewTesting.closeHelpBook(helpViewTesting.renderCategory(context, category, 0).components)[0].toJSON();
+    assert.ok(closed.components.flatMap(component => component.components ?? []).every(component => component.disabled));
+});
+
+test('help-only game category preserves both direct entries without slash guidance', () => {
+    const category = {
+        id: 'esports', label: '遊戲查詢', emoji: '🎮', description: '私人遊戲查詢。', group: 'public',
+        commands: ['戰績', '鳴潮抽卡'].map(name => ({ ...createCommand(name), helpOnly: true })),
+    };
+    const context = { ...createContext(), catalog: [category] };
+    const view = helpViewTesting.renderCategory(context, category, 0).components[0].toJSON();
+    assert.match(JSON.stringify(view), /help:viewer:launch:stats/);
+    assert.match(JSON.stringify(view), /help:viewer:launch:wuwa/);
+    assert.doesNotMatch(collectText(view), /\/戰績|\/鳴潮抽卡|投票與抽獎/);
+    assert.match(stripAnsi(collectText(view)), /\[指令\] 0 個/);
+    assert.match(stripAnsi(collectText(view)), /\[互動\] 2 個入口/);
+    assert.ok(countComponents(view) <= 40);
+    assertPrimaryButtonLimit(view);
+});
+
+test('help launches entertainment and game panels with owner checks and native selected values', async (t) => {
+    initTestDatabase('help-panel-entries');
+    t.after(cleanupTestDatabase);
+    t.mock.method(globalThis, 'fetch', async () => assert.fail('opening a panel must not access external services'));
+    const listeners = new Map();
+    let payload;
+    const commands = { cache: new Map(), async fetch() { return new Map(); } };
+    await executeHelp({
+        user: { id: 'viewer' },
+        member: { permissions: { has: () => false } },
+        client: { application: { commands } }, guild: { commands },
+        async reply(reply) { payload = reply; },
+        async fetchReply() {
+            return { createMessageComponentCollector() { return { on(event, callback) { listeners.set(event, callback); } }; } };
+        },
+    });
+    assert.doesNotMatch(JSON.stringify(payload), /\/汪汪/);
+    const actor = { id: 'viewer', toString: () => '<@viewer>' };
+    const component = (action, extra = {}) => ({
+        id: 'interaction-id', user: actor, customId: `help:viewer:launch:${action}`,
+        client: { user: { id: 'king' } },
+        isStringSelectMenu: () => false, isUserSelectMenu: () => false,
+        async reply(reply) { payload = reply; },
+        async fetchReply() { return { createMessageComponentCollector() { return { on() {} }; } }; },
+        ...extra,
+    });
+    const collect = listeners.get('collect');
+    await collect(component('pat'));
+    assert.match(JSON.stringify(payload), /摸摸吉吉國王/);
+    await collect(component('hug'));
+    assert.match(JSON.stringify(payload), /抱抱吉吉國王/);
+    await collect(component('hug_target', {
+        isUserSelectMenu: () => true, values: ['friend'],
+        users: new Map([['friend', { id: 'friend', toString: () => '<@friend>' }]]),
+    }));
+    assert.match(JSON.stringify(payload), /<@friend>/);
+    await collect(component('feed', { isStringSelectMenu: () => true, values: ['chocolate'] }));
+    assert.match(JSON.stringify(payload), /巧克力/);
+    await collect(component('feed', { user: { id: 'other' }, isStringSelectMenu: () => true, values: ['steak'] }));
+    assert.match(JSON.stringify(payload), /這份大典不屬於你/);
+    let modal;
+    await collect(component('stats', {
+        async showModal(value) { modal = value; },
+        async awaitModalSubmit() { return null; },
+    }));
+    assert.match(JSON.stringify(modal.toJSON()), /皇家戰報廳/);
+    await collect(component('wuwa'));
+    assert.match(JSON.stringify(payload), /喚取卷宗/);
+    assert.ok(payload.flags & MessageFlags.Ephemeral);
+});
+
 test('help music entry appears beside all existing shortcuts and opens from category and detail', () => {
     const music = {
         id: 'music', label: '音樂', emoji: '🎵', description: '搜尋 NAS 曲庫。', group: 'public',
@@ -394,6 +485,31 @@ test('help music entry appears beside all existing shortcuts and opens from cate
     const category = helpViewTesting.renderCategory(context, music, 0).components[0].toJSON();
     assert.match(collectText(category), /先加入一般語音頻道/);
     assert.doesNotMatch(collectText(category), /用法：|\/音樂/);
+});
+
+test('music help displays request and player subcommand usage beside the direct player entry', () => {
+    const player = {
+        ...createCommand('播放器', '播放器控制'),
+        subcommands: [
+            { name: '現在播放', description: '查看目前歌曲' },
+            { name: '循環', description: '設定循環', options: [{ name: '模式', required: true, type: 3 }] },
+        ],
+    };
+    const music = {
+        id: 'music', label: '音樂', emoji: '🎵', description: '語音播放。', group: 'public',
+        commands: [createCommand('音樂'), createCommand('點播'), player],
+    };
+    const context = { ...createContext(), catalog: [music] };
+    const category = helpViewTesting.renderCategory(context, music, 0).components[0].toJSON();
+    const detail = helpViewTesting.renderDetail(context, music, 0, 2).components[0].toJSON();
+    assert.match(JSON.stringify(category), /help:viewer:launch:music/);
+    assert.match(collectText(category), /\/點播/);
+    assert.match(collectText(category), /\/播放器 現在播放/);
+    assert.match(collectText(detail), /\/播放器 循環 <模式>/);
+    for (const view of [category, detail]) {
+        assert.ok(countComponents(view) <= 40);
+        assertPrimaryButtonLimit(view);
+    }
 });
 
 test('help music button runs the real music entry without a registered slash command and rejects other viewers', async (t) => {
@@ -442,7 +558,7 @@ test('help music button runs the real music entry without a registered slash com
     await listeners.get('collect')(button);
     assert.deepEqual(acknowledgements.map(ack => ack.kind), ['deferReply', 'editReply']);
     assert.ok(acknowledgements[0].payload.flags & MessageFlags.Ephemeral);
-    assert.match(JSON.stringify(acknowledgements[1].payload), /YouTube 點播/);
+    assert.match(JSON.stringify(acknowledgements[1].payload), /影片點播/);
     assert.match(JSON.stringify(acknowledgements[1].payload), /musicauth:[^:]+:youtube/);
     assert.doesNotMatch(JSON.stringify(acknowledgements[1].payload), /NAS|登入音樂庫|私人音樂庫/);
 });

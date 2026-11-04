@@ -162,8 +162,9 @@ function youtubeTrack(number = 1) {
   return { ...track(number), source: 'youtube', id: `video${String(number).padStart(6, '0')}`, mime: 'audio/webm' };
 }
 
-test('YouTube audio uses fresh provider MIME, awaits process and provider cleanup, and never calls NAS', async () => {
-  for (const mime of ['audio/webm', 'audio/mp4']) {
+test('YouTube audio caches every format using fresh MIME and awaits process, provider and file cleanup', async () => {
+  for (const [mime, demuxer] of [['audio/webm', 'matroska'], ['audio/mp4', 'mov'], ['audio/ogg', 'ogg'],
+    ['audio/mpeg', 'mp3'], ['audio/aac', 'aac'], ['audio/flac', 'flac'], ['audio/wav', 'wav']]) {
     const source = Readable.from([Buffer.from('synthetic-provider-audio')]);
     const controller = new AbortController();
     let releaseClose, releaseProvider, input;
@@ -181,7 +182,14 @@ test('YouTube audio uses fresh provider MIME, awaits process and provider cleanu
     };
     const transport = await createMusicAudioResource(provider, { ...youtubeTrack(), mime: 'audio/mpeg' }, {
       signal: controller.signal,
-      spawnImpl(_path, args) { input = args[args.indexOf('-i') + 1]; return child; },
+      spawnImpl(_path, args) {
+        input = args[args.indexOf('-i') + 1];
+        assert.equal(args[args.indexOf('-f') + 1], demuxer);
+        assert.equal(args[args.indexOf('-protocol_whitelist') + 1], 'file,pipe,crypto,data');
+        assert.equal(args.includes('-enable_drefs'), mime === 'audio/mp4');
+        assert.equal(source.readableEnded, true);
+        return child;
+      },
     });
     let settled = false;
     const disposing = transport.dispose().then(() => { settled = true; });
@@ -190,10 +198,8 @@ test('YouTube audio uses fresh provider MIME, awaits process and provider cleanu
       assert.equal(settled, false);
       assert.equal(providerDisposed, 1);
       assert.equal(source.destroyed, true);
-      if (mime === 'audio/mp4') {
-        assert.notEqual(input, 'pipe:0');
-        assert.deepEqual(await readFile(input), Buffer.from('synthetic-provider-audio'));
-      } else assert.equal(input, 'pipe:0');
+      assert.notEqual(input, 'pipe:0');
+      assert.deepEqual(await readFile(input), Buffer.from('synthetic-provider-audio'));
       releaseClose();
       await flush();
       assert.equal(settled, false, 'provider cleanup must also complete');
@@ -202,14 +208,14 @@ test('YouTube audio uses fresh provider MIME, awaits process and provider cleanu
       assert.equal(settled, true);
       await transport.dispose();
       assert.equal(providerDisposed, 1);
-      if (mime === 'audio/mp4') await assert.rejects(access(input), { code: 'ENOENT' });
+      await assert.rejects(access(input), { code: 'ENOENT' });
     } finally { releaseClose?.(); releaseProvider(); await disposing; }
   }
 });
 
 test('YouTube spawn failure and aborted preparation await source disposal without starting audio', async () => {
   for (const cancelled of [false, true]) {
-    const source = new Readable({ read() {} });
+    const source = Readable.from([Buffer.from('synthetic-provider-audio')]);
     let disposed = 0;
     const controller = new AbortController();
     const provider = { async openAudio() {
@@ -228,23 +234,26 @@ test('YouTube spawn failure and aborted preparation await source disposal withou
   }
 });
 
-test('YouTube M4A preparation preserves safe stream errors and disposes the downloader', async () => {
+test('YouTube WebM and M4A preparation preserve safe stream errors and dispose the downloader', async () => {
+  for (const mime of ['audio/webm', 'audio/mp4']) {
   const source = new Readable({ read() { this.destroy(new MusicError('MUSIC_SIZE')); } });
   let disposed = 0;
   await assert.rejects(createMusicAudioResource({ async openAudio() {
-    return { source, mime: 'audio/mp4', async dispose() { disposed++; } };
+    return { source, mime, async dispose() { disposed++; } };
   } }, youtubeTrack(), { spawnImpl() { assert.fail('failed downloads cannot start FFmpeg'); } }), errorCode('MUSIC_SIZE'));
   assert.equal(disposed, 1);
   assert.equal(source.destroyed, true);
+  }
 });
 
-test('cancelling YouTube M4A while downloading reaps the provider before preparation settles', async () => {
+test('cancelling YouTube WebM and M4A downloads reaps the provider before preparation settles', async () => {
+  for (const mime of ['audio/webm', 'audio/mp4']) {
   const controller = new AbortController();
   let markReading, disposed = 0;
   const reading = new Promise(resolve => { markReading = resolve; });
   const source = new Readable({ read() { markReading(); } });
   const preparing = createMusicAudioResource({ async openAudio() {
-    return { source, mime: 'audio/mp4', async dispose() { await flush(); disposed++; } };
+    return { source, mime, async dispose() { await flush(); disposed++; } };
   } }, youtubeTrack(), {
     signal: controller.signal, spawnImpl() { assert.fail('partial M4A cannot spawn FFmpeg'); },
   });
@@ -254,6 +263,114 @@ test('cancelling YouTube M4A while downloading reaps the provider before prepara
   await rejected;
   assert.equal(source.destroyed, true);
   assert.equal(disposed, 1);
+  }
+});
+
+test('YouTube WebM download pauses and failures are resolved before FFmpeg can start', async () => {
+  for (const fails of [false, true]) {
+    let markReading, spawned = 0, disposed = 0, input;
+    const reading = new Promise(resolve => { markReading = resolve; });
+    const source = new Readable({ read() { markReading(); } });
+    const preparing = createMusicAudioResource({ async openAudio() {
+      return { source, mime: 'audio/webm', async dispose() { disposed++; } };
+    } }, youtubeTrack(), { spawnImpl(_path, args) {
+      spawned++;
+      input = args[args.indexOf('-i') + 1];
+      return audioChild();
+    } });
+    // Attach a rejection handler before triggering the deliberate failure.
+    const outcome = preparing.then(transport => ({ transport }), error => ({ error }));
+    await reading;
+    source.push(Buffer.from('first bytes'));
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    assert.equal(spawned, 0, 'a network retry longer than the voice starvation budget must not start playback');
+    if (fails) source.destroy(new MusicError('MUSIC_YOUTUBE_NETWORK'));
+    else { source.push(Buffer.from(' and last bytes')); source.push(null); }
+    const { transport, error } = await outcome;
+    if (fails) {
+      assert.equal(error.code, 'MUSIC_YOUTUBE_NETWORK');
+      assert.equal(spawned, 0);
+    } else {
+      try {
+        assert.equal(spawned, 1);
+        assert.deepEqual(await readFile(input), Buffer.from('first bytes and last bytes'));
+      } finally { await transport.dispose(); }
+      await assert.rejects(access(input), { code: 'ENOENT' });
+    }
+    assert.equal(disposed, 1);
+  }
+});
+
+test('YouTube complete download deadline and unsupported MIME fail before FFmpeg and reap the source', async t => {
+  const deadline = new AbortController();
+  t.mock.method(AbortSignal, 'timeout', milliseconds => {
+    assert.equal(milliseconds, 60_000);
+    return deadline.signal;
+  });
+  let markReading, disposed = 0;
+  const reading = new Promise(resolve => { markReading = resolve; });
+  const source = new Readable({ read() { markReading(); } });
+  const preparing = createMusicAudioResource({ async openAudio() {
+    return { source, mime: 'audio/webm', async dispose() { disposed++; } };
+  } }, youtubeTrack(), { spawnImpl() { assert.fail('partial downloads must not start FFmpeg'); } });
+  const rejected = assert.rejects(preparing, errorCode('MUSIC_YOUTUBE_TIMEOUT'));
+  await reading;
+  deadline.abort();
+  await rejected;
+  assert.equal(disposed, 1);
+  assert.equal(source.destroyed, true);
+  const unknown = Readable.from([Buffer.from('synthetic')]);
+  await assert.rejects(createMusicAudioResource({ async openAudio() {
+    return { source: unknown, mime: 'application/octet-stream', async dispose() { disposed++; } };
+  } }, youtubeTrack(), { spawnImpl() { assert.fail('unsupported MIME must not reach FFmpeg'); } }), errorCode('MUSIC_YOUTUBE_RESPONSE'));
+  assert.equal(unknown.destroyed, true);
+  assert.equal(disposed, 2);
+});
+
+test('stopping a player during a YouTube download waits for the downloader before settling preparation', { timeout: 5000 }, async () => {
+  let markReading, markDisposing, releaseDisposal;
+  const reading = new Promise(resolve => { markReading = resolve; });
+  const disposing = new Promise(resolve => { markDisposing = resolve; });
+  const disposal = new Promise(resolve => { releaseDisposal = resolve; });
+  const source = new Readable({ read() { markReading(); } });
+  const { manager } = fixture({
+    resolveLibrary: () => ({ async openAudio() {
+      return { source, mime: 'audio/webm', async dispose() { markDisposing(); await disposal; } };
+    } }),
+    createResource: (library, selected, options) => createMusicAudioResource(library, selected, {
+      ...options, spawnImpl() { assert.fail('cancelled downloads must not start FFmpeg'); },
+    }),
+  });
+  let preparing;
+  try {
+    const session = await manager.connect(guild(), channel());
+    preparing = manager.enqueue(session, youtubeTrack(), 'requester');
+    await reading;
+    source.push(Buffer.from('partial audio'));
+    let stopped = false;
+    const stopping = manager.stop(session).then(() => { stopped = true; });
+    await disposing;
+    assert.equal(source.destroyed, true);
+    assert.equal(stopped, false);
+    releaseDisposal();
+    await Promise.all([preparing, stopping]);
+    assert.equal(session.transport, null);
+    assert.equal(manager.getSession(session.guildId), null);
+  } finally { releaseDisposal(); await preparing; await manager.close(); }
+});
+
+test('YouTube cleanup crossing the download deadline preserves the original transfer failure', async t => {
+  let deadline;
+  t.mock.method(AbortSignal, 'timeout', () => deadline.signal);
+  for (const code of ['MUSIC_YOUTUBE_NETWORK', 'MUSIC_SIZE']) {
+    deadline = new AbortController();
+    const source = new Readable({ read() { this.destroy(new MusicError(code)); } });
+    await assert.rejects(createMusicAudioResource({ async openAudio() {
+      return { source, mime: 'audio/webm', async dispose() { deadline.abort(); } };
+    } }, youtubeTrack(), { spawnImpl() { assert.fail('failed transfers must not start FFmpeg'); } }), errorCode(code));
+    assert.equal(source.destroyed, true);
+    assert.equal(deadline.signal.aborted, true);
+  }
 });
 
 test('FFmpeg cleanup escalates a resistant process and still awaits its close event', async t => {
@@ -262,7 +379,7 @@ test('FFmpeg cleanup escalates a resistant process and still awaits its close ev
   const child = audioChild();
   child.kill = signal => { signals.push(signal || 'SIGTERM'); if (signal === 'SIGKILL') child.emit('close'); };
   const transport = await createMusicAudioResource({ async openAudio() {
-    return { source: new Readable({ read() {} }), mime: 'audio/webm', async dispose() {} };
+    return { source: Readable.from([Buffer.from('synthetic-audio')]), mime: 'audio/webm', async dispose() {} };
   } }, youtubeTrack(), { spawnImpl: () => child });
   let settled = false;
   const disposing = transport.dispose().then(() => { settled = true; });
@@ -468,6 +585,24 @@ test('pause, resume, loop and shuffle preserve the playing track', async (t) => 
   } finally {
     await manager.close();
   }
+});
+
+test('explicit loop modes are idempotent, preserve playback and reject invalid modes', async () => {
+  const { manager, players } = fixture();
+  try {
+    const session = await manager.connect(guild(), channel());
+    await manager.enqueue(session, track(1), 'requester');
+    for (const mode of ['queue', 'queue', 'off', 'track']) {
+      await manager.control(session, 'loop', mode);
+      assert.equal(manager.snapshot(session).loop, mode);
+      assert.equal(manager.snapshot(session).current.id, track(1).id);
+      assert.equal(players[0].played.length, 1);
+    }
+    await assert.rejects(manager.control(session, 'loop', 'invalid'), error => error.code === 'MUSIC_RESPONSE');
+    assert.equal(manager.snapshot(session).loop, 'track');
+    await manager.control(session, 'loop');
+    assert.equal(manager.snapshot(session).loop, 'queue');
+  } finally { await manager.close(); }
 });
 
 test('natural Idle advances to the next track and releases the finished resource', async () => {
@@ -685,7 +820,8 @@ test('real voice player advances normally on EOF and explicit skip does not repo
 });
 
 test('real voice player preserves safe FFmpeg and YouTube failure codes when the SDK wraps stream errors', async () => {
-  for (const code of ['MUSIC_FFMPEG', 'MUSIC_YOUTUBE_TIMEOUT']) {
+  for (const code of ['MUSIC_FFMPEG', 'MUSIC_YOUTUBE_TIMEOUT', 'MUSIC_YOUTUBE_UNAVAILABLE',
+    'MUSIC_YOUTUBE_BLOCKED', 'MUSIC_YOUTUBE_RATE_LIMIT', 'MUSIC_YOUTUBE_NETWORK', 'MUSIC_YOUTUBE_PROCESS']) {
   const failures = [];
   let player;
   const { manager } = fixture({
@@ -1211,6 +1347,37 @@ test('NAS logout leaves the same requester YouTube playback and queued YouTube s
   } finally { await manager.close(); }
 });
 
+test('NAS logout preserves the same requester Bilibili playback and queued tracks', async () => {
+  const { manager, transports } = fixture();
+  const bili = { ...youtubeTrack(1), source: 'bilibili', id: 'BV1Y4411A7Q7' };
+  try {
+    const session = await manager.connect(guild(), channel());
+    await manager.enqueue(session, bili, 'alice');
+    await manager.enqueue(session, { ...bili, id: 'BV1Y4411A7Q8' }, 'alice');
+    await manager.enqueue(session, track(3), 'alice');
+    await manager.removeUserTracks(session, 'alice');
+    assert.equal(session.current.source, 'bilibili');
+    assert.deepEqual(session.queue.map(item => item.source), ['bilibili']);
+    assert.equal(transports[0].disposeCount, 0);
+  } finally { await manager.close(); }
+});
+
+test('Bilibili audio uses the remote cached transport instead of the NAS stream', async () => {
+  let input, disposed = 0;
+  const selected = { ...youtubeTrack(), source: 'bilibili', id: 'BV1Y4411A7Q7' };
+  const transport = await createMusicAudioResource({
+    openStream() { assert.fail('Bilibili must not use the NAS API'); },
+    async openAudio(value) {
+      assert.equal(value, selected);
+      return { source: Readable.from([Buffer.from('synthetic')]), mime: 'audio/mp4', async dispose() { disposed++; } };
+    },
+  }, selected, { spawnImpl(_path, args) { input = args[args.indexOf('-i') + 1]; return audioChild(); } });
+  assert.deepEqual(await readFile(input), Buffer.from('synthetic'));
+  await transport.dispose();
+  await assert.rejects(access(input), { code: 'ENOENT' });
+  assert.equal(disposed, 1);
+});
+
 test('NAS logout cancels current NAS audio and advances to the same requester YouTube song', async () => {
   const nas = {}, youtube = {}, providers = [];
   const { manager, players } = fixture({
@@ -1233,8 +1400,10 @@ test('NAS logout cancels current NAS audio and advances to the same requester Yo
   } finally { await manager.close(); }
 });
 
-test('YouTube loop and skip reopen provider audio and clean every previous downloader', async () => {
+test('YouTube loop and skip reopen provider audio and clean every previous downloader', { timeout: 5000 }, async () => {
   const opened = [], disposed = [];
+  let markRepeated;
+  const repeated = new Promise(resolve => { markRepeated = resolve; });
   const provider = { async openAudio(selected) {
     const token = opened.length;
     opened.push(selected.id);
@@ -1244,6 +1413,7 @@ test('YouTube loop and skip reopen provider audio and clean every previous downl
     };
   } };
   const { manager, players } = fixture({
+    onUpdate: session => { if (session.status === 'playing' && opened.length === 2) markRepeated(); },
     resolveLibrary: () => provider,
     createResource: (library, selected, options) => createMusicAudioResource(library, selected, {
       ...options, spawnImpl: () => audioChild(),
@@ -1255,7 +1425,7 @@ test('YouTube loop and skip reopen provider audio and clean every previous downl
     await manager.enqueue(session, youtubeTrack(2), 'alice');
     session.loop = 'track';
     players[0].finish();
-    await flush();
+    await repeated;
     assert.deepEqual(opened, [youtubeTrack(1).id, youtubeTrack(1).id]);
     assert.deepEqual(disposed, [0]);
     await manager.control(session, 'skip');

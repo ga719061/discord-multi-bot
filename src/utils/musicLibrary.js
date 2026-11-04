@@ -31,13 +31,17 @@ const ERROR_MESSAGES = {
   MUSIC_STREAM_STALLED: '音訊串流持續沒有資料，播放已中斷；請重新點播或選擇下一首。',
   MUSIC_EXPIRED: '這份音樂面板已失效，請重新使用 `/音樂`。',
   MUSIC_PANEL_DELETE: '播放器已停止並離開，但無法刪除播放器貼文；請手動刪除該貼文。',
-  MUSIC_YOUTUBE_URL: '請貼上 YouTube、Shorts 或 YouTube Music 的單支影片 HTTPS 連結。',
-  MUSIC_YOUTUBE_TOOL: 'YouTube 播放工具尚未安裝或無法使用，請聯絡管理員。',
-  MUSIC_YOUTUBE_UNAVAILABLE: '無法讀取這支 YouTube 影片；影片可能受驗證、地區或存取限制。',
-  MUSIC_YOUTUBE_RESPONSE: 'YouTube 回傳的影片或音訊資料無法辨識。',
+  MUSIC_YOUTUBE_URL: '請貼上 YouTube 或 Bilibili 的受支援單支影片 HTTPS 連結。',
+  MUSIC_YOUTUBE_TOOL: 'YouTube／Bilibili 播放工具尚未安裝或無法使用，請聯絡管理員。',
+  MUSIC_YOUTUBE_UNAVAILABLE: '無法讀取這支影片；影片可能受驗證、地區或存取限制。',
+  MUSIC_YOUTUBE_BLOCKED: '影片網站拒絕音訊存取，可能需要驗證或受存取限制。請改選其他影片。',
+  MUSIC_YOUTUBE_RATE_LIMIT: '影片網站暫時限制請求頻率，請稍後再試。',
+  MUSIC_YOUTUBE_NETWORK: '影片音訊下載遇到網路中斷或資料不完整，請稍後重新點播。',
+  MUSIC_YOUTUBE_PROCESS: '影片下載程序異常終止，請檢查主機資源並稍後重新點播。',
+  MUSIC_YOUTUBE_RESPONSE: '影片網站回傳的影片或音訊資料無法辨識。',
   MUSIC_YOUTUBE_DURATION: '只支援時長明確且不超過 2 小時的單支影片。',
   MUSIC_YOUTUBE_LIVE: '目前不支援直播或尚未開始的影片。',
-  MUSIC_YOUTUBE_TIMEOUT: 'YouTube 解析或音訊準備逾時，請稍後重試。',
+  MUSIC_YOUTUBE_TIMEOUT: '影片解析或音訊準備逾時，請稍後重試。',
 };
 
 export class MusicError extends Error {

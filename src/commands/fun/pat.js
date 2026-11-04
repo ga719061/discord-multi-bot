@@ -6,6 +6,7 @@ export const data = new SlashCommandBuilder()
     .setName('摸摸')
     .setDescription('🐾 摸摸頭：試著摸摸國王，但請承擔被咬的風險')
     .setDescriptionLocalizations({ 'zh-TW': '🐾 摸摸頭：試著摸摸國王，但請承擔被咬的風險' });
+export const helpOnly = true;
 
 const reactions = [
     { text: '🐕👑 汪～好舒服...本王允許你再摸一次！', mood: '😊', color: UI_COLORS.ROYAL },

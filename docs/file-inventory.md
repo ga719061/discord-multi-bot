@@ -7,7 +7,7 @@
 | 類別 | canonical 文件 | 檔案群／跨功能注意 |
 | --- | --- | --- |
 | AI | [ai](modules/ai.md) | ai* utils、persona、messageCreate 的聊天部分；共用 XP 與設定 |
-| 音樂 | [music](modules/music.md) | music command/lib、event、music* utils；NAS whitelist 與管理頁在設定模組 |
+| 音樂 | [music](modules/music.md) | music／play／player command、lib、event、music* utils；NAS whitelist 與管理頁在設定模組 |
 | 設定與資料庫 | [settings/database](modules/settings-database.md) | settings command、database、guildDiagnostics、測試 DB helper；服務所有持久化功能 |
 | Steam | [steam](modules/steam.md) | steam command、steam* utils；排程與設定連動 |
 | 遊戲查詢 | [games](modules/games.md) | esports／gacha command、lib、tests、fixture；幫助合併入口 |

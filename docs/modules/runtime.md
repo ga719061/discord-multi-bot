@@ -11,6 +11,7 @@
 
 ## 不可破壞的規則
 
+- 公開 slash manifest 由 [command-manifest](../../scripts/command-manifest.js) 掃 command `data` 與 aliases；loader 會 import `helpOnly` 模組但不註冊到 `client.commands`，由幫助面板直接呼叫功能，亦不納入部署。只有 `/help` 可為英文正式入口，停用的 `volume`／`stop`／`shuffle` 不可重新部署；音樂操作使用中文 `/點播`／`/播放器`。移除公開入口須同步幫助、手冊及 [manifest 測試](../../tests/commandManifest.test.js)，外部同步仍依維運授權執行。
 - 群暉 Docker 容器字型加載：本專案部署於 Synology Container Manager 環境。當圖片渲染模組（如公告卷軸、戰績卡）因為容器缺少系統字型而出現中文字型缺失或表情符號顯示為帶十六進位編碼的「豆腐塊」方框時，應在Dockerfile中以 `RUN apt-get update && apt-get install -y --no-install-recommends fonts-noto-cjk fonts-noto-color-emoji` 補齊 Linux 字型，或在群暉 Container Manager 介面中，將包含 `Noto Sans CJK` 和 `Segoe UI Emoji` 的本地字型資料夾掛載映射至容器內的 `/usr/share/fonts/truetype/` 目錄中，即可在不重建鏡像的情況下即時加載。
 - 快取與資源管理：模組級快取 Map 必須實施容量上限限制（如 100）與 FIFO 淘汰以防止記憶體無界膨脹；每日產生的日誌檔案須實施保留天數清理（如 30 天）。
 - 資源與生命週期管理：所有定時排程應提供對應的 `stop` 函數以支援 Graceful Shutdown，並在 `src/utils/scheduledJobs.js` 中統一經由 `stopScheduledJobs()` 關閉；健康檢查伺服器可由 `stopHealthServer()` 關閉。`/livez`（以及相容用 `/`）只檢查 HTTP 存活，`/readyz` 必須同時確認 Discord ready 與 SQLite 可查詢；Docker healthcheck 使用 `/readyz`。

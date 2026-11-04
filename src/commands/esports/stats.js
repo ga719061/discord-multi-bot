@@ -27,6 +27,7 @@ const LOL_REGIONS = [
 export const data = new SlashCommandBuilder()
   .setName('戰績')
   .setDescription('🐕📜 進入皇家戰報廳，查詢公開賽季戰績');
+export const helpOnly = true;
 
 export async function execute(interaction) {
   const sessionId = interaction.id;
@@ -58,7 +59,7 @@ export async function execute(interaction) {
       if (component.user.id !== ownerId) {
         return component.reply(v2Notice(
           '🐕📜 這份戰報委託不屬於你',
-          '請使用 `/戰績` 開啟自己的皇家戰報廳。',
+          '請使用 `/幫助` 的「戰績查詢」開啟自己的皇家戰報廳。',
           UI_COLORS.WARNING
         ));
       }

@@ -2,6 +2,17 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { fmt, COLORS, UI_COLORS } from '../../utils/style.js';
 import { embedsToV2Payload } from '../../utils/componentsV2.js';
 
+export const foodChoices = [
+    { name: '🥩 頂級牛排', value: 'steak' },
+    { name: '🍖 雞腿', value: 'chicken' },
+    { name: '🦴 骨頭', value: 'bone' },
+    { name: '🍕 披薩', value: 'pizza' },
+    { name: '🥦 花椰菜', value: 'broccoli' },
+    { name: '🍫 巧克力', value: 'chocolate' },
+    { name: '🍰 蛋糕', value: 'cake' },
+    { name: '🍣 壽司', value: 'sushi' },
+];
+
 export const data = new SlashCommandBuilder()
     .setName('餵食')
     .setDescription('🍖 進貢食物：挑選美食來餵食國王，小心別餵到有毒的東西！')
@@ -11,17 +22,9 @@ export const data = new SlashCommandBuilder()
             .setDescription('要餵什麼給國王？')
             .setDescriptionLocalizations({ 'zh-TW': '要餵什麼給國王？' })
             .setRequired(true)
-            .addChoices(
-                { name: '🥩 頂級牛排', value: 'steak' },
-                { name: '🍖 雞腿', value: 'chicken' },
-                { name: '🦴 骨頭', value: 'bone' },
-                { name: '🍕 披薩', value: 'pizza' },
-                { name: '🥦 花椰菜', value: 'broccoli' },
-                { name: '🍫 巧克力', value: 'chocolate' },
-                { name: '🍰 蛋糕', value: 'cake' },
-                { name: '🍣 壽司', value: 'sushi' },
-            )
+            .addChoices(...foodChoices)
     );
+export const helpOnly = true;
 
 const foodReactions = {
     steak: {
@@ -59,7 +62,11 @@ const foodReactions = {
 };
 
 export async function execute(interaction) {
-    const food = interaction.options.getString('食物');
+    return feedKing(interaction, interaction.options.getString('食物'));
+}
+
+export async function feedKing(interaction, food) {
+    if (!Object.hasOwn(foodReactions, food)) throw new Error('不支援的食物選項');
     const reaction = foodReactions[food];
 
     const embed = new EmbedBuilder()

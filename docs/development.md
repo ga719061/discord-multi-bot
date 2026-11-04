@@ -22,6 +22,8 @@
 
 新增／修改 command 要同步 `data.name`、`execute`、alias、幫助入口與操作手冊。只有 `/help` 可為英文正式指令，停用的 `volume`、`stop`、`shuffle` 不可重回 manifest；詳見 [runtime](modules/runtime.md)。
 
+精簡公開入口時，以 `helpOnly` 保留仍供面板使用的 command；面板入口合約見 [community](modules/community.md) 與 [games](modules/games.md)，音樂快捷指令與面板共用流程見 [music](modules/music.md)。需驗證 manifest 與實際面板流程，不能只刪指令表或停用 execute。
+
 資料庫 schema／allowlist 的遷移規則只在 [settings/database](modules/settings-database.md) 維護。共享檔案的 `sharedWith` 決定要一起讀哪些模組；不能只按檔案所在目錄判斷影響範圍。
 
 ## 測試矩陣
@@ -41,6 +43,8 @@
 | 純文件 | `npm run verify:docs`、diff 與人工語意查核；通常不必完整測試 |
 
 第三方 API、爬蟲與資料來源使用 mock fixture；不以即時網路作回歸測試。會呼叫 `initDatabase()` 的測試使用 [temp DB helper](../tests/helpers/database.js)，不能寫真實 data/bot.db；舊 schema 遷移也只測 temp DB。正式素材放 assets，測試素材放 fixture；本機預覽放 tmp，不納入版控。
+
+目前 logger 載入時會清理舊日誌，並在呼叫時寫入專案 logs；在正式工作目錄直接執行會載入 logger 的測試或指令驗證會觸碰正式日誌。驗證時應使用排除 data／logs／憑證的隔離副本，或以測試專用 module hook 將該專案 logger 替換成 no-op，且讓子程序繼承隔離；不得將正式日誌當測試素材。`verify:docs` 的 manifest 子程序已有自己的唯讀與 logger 隔離。
 
 `npm run verify:music` 是額外合成音訊驗證，需可用且支援 libopus 的 FFmpeg，涵蓋與限制見 [音樂模組](modules/music.md)。它不登入真實 NAS／YouTube／Discord，不能證明 NAS 負載或公開影片一定可播。
 
